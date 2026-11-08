@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,11 +110,17 @@ private val RowSpacings = listOf(-2, 0, 2, 4, 6, 8)
 private val TerminalLines = listOf(1000, 5000, 10000, 50000, 100000)
 
 @Composable
-fun SettingsDialog(settings: AppSettings, access: BrowserAccess? = null, onBrowserAccess: () -> Unit = {}, onClose: () -> Unit) {
+fun SettingsDialog(
+    settings: AppSettings,
+    access: BrowserAccess? = null,
+    onBrowserAccess: () -> Unit = {},
+    themeEditor: MutableState<ThemeFile?> = remember { mutableStateOf(null) },
+    onClose: () -> Unit,
+) {
     val palette = Theme.palette
     val scope = rememberCoroutineScope()
     val exchange = LocalFileExchange.current
-    var editing by remember { mutableStateOf<ThemeFile?>(null) }
+    var editing by themeEditor
     var problem by remember { mutableStateOf<String?>(null) }
     val current = settings.current
     val theme = settings.theme
@@ -127,7 +134,7 @@ fun SettingsDialog(settings: AppSettings, access: BrowserAccess? = null, onBrows
             problem = e.message ?: e::class.simpleName
         }
     }
-    Box(Modifier.fillMaxSize().scrim(palette.workspace.copy(alpha = 0.6f), onClose), contentAlignment = Alignment.Center) {
+    Box(Modifier.fillMaxSize().scrim(palette.workspace.copy(alpha = 0.6f), onClose.takeIf { editing == null }), contentAlignment = Alignment.Center) {
         Column(
             Modifier.widthIn(max = 620.dp).padding(16.dp).dialogPanel(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),

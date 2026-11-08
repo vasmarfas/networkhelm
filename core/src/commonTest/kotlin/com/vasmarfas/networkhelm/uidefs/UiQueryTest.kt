@@ -228,12 +228,18 @@ class UiQueryTest {
         assertEquals(3, uiQueries(entries(disks), RouterFacts(board = "x86")).size)
     }
 
-    private fun bundledEcho() = Pack(
+    private fun bundledEcho(fasttrack: Boolean = false) = Pack(
         menu = listOf("Tools", "Echo"),
         window = PackWindow("Echo", listOf(PackTab("Echo", "tool/echo"))),
-        paths = mapOf("tool/echo" to PackPath(columns = listOf("seq"), form = "tool")),
+        paths = mapOf("tool/echo" to PackPath(columns = listOf("seq"), form = "tool", fasttrack = fasttrack)),
         forms = mapOf("tool" to PackForm(tabs = listOf(PackFormTab("General", listOf("address"))))),
     )
+
+    @Test
+    fun theWarningOfTheBundledWindowStaysWithTheQueryThatTakesItsPlace() {
+        val merged = withQueries(listOf(one(echo)), listOf(bundledEcho(fasttrack = true))).single()
+        assertTrue(merged.paths.getValue("tool/echo").fasttrack)
+    }
 
     @Test
     fun theQueryTakesTheConsoleTabOfTheBundledWindowItsPathAndLeavesTheOtherPathsBe() {

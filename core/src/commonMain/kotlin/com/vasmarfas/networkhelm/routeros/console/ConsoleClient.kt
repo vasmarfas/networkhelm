@@ -8,6 +8,7 @@ import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiReply
 import com.vasmarfas.networkhelm.routeros.api.ApiResult
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
+import com.vasmarfas.networkhelm.routeros.api.BigTables
 import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
 import com.vasmarfas.networkhelm.routeros.api.rounds
@@ -18,12 +19,15 @@ import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.getAndUpdate
 import kotlinx.coroutines.flow.map
@@ -41,20 +45,23 @@ internal const val LINE_LIMIT = 16_000
 
 // RouterOS 6 redraws the line after every key, so a line of n characters costs about n squared
 private const val CLASSIC_LINE_LIMIT = 2_500
-private const val CALL_MILLIS = 120_000L
 private const val ROUND_MILLIS = 1_000L
+private const val LONGEST_WAIT_MILLIS = 30_000L
+private const val CRASHED = "Console has crashed"
 
 class ConsoleClient internal constructor(
     private val size: Int = 4,
     private val dialect: Dialect = Dialect.Serialize,
     private val encoding: ApiEncoding = ApiEncoding.Utf8,
+    private val alive: () -> Boolean = { true },
     private val open: suspend () -> ShellChannel,
 ) : RouterOsClient {
-    private val slots = Channel<ConsoleTerminal?>(size).also { repeat(size) { _ -> it.trySend(null) } }
+    private val slots: Channel<ConsoleTerminal?> = Channel<ConsoleTerminal?>(size, onUndeliveredElement = ::returned).also { repeat(size) { _ -> it.trySend(null) } }
 
     private val yesNo = MutableStateFlow(setOf("disabled"))
 
     private val refused = MutableStateFlow(emptyMap<String, Set<String>>())
+    private val tables = BigTables()
     private val link = MutableStateFlow(LinkState.Up)
     private val expired = MutableStateFlow(false)
 
@@ -62,6 +69,7 @@ class ConsoleClient internal constructor(
     private val held = MutableStateFlow<ConsoleTerminal?>(null)
     private val heldLine = Mutex()
     private val mode = Mutex()
+    private val heavyLine = Mutex()
 
     override val status: Flow<LinkState> = link.asStateFlow()
 
@@ -86,7 +94,8 @@ class ConsoleClient internal constructor(
                 release(console, false)
                 throw e
             }
-            if (taken) held.value = console else release(console, true)
+            // a busy console takes the Ctrl+X later, and what went into it then would be rolled back when it is closed
+            if (taken) held.value = console else release(console, false)
             taken
         }
 
@@ -109,14 +118,26 @@ class ConsoleClient internal constructor(
         }
     }
 
-    override suspend fun call(words: List<String>): ApiResult {
-        var call = translate(words)
+    override suspend fun call(words: List<String>): ApiResult = read(words) { _, _ -> }
+
+    override suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> = read(words, progress).rows
+
+    private suspend fun read(words: List<String>, progress: suspend (Int, Int) -> Unit): ApiResult {
+        val menu = translate(words).menu?.takeIf(::portionable)
+        return tables.read(words, menu, progress, { whole(it) }) { part -> whole(words, part).rows.takeIf { portionable(menu.orEmpty()) } }
+    }
+
+    private fun portionable(menu: String) = refused.value[menu].orEmpty().none { it == FIND || it == FROM }
+
+    private suspend fun whole(words: List<String>, portion: IntRange? = null): ApiResult {
+        var call = translate(words, portion)
         var answer = run(call)
+        if (CRASHED in answer.text && !call.changes) answer = run(call)
         if (!answer.ok) {
             val name = BOOLEAN.find(answer.text)?.groupValues?.get(1)
             if (name != null && words.any { it == "=$name=true" || it == "=$name=false" }) {
                 yesNo.update { it + name }
-                call = translate(words)
+                call = translate(words, portion)
                 answer = run(call)
             }
         }
@@ -127,7 +148,7 @@ class ConsoleClient internal constructor(
             call = when {
                 menu != null && word != null && word in call.offered -> {
                     refused.update { it + (menu to it[menu].orEmpty() + word) }
-                    translate(words)
+                    translate(words, portion)
                 }
                 last.startsWith(AS_VALUE) -> call.fallback ?: break
                 else -> break
@@ -138,10 +159,10 @@ class ConsoleClient internal constructor(
         return result(call, answer.text)
     }
 
-    private fun translate(words: List<String>) = try {
+    private fun translate(words: List<String>, portion: IntRange? = null) = try {
         when (dialect) {
-            Dialect.Serialize -> consoleCall(words, yesNo.value, refused.value, encoding)
-            Dialect.Classic -> classicCall(words, yesNo.value, refused.value, encoding)
+            Dialect.Serialize -> consoleCall(words, yesNo.value, refused.value, encoding, portion)
+            Dialect.Classic -> classicCall(words, yesNo.value, refused.value, encoding, portion)
         }
     } catch (e: IllegalArgumentException) {
         throw DeviceException(ErrorCategory.ArgumentValue, e.message.orEmpty(), e)
@@ -160,7 +181,20 @@ class ConsoleClient internal constructor(
         return row + ("usage" to if (tenths % 10 == 0) "${tenths / 10}" else "${tenths / 10}.${tenths % 10}")
     }
 
-    override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = flow { block(this@ConsoleClient) }
+    // a watch outlives a lost console, as it does a lost connection of the API
+    override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = flow {
+        var wait = ROUND_MILLIS
+        while (true) {
+            try {
+                block(this@ConsoleClient)
+                return@flow
+            } catch (e: ApiConnectionClosedException) {
+                if (link.value == LinkState.Closed) throw e
+                delay(wait)
+                wait = minOf(wait * 2, LONGEST_WAIT_MILLIS)
+            }
+        }
+    }
 
     fun warm(scope: CoroutineScope) {
         repeat(size - 1) {
@@ -173,6 +207,29 @@ class ConsoleClient internal constructor(
                     return@launch
                 }
                 release(console, true)
+            }
+        }
+        scope.launch { keep() }
+    }
+
+    // a window that only shows a list asks nothing, so nothing else would notice a dropped connection or open a new one
+    private suspend fun keep() {
+        var wait = ROUND_MILLIS
+        while (withTimeoutOrNull(wait) { link.first { it == LinkState.Closed } } == null) {
+            if (!alive()) held.value?.let(::forget)
+            if (link.value == LinkState.Up) {
+                wait = ROUND_MILLIS
+                if (!alive()) lost(ApiConnectionClosedException("the connection went down"))
+                continue
+            }
+            wait = minOf(wait * 2, LONGEST_WAIT_MILLIS)
+            try {
+                call(listOf("/system/identity/print"))
+            } catch (e: DeviceException) {
+                // a refused login does not change by itself, and every failed one lands in the log of the router
+                if (e.category == ErrorCategory.PermissionDenied) close()
+            } catch (e: Exception) {
+                currentCoroutineContext().ensureActive()
             }
         }
     }
@@ -206,7 +263,7 @@ class ConsoleClient internal constructor(
                 try {
                     ask(holder, call)
                 } catch (e: ApiConnectionClosedException) {
-                    held.compareAndSet(holder, null)
+                    forget(holder)
                     throw e
                 }
             }
@@ -214,12 +271,27 @@ class ConsoleClient internal constructor(
         return try {
             attempt(call)
         } catch (e: ApiConnectionClosedException) {
-            if (!call.quick) throw e
+            // a read goes to another console, a change does not: the router may have run it
+            if (call.changes || !call.quick && e !is SilentConsoleException) throw e
             attempt(call)
         }
     }
 
-    private suspend fun attempt(call: ConsoleCall): Answer {
+    private suspend fun attempt(call: ConsoleCall): Answer = if (call.heavy) alone { asked(call) } else asked(call)
+
+    // the consoles of a router are one process: a line typed in another one during a long line only stops there for ten seconds with the question of Restart console
+    private suspend fun <T> alone(block: suspend () -> T): T = heavyLine.withLock {
+        val others = ArrayList<ConsoleTerminal?>()
+        try {
+            // the console of Safe Mode is out of the pool, and nothing else stands behind it
+            repeat(size - 1 - (if (held.value == null) 0 else 1)) { others += slot() }
+            block()
+        } finally {
+            others.forEach(::returned)
+        }
+    }
+
+    private suspend fun asked(call: ConsoleCall): Answer {
         val console = acquire()
         var healthy = false
         try {
@@ -231,8 +303,7 @@ class ConsoleClient internal constructor(
 
     private suspend fun ask(console: ConsoleTerminal, call: ConsoleCall): Answer {
         try {
-            val answer = withTimeoutOrNull(CALL_MILLIS) { console.run(call.line, call.quick) }
-                ?: throw ApiConnectionClosedException("the router did not answer in ${CALL_MILLIS / 1000} s")
+            val answer = console.run(call.line, call.quick)
             link.update { state -> if (state == LinkState.Closed) state else LinkState.Up }
             return answer
         } catch (e: CancellationException) {
@@ -248,6 +319,13 @@ class ConsoleClient internal constructor(
 
     private fun lost(error: ApiConnectionClosedException): ApiConnectionClosedException {
         link.update { state -> if (state == LinkState.Closed) state else LinkState.Reconnecting }
+        // the parked consoles are streams of the connection that went down
+        repeat(size) {
+            val slot = slots.tryReceive()
+            if (!slot.isSuccess) return error
+            slot.getOrNull()?.close()
+            slots.trySend(null)
+        }
         return error
     }
 
@@ -274,12 +352,14 @@ class ConsoleClient internal constructor(
         throw DeviceException(ErrorCategory.Api, "the router answered with something other than rows: ${text.take(200)}", e)
     }
 
+    private suspend fun slot() = try {
+        slots.receive()
+    } catch (e: ClosedReceiveChannelException) {
+        throw ApiConnectionClosedException("the client is closed", e)
+    }
+
     private suspend fun acquire(): ConsoleTerminal {
-        val slot = try {
-            slots.receive()
-        } catch (e: ClosedReceiveChannelException) {
-            throw ApiConnectionClosedException("the client is closed", e)
-        }
+        val slot = slot()
         if (slot != null) return slot
         return try {
             ConsoleTerminal.open(open, dialect, encoding).also { if (it.expired) expired.value = true }
@@ -288,7 +368,8 @@ class ConsoleClient internal constructor(
             throw when {
                 e is ApiConnectionClosedException -> lost(e)
                 e is DeviceException && e.category == ErrorCategory.ConnectionLost -> dropped(e)
-                else -> e
+                e is CancellationException || e is DeviceException || e !is Exception -> e
+                else -> lost(ApiConnectionClosedException(e.message ?: "the console did not open", e))
             }
         }
     }
@@ -296,6 +377,14 @@ class ConsoleClient internal constructor(
     private fun release(console: ConsoleTerminal, healthy: Boolean) {
         val kept = console.takeIf { healthy }
         if (kept == null) console.close()
-        if (!slots.trySend(kept).isSuccess) kept?.close()
+        returned(kept)
+    }
+
+    private fun returned(slot: ConsoleTerminal?) {
+        if (!slots.trySend(slot).isSuccess) slot?.close()
+    }
+
+    private fun forget(console: ConsoleTerminal) {
+        if (held.compareAndSet(console, null)) release(console, false)
     }
 }

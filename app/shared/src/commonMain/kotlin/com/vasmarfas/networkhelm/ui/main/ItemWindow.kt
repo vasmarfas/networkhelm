@@ -130,6 +130,7 @@ import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
 import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.kit.sunken
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import com.vasmarfas.networkhelm.ui.theme.on
 import com.vasmarfas.networkhelm.ui.theme.tintOf
 import com.vasmarfas.networkhelm.ui.workspace.VerticalScrollbar
 import kotlinx.coroutines.flow.collect
@@ -676,7 +677,7 @@ fun ItemForm(
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             standing?.let { state ->
                                 val up = state == "ACTIVE"
-                                Text(state, Modifier.background(if (up) palette.success else palette.badge, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp).testTag("standing"), style = Theme.type.small, color = if (up) palette.onAccent else palette.muted)
+                                Text(state, Modifier.background(if (up) palette.success else palette.badge, RoundedCornerShape(3.dp)).padding(horizontal = 6.dp).testTag("standing"), style = Theme.type.small, color = if (up) palette.on(palette.success) else palette.muted)
                             }
                             for (property in flagged) {
                                 Text(
@@ -691,7 +692,14 @@ fun ItemForm(
                             if (!compact) dialogButtons(Modifier)
                         }
                     }
-                    if (compact) Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) { dialogButtons(Modifier.weight(1f)) }
+                    if (compact) {
+                        FlowRow(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp, Alignment.End),
+                            verticalArrangement = Arrangement.spacedBy(6.dp),
+                            itemVerticalAlignment = Alignment.CenterVertically,
+                        ) { dialogButtons(Modifier) }
+                    }
                 }
             }
             if (showing) {

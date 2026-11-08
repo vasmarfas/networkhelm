@@ -9,9 +9,48 @@ import kotlin.test.assertTrue
 
 class PaletteTest {
 
-    private fun contrast(first: Color, second: Color): Float {
-        val (light, dark) = listOf(first.luminance(), second.luminance()).sortedDescending()
-        return (light + 0.05f) / (dark + 0.05f)
+    private val looks = mapOf(
+        "Modern light" to LightPalette, "Modern dark" to DarkPalette, "Legacy light" to LegacyPalette, "Legacy dark" to LegacyDarkPalette,
+        "Material light" to MaterialPalette, "Material dark" to MaterialDarkPalette,
+    )
+
+    @Test
+    fun plainTextReadsOnEveryGroundOfEveryLook() {
+        val low = looks.flatMap { (name, p) ->
+            listOf(p.surface, p.raised, p.selection, p.badge, p.panel).flatMap { ground -> listOf(p.text, p.muted).map { Triple(name, it, ground) } }
+        }.filter { (_, fore, back) -> contrast(fore, back) < 4.5f }
+        assertTrue(low.isEmpty(), "too little contrast: ${low.map { (name, fore, back) -> "$name ${fore.hex()} on ${back.hex()}" }}")
+    }
+
+    @Test
+    fun theColoursOfStatesReadOnFieldsFacesAndBadges() {
+        val low = looks.flatMap { (name, p) ->
+            listOf(p.surface, p.raised, p.badge).flatMap { ground -> listOf(p.accent, p.danger, p.success, p.warning).map { Triple(name, it, ground) } }
+        }.filter { (_, fore, back) -> contrast(fore, back) < 4.5f }
+        assertTrue(low.isEmpty(), "too little contrast: ${low.map { (name, fore, back) -> "$name ${fore.hex()} on ${back.hex()}" }}")
+    }
+
+    @Test
+    fun whatIsWrittenOnAFilledShapeReadsInEveryLook() {
+        for ((name, p) in looks) for (fill in listOf(p.accent, p.danger, p.success, p.warning)) {
+            assertTrue(contrast(p.on(fill), fill) >= 4.5f, "$name ${p.on(fill).hex()} on ${fill.hex()}")
+        }
+    }
+
+    @Test
+    fun theTitleOfAWindowReadsInEveryLook() {
+        for ((name, p) in looks) {
+            val title = p.title ?: p.accent
+            val text = if (p == MaterialPalette || p == MaterialDarkPalette) p.text else p.onAccent
+            assertTrue(contrast(text, title) >= 4.5f, "$name ${text.hex()} on ${title.hex()}")
+        }
+    }
+
+    @Test
+    fun aThemeOfItsOwnKeepsItsColourOnAFillThatReads() {
+        assertEquals(LightPalette.onAccent, LightPalette.on(LightPalette.accent))
+        assertEquals(Color.Black, DarkPalette.copy(accent = Color(0xFFFFD54F)).on(Color(0xFFFFD54F)))
+        assertEquals(Color.White, DarkPalette.copy(onAccent = Color.Black).on(Color(0xFF1B3A56)))
     }
 
     @Test

@@ -23,6 +23,7 @@ import com.vasmarfas.networkhelm.session.QUERY_END
 import com.vasmarfas.networkhelm.session.QUERY_PASS
 import com.vasmarfas.networkhelm.session.RouterFacts
 import com.vasmarfas.networkhelm.session.keepsWindow
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -347,6 +348,7 @@ internal class NativeWindows(
                             rows.remove(event.id)
                             send(event)
                         }
+                        is ListEvent.Progress -> send(event)
                     }
                 }
             }
@@ -413,6 +415,15 @@ internal class NativeWindows(
     private suspend fun open(): NativeObjects {
         val side = side ?: throw DeviceException(ErrorCategory.Unsupported, "this connection has no native channel")
         val port = port() ?: throw DeviceException(ErrorCategory.Unsupported, "the WinBox service of the router is off")
-        return side.open(port)
+        return try {
+            side.open(port)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: DeviceException) {
+            throw e
+        } catch (e: Exception) {
+            // a firewall closes the port of a service the router keeps on, and for the windows that is the service being off
+            throw DeviceException(ErrorCategory.Unsupported, "the WinBox port of the router does not answer", e)
+        }
     }
 }

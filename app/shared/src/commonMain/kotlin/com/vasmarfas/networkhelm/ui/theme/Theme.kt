@@ -10,9 +10,11 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.Immutable
 import androidx.compose.runtime.ReadOnlyComposable
+import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.PlatformTextStyle
@@ -83,19 +85,27 @@ val Palette.snack: Color get() = inverse ?: text
 
 val Palette.onSnack: Color get() = onInverse ?: surface
 
+internal fun contrast(first: Color, second: Color): Float {
+    val (light, dark) = listOf(first.luminance(), second.luminance()).sortedDescending()
+    return (light + 0.05f) / (dark + 0.05f)
+}
+
+// what is written on a filled shape: the colour of the theme, or black or white where that one does not read
+fun Palette.on(fill: Color): Color = listOf(onAccent, Color.Black, Color.White).firstOrNull { contrast(it, fill) >= 4.5f } ?: onAccent
+
 val DarkPalette = Palette(
     workspace = Color(0xFF23272D),
     surface = Color(0xFF1C2025),
     raised = Color(0xFF2A2F36),
     line = Color(0xFF353B43),
     text = Color(0xFFE4E7EB),
-    muted = Color(0xFF9AA3AE),
+    muted = Color(0xFFABB2BC),
     faint = Color(0xFF646C76),
-    accent = Color(0xFF3D8BFD),
+    accent = Color(0xFF68A5FD),
     onAccent = Color(0xFFFFFFFF),
     selection = Color(0xFF24456F),
     badge = Color(0xFF343A42),
-    danger = Color(0xFFF0645C),
+    danger = Color(0xFFF3837D),
     success = Color(0xFF4CB782),
     warning = Color(0xFFE5A33A),
     title = Color(0xFF1B3A56),
@@ -109,15 +119,15 @@ val LightPalette = Palette(
     raised = Color(0xFFF3F5F7),
     line = Color(0xFFD5DAE0),
     text = Color(0xFF1E2329),
-    muted = Color(0xFF5F6873),
+    muted = Color(0xFF5B646F),
     faint = Color(0xFFA3ABB4),
-    accent = Color(0xFF1F6FD9),
+    accent = Color(0xFF1C64C4),
     onAccent = Color(0xFFFFFFFF),
     selection = Color(0xFFCFE2FC),
     badge = Color(0xFFE3E7EB),
-    danger = Color(0xFFD23B33),
-    success = Color(0xFF23895A),
-    warning = Color(0xFFB97A12),
+    danger = Color(0xFFBF322A),
+    success = Color(0xFF1E754D),
+    warning = Color(0xFF8D5D0E),
     grid = Color(0xFFDFE3E7),
 )
 
@@ -133,9 +143,9 @@ val LegacyPalette = Palette(
     onAccent = Color(0xFFFFFFFF),
     selection = Color(0xFF9DC0EA),
     badge = Color(0xFFFFFFFF),
-    danger = Color(0xFFFF0000),
+    danger = Color(0xFFDC0000),
     success = Color(0xFF008000),
-    warning = Color(0xFFB07800),
+    warning = Color(0xFF926400),
     grid = Color(0xFFE3E3E3),
     frame = Color(0xFF000000),
     inactiveTitle = Color(0xFFC0C0C0),
@@ -152,13 +162,13 @@ val LegacyDarkPalette = Palette(
     raised = Color(0xFF3C3C40),
     line = Color(0xFF808086),
     text = Color(0xFFF2F2F4),
-    muted = Color(0xFFD4D4D8),
+    muted = Color(0xFFDBDBDE),
     faint = Color(0xFF9C9CA2),
     accent = Color(0xFF98A4FF),
     onAccent = Color(0xFFFFFFFF),
     selection = Color(0xFF34609E),
     badge = Color(0xFF1E1E21),
-    danger = Color(0xFFFF7070),
+    danger = Color(0xFFFF8181),
     success = Color(0xFF62D690),
     warning = Color(0xFFF4B544),
     title = Color(0xFF3D3FB5),
@@ -360,6 +370,15 @@ object DpNumber : KSerializer<Dp> {
 }
 
 private val LocalPalette = staticCompositionLocalOf { DarkPalette }
+private fun Metrics.touch() = copy(row = maxOf(row, 40.dp), control = maxOf(control, 40.dp), title = maxOf(title, 40.dp), toolbar = maxOf(toolbar, 44.dp))
+
+// a finger needs 40 dp, whatever the theme gives a mouse
+@Composable
+fun TouchMetrics(touch: Boolean, content: @Composable () -> Unit) {
+    val metrics = Theme.metrics
+    CompositionLocalProvider(LocalMetrics provides if (touch) metrics.touch() else metrics, content = content)
+}
+
 private val LocalMetrics = staticCompositionLocalOf { Metrics() }
 private val LocalTypography = staticCompositionLocalOf { typography(FontFamily.SansSerif, FontFamily.Monospace) }
 private val LocalClassic = staticCompositionLocalOf { false }
@@ -387,7 +406,7 @@ object Theme {
 }
 
 fun ThemeFile.drawnIcons(): Map<String, ThemeIcon> =
-    (DefaultIcons + (if (classic) ClassicIcons else emptyMap()) + icons).mapNotNull { (key, spec) -> themeIcon(spec)?.let { key to it } }.toMap()
+    (DefaultIcons + (if (classic) ClassicIcons else emptyMap()) + (if (material) MaterialIcons else emptyMap()) + icons).mapNotNull { (key, spec) -> themeIcon(spec)?.let { key to it } }.toMap()
 
 @Composable
 fun NetworkHelmTheme(theme: ThemeFile = Modern, dark: Boolean = isSystemInDarkTheme(), scale: Float = 1f, content: @Composable () -> Unit) {
@@ -406,10 +425,12 @@ fun NetworkHelmTheme(theme: ThemeFile = Modern, dark: Boolean = isSystemInDarkTh
     val type = if (theme.material) materialTypography(sans, mono, size) else typography(sans, mono, size)
     val density = LocalDensity.current
     val icons = remember(theme) { theme.drawnIcons() }
-    val indication = if (theme.material) {
-        rememberColoredIndication(palette.text, focusedAlpha = 0.1f, hoveredAlpha = 0.08f, pressedAlpha = 0.1f)
-    } else {
-        rememberColoredIndication(palette.text, hoveredAlpha = 0.1f, pressedAlpha = 0.18f)
+    val indication = key(palette.text) {
+        if (theme.material) {
+            rememberColoredIndication(palette.text, focusedAlpha = 0.1f, hoveredAlpha = 0.08f, pressedAlpha = 0.1f)
+        } else {
+            rememberColoredIndication(palette.text, focusedAlpha = 0.18f, hoveredAlpha = 0.1f, pressedAlpha = 0.18f)
+        }
     }
     CompositionLocalProvider(
         LocalDensity provides Density(density.density * scale.coerceIn(0.67f, 2.5f), density.fontScale),

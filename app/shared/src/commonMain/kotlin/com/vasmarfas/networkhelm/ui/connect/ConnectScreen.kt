@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -81,6 +82,7 @@ import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.LabelWidth
 import com.vasmarfas.networkhelm.ui.kit.Labeled
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
+import com.vasmarfas.networkhelm.ui.kit.LocalSubmit
 import com.vasmarfas.networkhelm.ui.kit.SecretField
 import com.vasmarfas.networkhelm.ui.kit.Select
 import com.vasmarfas.networkhelm.ui.kit.TabStrip
@@ -95,6 +97,7 @@ import com.vasmarfas.networkhelm.ui.table.TableState
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.workspace.VerticalScrollbar
 import eu.anifantakis.lib.ksafe.KSafeProtectionLevel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.Flow
@@ -226,6 +229,7 @@ import networkhelm.app.shared.generated.resources.neighbor_ip
 import networkhelm.app.shared.generated.resources.neighbor_mac
 import networkhelm.app.shared.generated.resources.neighbor_version
 import networkhelm.app.shared.generated.resources.neighbors_hint
+import networkhelm.app.shared.generated.resources.neighbors_not_heard
 import networkhelm.app.shared.generated.resources.neighbors_not_sent
 import networkhelm.app.shared.generated.resources.neighbors_refresh
 import networkhelm.app.shared.generated.resources.protocol_api
@@ -291,21 +295,23 @@ fun ConnectScreen(
         ) {
             Column(Modifier.onSizeChanged { above = with(density) { it.height.toDp() } }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 Header(onAbout, onSettings, onTools)
-                Form(
-                    state,
-                    saved.routers.collectAsState().value.map { it.address }.distinct(),
-                    onConnect = { state.connect(onConnected) },
-                    onSave = { ui.launch { state.save() } },
-                    onOpenFile = { ui.launch { state.openFiles(exchange.pick(), onConnected) } },
-                    onKey = {
-                        ui.launch {
-                            exchange.pick().firstOrNull()?.let { file ->
-                                state.key = file.name to file.read()
-                                state.passphrase.clearText()
+                CompositionLocalProvider(LocalSubmit provides { if (state.connecting == null) state.connect(onConnected) }) {
+                    Form(
+                        state,
+                        saved.routers.collectAsState().value.map { it.address }.distinct(),
+                        onConnect = { state.connect(onConnected) },
+                        onSave = { ui.launch { state.save() } },
+                        onOpenFile = { ui.launch { state.openFiles(exchange.pick(), onConnected) } },
+                        onKey = {
+                            ui.launch {
+                                exchange.pick().firstOrNull()?.let { file ->
+                                    state.key = file.name to file.read()
+                                    state.passphrase.clearText()
+                                }
                             }
-                        }
-                    },
-                )
+                        },
+                    )
+                }
             }
             // the lists take what the window has left below the form, and the page scrolls when that is less than they need
             Lists(
@@ -461,8 +467,8 @@ private fun Form(
         val community = state.protocol == Access.Snmp
         if (!community && state.protocol != Access.Vyos) Labeled(stringResource(Res.string.connect_user)) { TextField(state.user, field.testTag("user")) }
         Labeled(stringResource(if (community) Res.string.connect_community else Res.string.connect_password)) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val box = (if (compact) Modifier.weight(1f) else field).testTag("password")
+            FlowRow(itemVerticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                val box = field.testTag("password")
                 if (community) TextField(state.password, box) else SecretField(state.password, box, onGo = onConnect)
                 Checkbox(state.remember, { state.remember = it })
                 Text(stringResource(if (community) Res.string.connect_remember_community else Res.string.connect_remember), Modifier.clickable { state.remember = !state.remember }.hand(), color = palette.muted)
@@ -696,12 +702,19 @@ private fun NeighborTable(services: Services, state: ConnectState) {
     val palette = Theme.palette
     val scope = rememberCoroutineScope()
     var problem by remember { mutableStateOf<String?>(null) }
+    var deaf by remember { mutableStateOf(false) }
     val noLocalNetwork = stringResource(Res.string.error_local_network)
     val notSent = stringResource(Res.string.neighbors_not_sent)
     val heard = remember { mutableStateMapOf<String, MndpSighting>() }
     val tableState = remember { TableState<String>() }
     LaunchedEffect(neighbors) {
-        neighbors.collect { sighting -> heard[sighting.announcement.mac ?: sighting.sourceAddress] = sighting }
+        try {
+            neighbors.collect { sighting -> heard[sighting.announcement.mac ?: sighting.sourceAddress] = sighting }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            deaf = true
+        }
     }
     val rows = heard.values.sortedWith(compareBy({ it.announcement.identity.orEmpty() }, { it.announcement.mac.orEmpty() }))
     fun ask(refresh: suspend () -> Unit) {
@@ -739,12 +752,10 @@ private fun NeighborTable(services: Services, state: ConnectState) {
             Row(Modifier.padding(6.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(stringResource(Res.string.neighbors_refresh), { ask(refresh) }, Modifier.testTag("neighbors-refresh"))
                 Text(
-                    problem ?: stringResource(Res.string.neighbors_hint),
+                    problem ?: stringResource(if (deaf) Res.string.neighbors_not_heard else Res.string.neighbors_hint),
                     Modifier.testTag("neighbors-status"),
-                    color = if (problem != null) palette.danger else palette.muted,
+                    color = if (problem != null || deaf) palette.danger else palette.muted,
                     style = Theme.type.small,
-                    maxLines = 2,
-                    overflow = TextOverflow.Ellipsis,
                 )
             }
         }

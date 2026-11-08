@@ -20,6 +20,11 @@ class Hop(val number: Int, val address: String?, val timeMillis: Double?)
 
 class LocalNetwork(val name: String, val address: String, val prefix: Int)
 
+private val CELLULAR = Regex("^(?:v4-)?(?:rmnet|ccmni|pdp_ip|wwan)")
+
+// the addresses of a mobile interface belong to the carrier, there is no network of the user to scan behind them
+fun cellular(name: String) = CELLULAR.containsMatchIn(name)
+
 interface HostOps {
     suspend fun ping(host: String, timeoutMillis: Int, ttl: Int? = null, size: Int? = null, dontFragment: Boolean = false): PingReply
 

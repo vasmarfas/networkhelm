@@ -7,6 +7,8 @@ import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.ssh.ShellChannel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
@@ -15,12 +17,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 private const val PROMPT_TEXT = "\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mtester\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
@@ -47,10 +51,14 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
         else if (banner) out.trySend(bytesOf("\r\n  MikroTik RouterOS\r\n$PROMPT_TEXT$stale"))
     }
 
+    private var rest = ByteArray(0)
+
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
-        val chunk = out.receiveCatching().getOrNull() ?: return -1
-        chunk.copyInto(buffer, offset)
-        return chunk.size
+        if (rest.isEmpty()) rest = out.receiveCatching().getOrNull() ?: return -1
+        val size = minOf(length, rest.size)
+        rest.copyInto(buffer, offset, 0, size)
+        rest = rest.copyOfRange(size, rest.size)
+        return size
     }
 
     override suspend fun write(bytes: ByteArray) {
@@ -61,6 +69,15 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
         }
         if (bytes.contentEquals(byteArrayOf(3))) {
             out.trySend(bytesOf("\rScript Error: action cancelled\n\r\r\r$PROMPT_TEXT"))
+            return
+        }
+        if (bytes.contentEquals(byteArrayOf(0x18))) {
+            out.trySend(bytesOf("\r\n[tester@CHR] <SAFE> "))
+            return
+        }
+        if (bytes.decodeToString() == "n\r") {
+            answers += "n"
+            out.trySend(bytesOf("n\r\n$PROMPT_TEXT"))
             return
         }
         var line = bytes.decodeToString().trimEnd('\r')
@@ -76,6 +93,10 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
         val (begin, command, end) = checkNotNull(MARKERS.matchEntire(line)).destructured
         val text = handler(command)
         val asking = text.startsWith("?")
+        if (text == "~echo") {
+            out.trySend(bytesOf(line.take(line.length / 2)))
+            return
+        }
         val silent = text == "~"
         val body = when {
             asking -> text.drop(1) + ": "
@@ -94,8 +115,102 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
     }
 }
 
+private val PICK = Regex("\\[:pick \\[[^\\]]*] (\\d+) (\\d+)]")
+
+// answers a line one piece at a time, with a pause before each
+private class DrippingConsole(private val chunks: Int, private val millis: Long) : ShellChannel {
+    private val out = Channel<ByteArray>(Channel.UNLIMITED)
+
+    init {
+        out.trySend("\r\n  MikroTik RouterOS\r\n$PROMPT_TEXT".encodeToByteArray())
+    }
+
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val chunk = out.receiveCatching().getOrNull() ?: return -1
+        if (chunk.size == 1) delay(millis)
+        chunk.copyInto(buffer, offset)
+        return chunk.size
+    }
+
+    override suspend fun write(bytes: ByteArray) {
+        val line = bytes.decodeToString().trimEnd('\r').removePrefix("$RELAY\r")
+        val (begin, _, end) = checkNotNull(MARKERS.matchEntire(line)).destructured
+        out.trySend("$line\r\n\r$begin\r\n".encodeToByteArray())
+        repeat(chunks) { out.trySend(".".encodeToByteArray()) }
+        out.trySend("\r\n*1\r\n$end\r\n$PROMPT_TEXT".encodeToByteArray())
+    }
+
+    override fun resize(columns: Int, rows: Int) = Unit
+
+    override fun close() = out.close().let { }
+}
+
+// waits for a busy console as RouterOS 7.25 does: the question comes a second after the line, the line runs when the console is back
+private class BusyConsole(private val typed: MutableList<String>, private val reply: String = "*4A", private val pauseMillis: Long = 11_000) : ShellChannel {
+    private val out = Channel<ByteArray>(Channel.UNLIMITED)
+
+    init {
+        out.trySend("\r\n  MikroTik RouterOS\r\n$PROMPT_TEXT".encodeToByteArray())
+    }
+
+    private var rest = ByteArray(0)
+
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (rest.isEmpty()) {
+            rest = out.receiveCatching().getOrNull() ?: return -1
+            if (rest.isEmpty()) {
+                delay(pauseMillis)
+                rest = out.receiveCatching().getOrNull() ?: return -1
+            }
+        }
+        val size = minOf(length, rest.size)
+        rest.copyInto(buffer, offset, 0, size)
+        rest = rest.copyOfRange(size, rest.size)
+        return size
+    }
+
+    override suspend fun write(bytes: ByteArray) {
+        val line = bytes.decodeToString().trimEnd('\r').removePrefix("$RELAY\r")
+        typed += line
+        val (begin, command, end) = MARKERS.matchEntire(line)?.destructured ?: return
+        if (command.startsWith(":global rdrow")) {
+            out.trySend("$line\r\n\r$begin\r\n$end\r\n$PROMPT_TEXT".encodeToByteArray())
+            return
+        }
+        out.trySend("$line\r\nConsole does not respond.\r\nRestart console (this will terminate all active sessions)? [y/N] ".encodeToByteArray())
+        out.trySend(ByteArray(0))
+        out.trySend("\r\nConsole responded, action cancelled\r\n\r$begin\r\n$reply\r\n$end\r\n$PROMPT_TEXT".encodeToByteArray())
+    }
+
+    override fun resize(columns: Int, rows: Int) = Unit
+
+    override fun close() = out.close().let { }
+}
+
 class ConsoleClientTest {
     private val consoles = mutableListOf<FakeConsole>()
+    private val deaf = mutableListOf<Deaf>()
+
+    // answers the login and then nothing: a busy process takes what is typed later
+    private class Deaf : ShellChannel {
+        private val out = Channel<ByteArray>(Channel.UNLIMITED).also { it.trySend("\r\n  MikroTik RouterOS\r\n$PROMPT_TEXT".encodeToByteArray()) }
+        var closed = false
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            val bytes = out.receiveCatching().getOrNull() ?: return -1
+            bytes.copyInto(buffer, offset)
+            return bytes.size
+        }
+
+        override suspend fun write(bytes: ByteArray) = Unit
+
+        override fun resize(columns: Int, rows: Int) = Unit
+
+        override fun close() {
+            closed = true
+            out.close()
+        }
+    }
 
     private fun client(size: Int = 4, handler: suspend (String) -> String) = ConsoleClient(size) { FakeConsole(handler = handler).also { consoles += it } }
 
@@ -112,7 +227,8 @@ class ConsoleClientTest {
         assertEquals(listOf(mapOf("name" to "CHR")), client.call(listOf("/system/identity/print")).rows)
     }
 
-    private fun router(sent: MutableList<String>, refuses: Set<String>, vararg views: String): suspend (String) -> String = { command ->
+    private fun router(sent: MutableList<String>, refuses: Set<String>, vararg views: String): suspend (String) -> String = handler@{ command ->
+        if ("count-only" in command) return@handler "!bad parameter count-only (line 1 column 25)"
         sent += command
         val parts = command.split("; ")
         val failing = parts.indexOfFirst { part -> part.split(' ', ']').any { it.substringBefore('=') in refuses } }
@@ -183,7 +299,7 @@ class ConsoleClientTest {
         }
         assertEquals(1, assertFailsWith<ApiTrapException> { client.call(listOf("/ip/address/print", "=foo=1")) }.category)
         assertEquals(0, assertFailsWith<ApiTrapException> { client.call(listOf("/ip/route/print")) }.category)
-        assertEquals(2, sent.size)
+        assertEquals(2, sent.count { "count-only" !in it })
     }
 
     @Test
@@ -277,8 +393,8 @@ class ConsoleClientTest {
             }
         }
         assertEquals(listOf(mapOf(".id" to "*1", "address" to "192.0.2.1/24", "disabled" to "false")), client.call(listOf("/ip/address/print")).rows)
-        assertEquals(2, sent.size)
-        assertEquals(PRELUDE, sent.first())
+        assertEquals(listOf(PRELUDE, "/ip address print count-only"), sent.take(2))
+        assertEquals(3, sent.size)
     }
 
     @Test
@@ -434,6 +550,51 @@ class ConsoleClientTest {
     }
 
     @Test
+    fun aLostLinkComesBackThoughNoWindowAsksForAnything() = runTest {
+        var back = false
+        val client = ConsoleClient(1) {
+            if (!back) error("failed to connect after 10000ms")
+            FakeConsole { "{\"name\":\"CHR\"}" }.also { consoles += it }
+        }
+        client.warm(backgroundScope)
+        assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/ip/address/print")) }
+        assertEquals(LinkState.Reconnecting, client.status.first())
+        back = true
+        client.status.first { it == LinkState.Up }
+        client.close()
+    }
+
+    @Test
+    fun aConnectionThatWentDownIsNoticedWithoutAnyCallAndOpenedAgain() = runTest {
+        var up = true
+        val client = ConsoleClient(1, alive = { up }) { FakeConsole { "{\"name\":\"CHR\"}" }.also { consoles += it } }
+        client.warm(backgroundScope)
+        client.call(listOf("/system/identity/print"))
+        up = false
+        client.status.first { it == LinkState.Reconnecting }
+        assertTrue(consoles.single().closed)
+        up = true
+        client.status.first { it == LinkState.Up }
+        assertEquals(2, consoles.size)
+        client.close()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theConsolesParkedInThePoolGoWithTheOneThatWasLost() = runTest {
+        val client = client(2) { "[]" }
+        client.warm(backgroundScope)
+        runCurrent()
+        client.call(listOf("/ip/address/print"))
+        assertEquals(2, consoles.size)
+        consoles.forEach { it.close() }
+        assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/ip/address/print")) }
+        assertEquals(emptyList(), client.call(listOf("/ip/address/print")).rows)
+        assertEquals(3, consoles.size)
+        client.close()
+    }
+
+    @Test
     fun listenIsRefusedSoTheDriverPollsAndAClosedClientRefusesEverything() = runTest {
         val client = client { "[]" }
         assertFailsWith<ApiTrapException> { client.command(listOf("/ip/address/listen")).toList() }
@@ -487,6 +648,358 @@ class ConsoleClientTest {
         assertFalse(client.passwordExpired)
         assertEquals(listOf(mapOf("name" to "CHR")), client.call(listOf("/system/identity/print")).rows)
         assertTrue(client.passwordExpired)
+    }
+
+    @Test
+    fun aRouterThatShowsItsLicenseFirstIsToldNo() = runTest {
+        val client = ConsoleClient(1) {
+            FakeConsole(stale = "\r\nDo you want to see the software license? [Y/n]: ") { """{"name":"CHR"}""" }.also { consoles += it }
+        }
+        assertEquals(listOf(mapOf("name" to "CHR")), client.call(listOf("/system/identity/print")).rows)
+        assertEquals(listOf("n"), consoles.single().answers)
+    }
+
+    private fun table(size: Int, sent: MutableList<String> = mutableListOf(), refuses: String? = null): suspend (String) -> String = handler@{ command ->
+        sent += command
+        val pick = PICK.find(command)
+        when {
+            "count-only" in command -> "$size"
+            refuses != null && refuses in command -> "!bad parameter $refuses (line 1 column 120)"
+            pick == null -> "!not in portions: $command"
+            else -> {
+                val (from, to) = pick.destructured
+                val rows = (from.toInt() until minOf(to.toInt(), size)).joinToString(",") { "{\".id\":\"*$it\"}" }
+                Regex(":serialize").findAll(command).joinToString("\n") { "[$rows]" }
+            }
+        }
+    }
+
+    private val addresses = listOf("/ip/firewall/address-list/print")
+
+    @Test
+    fun aBigTableComesInPortionsAndTheRouterNeverBuildsItWhole() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(handler = table(5_000, sent))
+        val progress = mutableListOf<Pair<Int, Int>>()
+        val rows = client.table(addresses) { read, total -> progress += read to total }
+        assertEquals((0 until 5_000).map { "*$it" }, rows.map { it[".id"] })
+        assertEquals(listOf(2_000 to 5_000, 4_000 to 5_000, 5_000 to 5_000), progress)
+        assertEquals("/ip/firewall/address-list/print count-only", sent.first())
+        assertTrue(sent.drop(1).all { "[:pick [/ip/firewall/address-list/find] " in it && " from=\$part" in it })
+    }
+
+    @Test
+    fun theCallOfABigTableGoesInPortionsToo() = runTest {
+        val sent = mutableListOf<String>()
+        assertEquals(5_000, client(handler = table(5_000, sent)).call(addresses).rows.size)
+        assertEquals(4, sent.size)
+    }
+
+    @Test
+    fun aHugeTableTakesNoMoreThanSeventeenPortions() = runTest {
+        val sent = mutableListOf<String>()
+        assertEquals(100_000, client(handler = table(100_000, sent)).call(addresses).rows.size)
+        assertTrue(sent.count { ":pick" in it } <= 17)
+    }
+
+    @Test
+    fun aQueryIsCountedAndFoundAsTheRowsAreAsked() = runTest {
+        val sent = mutableListOf<String>()
+        client(handler = table(3_000, sent)).call(addresses + "?list=rd-test")
+        assertEquals("/ip/firewall/address-list/print count-only where list=\"rd-test\"", sent.first())
+        assertTrue("[/ip/firewall/address-list/find where list=\"rd-test\"]" in sent[1])
+    }
+
+    @Test
+    fun nothingIsTypedInOtherConsolesWhileAPortionRuns() = runTest {
+        val sent = mutableListOf<String>()
+        val portion = CompletableDeferred<Unit>()
+        val rows = table(2_500)
+        val client = client(size = 2) { command ->
+            if (":pick" in command) portion.await()
+            sent += command
+            if ("identity" in command) "{\"name\":\"CHR\"}" else rows(command)
+        }
+        val big = async { client.call(addresses).rows }
+        testScheduler.advanceUntilIdle()
+        val other = async { client.call(listOf("/system/identity/print", "?name=CHR")).rows }
+        testScheduler.advanceUntilIdle()
+        assertFalse(sent.any { "identity" in it })
+        portion.complete(Unit)
+        assertEquals(2_500, big.await().size)
+        assertEquals(1, other.await().size)
+    }
+
+    @Test
+    fun aRowAskedByItsIdIsNotCounted() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client { command ->
+            sent += command
+            "[{\".id\":\"*1\"}]"
+        }
+        client.call(addresses + "?.id=*1")
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun aSmallTableIsOneLineAndCountedOnce() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client { command ->
+            sent += command
+            if ("count-only" in command) "3" else "[{\".id\":\"*1\"}]"
+        }
+        client.call(addresses)
+        client.call(addresses)
+        assertEquals(1, sent.count { "count-only" in it })
+        assertEquals(3, sent.size)
+        assertFalse(sent.any { ":pick" in it })
+    }
+
+    @Test
+    fun aSmallTableThatGrewIsCountedAgain() = runTest {
+        val sent = mutableListOf<String>()
+        var count = 3
+        val client = client { command ->
+            sent += command
+            when {
+                "count-only" in command -> "$count"
+                ":pick" in command -> "[{\".id\":\"*1\"}]"
+                else -> "[" + (1..count).joinToString(",") { "{\".id\":\"*$it\"}" } + "]"
+            }
+        }
+        client.call(addresses)
+        count = 2_500
+        client.call(addresses)
+        assertEquals(1, sent.count { "count-only" in it })
+        client.call(addresses)
+        assertEquals(2, sent.count { "count-only" in it })
+        assertTrue(":pick" in sent.last())
+    }
+
+    @Test
+    fun aViewTheMenuRefusesIsLearntOnOnePortion() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(handler = table(5_000, sent, "show-sensitive"))
+        assertEquals(5_000, client.call(addresses).rows.size)
+        assertEquals(1, sent.count { "show-sensitive" in it })
+        assertEquals(5, sent.size)
+    }
+
+    @Test
+    fun aRowThatWentDuringTheReadingAsksThePortionAgain() = runTest {
+        val rows = table(3_000)
+        var fails = 2
+        val client = client { command -> if (":pick" in command && fails-- > 0) "!interrupted" else rows(command) }
+        assertEquals(3_000, client.call(addresses).rows.size)
+    }
+
+    @Test
+    fun aRowThatWentBetweenTheViewsOfAPortionAsksThePortionAgain() = runTest {
+        val rows = table(3_000)
+        var fails = 1
+        val client = client { command -> if (":pick" in command && fails-- > 0) "![{\".id\":\"*1\"}]\r\ninterrupted" else rows(command) }
+        assertEquals(3_000, client.call(addresses).rows.size)
+    }
+
+    @Test
+    fun aBigTableGoesOnWhileSafeModeHoldsAConsole() = runTest {
+        val client = client(handler = table(3_000))
+        assertTrue(assertNotNull(client.safeMode).enter())
+        assertEquals(3_000, withTimeout(60_000) { client.call(addresses) }.rows.size)
+    }
+
+    @Test
+    fun theConsoleOfSafeModeThatWentDownLeavesThePoolWhole() = runTest {
+        val rows = table(3_000)
+        val client = client { command -> if ("comment" in command) "~" else rows(command) }
+        assertTrue(assertNotNull(client.safeMode).enter())
+        consoles.single().close()
+        assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/ip/address/set", "=.id=*1", "=comment=a")) }
+        assertEquals(3_000, withTimeout(60_000) { client.call(addresses) }.rows.size)
+    }
+
+    @Test
+    fun aConsoleThatDidNotTakeSafeModeInTimeIsNotUsedAgain() = runTest {
+        val client = ConsoleClient(1) { Deaf().also { deaf += it } }
+        assertFalse(assertNotNull(client.safeMode).enter())
+        assertTrue(deaf.single().closed)
+    }
+
+    @Test
+    fun aChangeWhoseEchoStoodStillIsGivenUpInSecondsAndNotTypedAgain() = runTest {
+        var runs = 0
+        val client = client { command -> if ("comment" in command) "~echo".also { runs++ } else "" }
+        withTimeout(30_000) { assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/ip/address/set", "=.id=*1", "=comment=a")) } }
+        assertEquals(1, runs)
+    }
+
+    @Test
+    fun aReadWhoseEchoStoodStillIsAskedAgainOnAnotherConsole() = runTest {
+        var stalls = 1
+        val client = client { command -> if ("identity" in command && stalls-- > 0) "~echo" else "{\"name\":\"CHR\"}" }
+        assertEquals("CHR", withTimeout(30_000) { client.call(listOf("/system/identity/print")) }.rows.single()["name"])
+        assertTrue(consoles.first().closed)
+    }
+
+    @Test
+    fun aScriptIsNotTypedAgainAfterTheConsoleCrashed() = runTest {
+        var runs = 0
+        val client = client {
+            runs++
+            "!Console has crashed, attempting to reconnect... success"
+        }
+        assertFailsWith<ApiTrapException> { client.call(listOf("/execute", "=script=:put 1")) }
+        assertEquals(1, runs)
+    }
+
+    @Test
+    fun aRefusedLoginEndsTheClientInsteadOfTryingForEver() = runTest {
+        var refused = false
+        val client = ConsoleClient(1) {
+            if (refused) throw DeviceException(ErrorCategory.PermissionDenied, "invalid user name or password")
+            FakeConsole { "{\"name\":\"CHR\"}" }.also { consoles += it }
+        }
+        client.warm(backgroundScope)
+        client.call(listOf("/system/identity/print"))
+        refused = true
+        consoles.single().close()
+        assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/system/identity/print")) }
+        client.status.first { it == LinkState.Closed }
+    }
+
+    @Test
+    fun aTableThatKeepsChangingEndsWithTheWordsOfTheRouter() = runTest {
+        val client = client { command -> if ("count-only" in command) "3000" else "!interrupted" }
+        assertEquals("interrupted", assertFailsWith<ApiTrapException> { client.call(addresses) }.message)
+    }
+
+    @Test
+    fun aRowThatComesTwiceWhenTheTableMovesIsOneRow() = runTest {
+        val client = client { command ->
+            val from = PICK.find(command)?.groupValues?.get(1)?.toInt()
+            when {
+                "count-only" in command -> "2500"
+                from == 0 -> "[{\".id\":\"*1\"},{\".id\":\"*2\"}]"
+                else -> "[{\".id\":\"*2\"},{\".id\":\"*3\"}]"
+            }
+        }
+        assertEquals(listOf("*1", "*2", "*3"), client.call(addresses).rows.map { it[".id"] })
+    }
+
+    @Test
+    fun aMenuWithoutFromIsReadWholeAndNotCountedAgain() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client { command ->
+            sent += command
+            when {
+                "count-only" in command -> "3000"
+                ":pick" in command -> "!bad parameter from (line 1 column 38)"
+                else -> "[{\".id\":\"*1\"},{\".id\":\"*2\"}]"
+            }
+        }
+        val log = listOf("/log/print")
+        val progress = mutableListOf<Int>()
+        assertEquals(2, client.table(log) { read, _ -> progress += read }.size)
+        assertEquals(emptyList(), progress)
+        assertEquals(4, sent.size)
+        assertEquals(2, client.call(log).rows.size)
+        assertEquals(5, sent.size)
+    }
+
+    @Test
+    fun aReadInterruptedByACrashOfTheConsoleIsAskedOnceMore() = runTest {
+        var crashes = 1
+        val client = client { command ->
+            when {
+                "count-only" in command -> "!bad parameter count-only (line 1 column 25)"
+                crashes-- > 0 -> "!Console has crashed, attempting to reconnect... success"
+                else -> "{\"name\":\"CHR\"}"
+            }
+        }
+        assertEquals(listOf(mapOf("name" to "CHR")), client.call(listOf("/system/identity/print")).rows)
+    }
+
+    @Test
+    fun aConsoleThatAsksToRestartTheOthersIsLeftWithoutAnAnswerUntilItGoesOnByItself() = runTest {
+        val typed = mutableListOf<String>()
+        val console = BusyConsole(typed)
+        val client = ConsoleClient(1) { console }
+        assertEquals(mapOf("ret" to "*4A"), client.call(listOf("/ip/address/add", "=address=192.0.2.1/24")).done)
+        assertEquals(emptyList(), typed.filter { it == "y" || it == "n" })
+        assertEquals(LinkState.Up, client.status.first())
+    }
+
+    @Test
+    fun aQuickLineOfRouterOs6WaitsOutTheQuestionOfABusyConsole() = runTest {
+        val typed = mutableListOf<String>()
+        val client = ConsoleClient(1, Dialect.Classic) { BusyConsole(typed, reply = "\u0001.id\u0002id\u0002*1\n\u0003", pauseMillis = 15_000) }
+        assertEquals(listOf(mapOf(".id" to "*1")), client.call(listOf("/ip/address/print", "?.id=*1")).rows)
+        assertEquals(emptyList(), typed.filter { it == "y" || it == "n" })
+    }
+
+    @Test
+    fun aRowsAnswerThatACrashOfTheConsoleCutIsAskedOnceMore() = runTest {
+        var crashes = 1
+        val client = client { command ->
+            when {
+                "count-only" in command -> "!bad parameter count-only (line 1 column 25)"
+                crashes-- > 0 -> "[{\".id\":\"*1\",\"name\":Console has crashed, attempting to reconnect... success"
+                else -> "{\"name\":\"CHR\"}"
+            }
+        }
+        assertEquals(listOf(mapOf("name" to "CHR")), client.call(listOf("/system/identity/print")).rows)
+    }
+
+    @Test
+    fun aChangeInterruptedByACrashOfTheConsoleIsNotRepeated() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client { command ->
+            sent += command
+            "!Console has crashed, attempting to reconnect... success"
+        }
+        assertFailsWith<ApiTrapException> { client.call(listOf("/ip/address/add", "=address=192.0.2.1/24")) }
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun aBigTableOfRouterOs6ComesInPortionsToo() = runTest {
+        val sent = mutableListOf<String>()
+        val client = classic { command ->
+            sent += command
+            val pick = PICK.find(command)
+            when {
+                command.startsWith(":global rdrow") -> ""
+                "count-only" in command -> "3000"
+                pick == null -> "!not in portions: $command"
+                else -> (pick.groupValues[1].toInt() until minOf(pick.groupValues[2].toInt(), 3_000)).joinToString("\n") { "\u0001.id\u0002id\u0002*$it\n\u0003" }
+            }
+        }
+        val progress = mutableListOf<Int>()
+        assertEquals(3_000, client.table(listOf("/ip/address/print")) { read, _ -> progress += read }.size)
+        assertEquals(listOf(2_000, 3_000), progress)
+        assertTrue(":foreach i in=[:pick [/ip address find] 2000 4000] do={" in sent.last())
+    }
+
+    @Test
+    fun aRouterThatSaysNothingForTwoMinutesIsLostAndOneThatKeepsTalkingIsNot() = runTest {
+        val client = client(size = 1) { "~" }
+        assertEquals("the router did not answer in 120 s", assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/ip/address/add", "=address=192.0.2.1/24")) }.message)
+        assertEquals(LinkState.Reconnecting, client.status.first())
+        val slow = ConsoleClient(1) { DrippingConsole(chunks = 6, millis = 100_000) }
+        assertTrue(slow.call(listOf("/ip/address/add", "=address=192.0.2.1/24")).done["ret"].orEmpty().endsWith("*1"))
+    }
+
+    @Test
+    fun aWatchComesBackAfterALostConsoleAndEndsWithTheClient() = runTest {
+        val client = client { "[]" }
+        var tries = 0
+        val seen = client.each<Int> {
+            if (tries++ < 3) throw ApiConnectionClosedException("lost")
+            emit(tries)
+        }.toList()
+        assertEquals(listOf(4), seen)
+        client.close()
+        assertFailsWith<ApiConnectionClosedException> { client.each<Int> { throw ApiConnectionClosedException("closed") }.toList() }
     }
 
     @Test

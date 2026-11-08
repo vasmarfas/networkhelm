@@ -62,7 +62,7 @@ private object SystemHostOps : HostOps {
     }
 
     override suspend fun localNetworks(): List<LocalNetwork> = withContext(Dispatchers.IO) {
-        NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().filter { it.isUp && !it.isLoopback }.flatMap { network ->
+        NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().filter { it.isUp && !it.isLoopback && !cellular(it.name) }.flatMap { network ->
             network.interfaceAddresses.mapNotNull { entry ->
                 val host = (entry.address as? Inet4Address)?.hostAddress ?: return@mapNotNull null
                 LocalNetwork(network.name, host, entry.networkPrefixLength.toInt())

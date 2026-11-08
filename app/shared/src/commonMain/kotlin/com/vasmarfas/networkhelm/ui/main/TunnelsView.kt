@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -133,7 +134,7 @@ internal fun TunnelsView(tab: RouterTab) {
     val closed = tab.savedTunnels.filter { saved -> tab.tunnels.all.none { it.wanted == saved.localPort && it.host == saved.host && it.port == saved.port } }
     Column(Modifier.fillMaxSize().background(palette.surface).padding(10.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(stringResource(Res.string.tunnels_hint), color = palette.muted, style = Theme.type.small)
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        FlowRow(itemVerticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(stringResource(Res.string.tunnels_local), color = palette.muted)
             TextField(local, Modifier.width(80.dp).testTag("tunnel-local"), mono = true, error = localPort == null)
             Text("→", color = palette.muted)

@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.ui.form
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -142,6 +143,7 @@ fun NegationToggle(on: Boolean, onToggle: (Boolean) -> Unit) {
     val description = stringResource(Res.string.form_negate)
     UnstyledButton(
         onClick = { onToggle(!on) },
+        indication = LocalIndication.current,
         modifier = Modifier
             .size(24.dp, Theme.metrics.control)
             .clip(shape)

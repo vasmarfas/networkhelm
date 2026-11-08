@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -46,6 +45,8 @@ import com.vasmarfas.networkhelm.session.QUERY_END
 import com.vasmarfas.networkhelm.session.QUERY_PASS
 import com.vasmarfas.networkhelm.ui.form.FormState
 import com.vasmarfas.networkhelm.ui.kit.Button
+import com.vasmarfas.networkhelm.ui.kit.CountPill
+import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.SplitState
 import com.vasmarfas.networkhelm.ui.kit.TabStrip
 import com.vasmarfas.networkhelm.ui.kit.VerticalSplit
@@ -60,6 +61,7 @@ import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
+import networkhelm.app.shared.generated.resources.command_fasttrack
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
@@ -249,23 +251,27 @@ private fun QueryBody(session: DeviceSession, tab: WindowTab, schema: MenuSchema
                     else -> VerticalSplit(split, Modifier.fillMaxSize(), first = inputs, second = outputs)
                 }
             }
+            val line = query.status.mapNotNull { name -> last?.get(name)?.let { value -> tab.labels[name]?.let { "$it: " }.orEmpty() + formatted(pack, name, value) } }.joinToString("   ")
+            val compact = LocalCompact.current
+            val notice = @Composable { lines: Int ->
+                val failed = problem
+                when {
+                    failed != null -> Text(deviceMessage(failed), color = palette.danger, style = Theme.type.small, maxLines = lines, modifier = Modifier.testTag("problem"))
+                    line.isNotEmpty() -> Text(line, style = Theme.type.small, maxLines = lines, modifier = Modifier.testTag("query-status"))
+                    pack.fasttrack -> Text(stringResource(Res.string.command_fasttrack), color = palette.warning, style = Theme.type.small, maxLines = lines)
+                }
+            }
+            if (compact) Box(Modifier.fillMaxWidth().background(palette.raised).padding(start = 8.dp, end = 8.dp, top = 4.dp)) { notice(Int.MAX_VALUE) }
             Row(
                 Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (!query.action) {
-                    val pill = if (Theme.classic) Modifier else Modifier.background(palette.line, RoundedCornerShape(50)).padding(horizontal = 7.dp)
-                    Text(pluralStringResource(Res.plurals.list_items, rows.size, rows.size), pill.testTag("query-count"), style = Theme.type.small, color = if (Theme.classic) palette.muted else palette.text)
+                    CountPill(pluralStringResource(Res.plurals.list_items, rows.size, rows.size), Modifier.testTag("query-count"))
                 }
-                val line = query.status.mapNotNull { name -> last?.get(name)?.let { value -> tab.labels[name]?.let { "$it: " }.orEmpty() + formatted(pack, name, value) } }.joinToString("   ")
                 Box(Modifier.weight(1f)) {
-                    val failed = problem
-                    if (failed != null) {
-                        Text(deviceMessage(failed), color = palette.danger, style = Theme.type.small, maxLines = 2, modifier = Modifier.testTag("problem"))
-                    } else if (line.isNotEmpty()) {
-                        Text(line, style = Theme.type.small, maxLines = 2, modifier = Modifier.testTag("query-status"))
-                    }
+                    if (!compact) notice(2)
                 }
                 Button(stringResource(Res.string.command_stop), { running?.cancel() }, Modifier.testTag("query-stop"), enabled = running != null, danger = true)
                 Button(stringResource(Res.string.command_start), { if (pack.confirm) asking = true else start() }, Modifier.testTag("query-start"), enabled = running == null && ready, primary = true)

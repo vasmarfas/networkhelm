@@ -6,19 +6,24 @@ import com.vasmarfas.networkhelm.model.DeviceInfo
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.SafeModeKind
+import com.vasmarfas.networkhelm.openwrt.RequestOutcomeUnknownException
 import com.vasmarfas.networkhelm.routeros.api.ApiClient
 import com.vasmarfas.networkhelm.routeros.api.ApiConnection
+import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiReply
 import com.vasmarfas.networkhelm.routeros.api.ApiResult
+import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.routeros.api.FakeRouterStream
 import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
+import com.vasmarfas.networkhelm.session.SafeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,6 +37,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.take
+import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runCurrent
@@ -39,6 +46,7 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -235,6 +243,66 @@ class RouterOsSessionTest {
         override fun close() {
             state.value = LinkState.Closed
         }
+    }
+
+    @Test
+    fun aTableThatComesInPortionsTellsItsProgressBeforeTheSnapshot() = runTest {
+        val events = RouterOsSession(PortionsLink(), device, capabilities).watch(MenuPath.parse("ip/firewall/address-list")).take(3).toList()
+        assertEquals(listOf(ListEvent.Progress(2_000, 3_000), ListEvent.Progress(3_000, 3_000), ListEvent.Snapshot(listOf(Item("*1", emptyMap())))), events)
+    }
+
+    @Test
+    fun manyRowsAreRemovedInLinesThatFitTheConsole() = runTest {
+        val link = Link()
+        RouterOsSession(link, device, capabilities).remove(MenuPath.parse("ip/firewall/address-list"), (1..450).map { "*$it" })
+        assertEquals(listOf(200, 200, 50), link.sent.filter { it.first().endsWith("/remove") }.map { it[1].split(',').size })
+    }
+
+    @Test
+    fun anEditThatLosesTheLinkDoesNotClaimItFailed() = runTest {
+        val session = RouterOsSession(Dropping(), device, capabilities)
+        assertFailsWith<RequestOutcomeUnknownException> { session.set(MenuPath.parse("ip/pool"), "*1", mapOf("ranges" to "10.0.0.1")) }
+        assertFailsWith<RequestOutcomeUnknownException> { session.add(MenuPath.parse("ip/pool"), mapOf("name" to "a")) }
+        assertFailsWith<RequestOutcomeUnknownException> { session.remove(MenuPath.parse("ip/pool"), listOf("*1")) }
+    }
+
+    @Test
+    fun aReadThatLosesTheLinkSaysSoInPlainWords() = runTest {
+        val session = RouterOsSession(Dropping(), device, capabilities)
+        assertEquals(LINK_LOST, assertFailsWith<DeviceException> { session.count(MenuPath.parse("ip/pool"), null) }.message)
+    }
+
+    @Test
+    fun theSafeModeOfTheConsoleFailsWithADeviceError() = runTest {
+        val session = RouterOsSession(Dropping(), device, capabilities)
+        assertEquals(LINK_LOST, assertFailsWith<DeviceException> { assertNotNull(session.safeMode).enter() }.message)
+    }
+
+    private class Dropping : RouterOsClient by Link() {
+        override suspend fun call(words: List<String>): ApiResult = throw ApiConnectionClosedException("connection closed")
+
+        override val safeMode: SafeMode = object : SafeMode {
+            override val active: Flow<Boolean> = emptyFlow()
+            override val actions: Flow<Int> = emptyFlow()
+
+            override suspend fun enter(): Boolean = throw ApiConnectionClosedException("connection closed")
+
+            override suspend fun commit() = Unit
+
+            override suspend fun rollback() = Unit
+        }
+    }
+
+    private class PortionsLink : RouterOsClient by Link() {
+        override suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> {
+            progress(2_000, 3_000)
+            progress(3_000, 3_000)
+            return listOf(mapOf(".id" to "*1"))
+        }
+
+        override fun command(words: List<String>, sent: CompletableDeferred<Unit>?): Flow<ApiReply> = flow { throw ApiTrapException(0, "no such command") }
+
+        override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = flow { block(this@PortionsLink) }
     }
 
     @OptIn(ExperimentalCoroutinesApi::class)

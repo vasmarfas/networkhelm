@@ -8,6 +8,7 @@ import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsProtocol
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.theme.BundledThemes
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import kotlin.test.Test
@@ -110,6 +111,32 @@ class ShellTest {
         assertTrue(shell.canGoBack)
         shell.back()
         assertEquals(listOf("Addresses"), tab.workspace.windows.map { it.title })
+        shell.back()
+        assertFalse(shell.canGoBack)
+    }
+
+    @Test
+    fun backLeavesTheThemeEditorBeforeTheSettingsUnderIt() {
+        shell.settingsShown = true
+        shell.themeEditor.value = BundledThemes.first()
+        shell.back()
+        assertEquals(null, shell.themeEditor.value)
+        assertTrue(shell.settingsShown)
+    }
+
+    @Test
+    fun backClosesWhatLiesOverTheWindowsBeforeTheWindows() {
+        shell.add(FakeRouter(), "192.0.2.1")
+        val tab = shell.routers.single()
+        tab.open(MenuEntry("Addresses", "ip/address"))
+        shell.about = true
+        shell.settingsShown = true
+        shell.back()
+        assertFalse(shell.settingsShown)
+        assertTrue(shell.about)
+        shell.back()
+        assertFalse(shell.about)
+        assertEquals(1, tab.workspace.windows.size)
         shell.back()
         assertFalse(shell.canGoBack)
     }

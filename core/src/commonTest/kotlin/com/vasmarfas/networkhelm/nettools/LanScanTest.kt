@@ -152,4 +152,10 @@ class LanScanTest {
         assertEquals("10.1.2.0/24", LocalNetwork("eth1", "10.1.2.3", 16).scanRange())
         assertEquals("192.168.43.0/30", LocalNetwork("tun1", "192.168.43.1", 32).scanRange())
     }
+
+    @Test
+    fun aMobileInterfaceIsNoNetworkToScan() {
+        assertTrue(listOf("rmnet_data1", "rmnet0", "v4-rmnet_data0", "ccmni1", "pdp_ip0", "wwan0").all(::cellular))
+        assertFalse(listOf("wlan0", "eth0", "en0", "swlan0", "bridge1").any(::cellular))
+    }
 }

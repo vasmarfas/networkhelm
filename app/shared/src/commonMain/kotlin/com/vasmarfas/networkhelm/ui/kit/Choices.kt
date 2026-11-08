@@ -1,5 +1,7 @@
 package com.vasmarfas.networkhelm.ui.kit
 
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -79,6 +81,7 @@ import com.composeunstyled.UnstyledDropdownMenu
 import com.composeunstyled.UnstyledIcon
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.lit
+import com.vasmarfas.networkhelm.ui.theme.on
 import kotlin.math.roundToInt
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
@@ -96,14 +99,16 @@ fun <T> Segments(value: T, choices: List<T>, label: @Composable (T) -> String, o
     val material = Theme.material
     val shape = if (material) RoundedCornerShape(50) else RoundedCornerShape(Theme.metrics.radius)
     val edge = if (material) palette.faint else palette.line
+    val least = if (LocalCompact.current) 40.dp else 0.dp
     Row(modifier.height(Theme.metrics.control).clip(shape).border(1.dp, edge, shape)) {
         choices.forEachIndexed { index, choice ->
             val chosen = choice == value
             if (index > 0) Box(Modifier.width(1.dp).fillMaxHeight().background(edge))
             Box(
                 Modifier
+                    .widthIn(min = least)
                     .fillMaxHeight()
-                    .background(if (!chosen) palette.surface else if (material) palette.selection else palette.accent)
+                    .background((if (!chosen) palette.surface else if (material) palette.selection else palette.accent).eased())
                     .selectable(selected = chosen, interactionSource = null, indication = LocalIndication.current, role = Role.RadioButton, onClick = { onSelect(choice) })
                     .hand()
                     .padding(horizontal = if (material) 16.dp else 10.dp),
@@ -113,7 +118,7 @@ fun <T> Segments(value: T, choices: List<T>, label: @Composable (T) -> String, o
                     Text(
                         label(choice),
                         style = if (material) Theme.type.strong else LocalTextStyle.current,
-                        color = if (chosen && !material) palette.onAccent else palette.text,
+                        color = if (chosen && !material) palette.on(palette.accent) else palette.text,
                         singleLine = true,
                     )
                 }
@@ -138,7 +143,7 @@ fun <T> Radios(value: T, choices: List<T>, label: @Composable (T) -> String, onS
             ) {
                 Box(
                     Modifier.size(if (material) 20.dp else 16.dp).clip(CircleShape).background(palette.surface)
-                        .border(if (material) 2.dp else 1.dp, if (chosen && !Theme.classic) palette.accent else edge, CircleShape),
+                        .border(if (material) 2.dp else 1.dp, (if (chosen && !Theme.classic) palette.accent else edge).eased(), CircleShape),
                     contentAlignment = Alignment.Center,
                 ) {
                     if (chosen) Box(Modifier.size(if (material) 10.dp else 8.dp).clip(CircleShape).background(dot))
@@ -257,6 +262,7 @@ fun <T> Select(
         anchor = {
             UnstyledButton(
                 onClick = { expanded = true },
+                indication = LocalIndication.current,
                 contentPadding = PaddingValues(start = if (material) 12.dp else 8.dp, end = if (material) 8.dp else 6.dp),
                 modifier = Modifier.height(Theme.metrics.control).clip(shape).background(palette.surface).border(1.dp, if (material) palette.faint else palette.line, shape).hand(),
             ) {
@@ -391,6 +397,7 @@ fun TabStrip(
         ) {
             titles.forEachIndexed { index, title ->
                 val active = index == selected || index in also
+                val mark by animateFloatAsState(if (active) 1f else 0f, tween(if (material) MOTION_MILLIS else 0))
                 Box(
                     Modifier
                         .fillMaxHeight()
@@ -399,6 +406,7 @@ fun TabStrip(
                         .then(if (boxed) Modifier.padding(top = 4.dp).clip(tabShape).background(if (active) chosenBox else otherBox) else Modifier)
                         .selectable(selected = active, interactionSource = null, indication = LocalIndication.current, role = Role.Tab, onClick = {
                             if (shift && onAdd != null) onAdd(index) else onSelect(index)
+                            scope.launch { places[index].bringIntoView() }
                         })
                         .hand()
                         .drawBehind {
@@ -410,10 +418,11 @@ fun TabStrip(
                                 drawLine(palette.line, Offset(size.width - px / 2, 0f), Offset(size.width - px / 2, size.height), px)
                                 drawLine(palette.lit, Offset(px * 1.5f, px), Offset(px * 1.5f, size.height), px)
                                 if (!active) drawLine(palette.line, Offset(0f, size.height - px / 2), Offset(size.width, size.height - px / 2), px)
-                            } else if (active && material) {
+                            } else if (material) {
                                 val thick = 3.dp.toPx()
                                 val inset = if (boxed) 0f else 16.dp.toPx()
-                                drawRoundRect(palette.accent, Offset(inset, if (boxed) 0f else size.height - thick), Size(size.width - inset * 2, thick), CornerRadius(thick))
+                                val width = (size.width - inset * 2) * mark
+                                drawRoundRect(palette.accent, Offset((size.width - width) / 2, if (boxed) 0f else size.height - thick), Size(width, thick), CornerRadius(thick))
                             } else if (active) {
                                 val top = if (boxed) 0f else size.height - 2.dp.toPx()
                                 drawRect(palette.accent, Offset(0f, top), Size(size.width, 2.dp.toPx()))
@@ -446,6 +455,7 @@ private fun TabList(titles: List<String>, selected: Int, onSelect: (Int) -> Unit
         anchor = {
             UnstyledButton(
                 onClick = { expanded = true },
+                indication = LocalIndication.current,
                 modifier = Modifier
                     .fillMaxHeight()
                     .padding(top = 4.dp, end = 2.dp)
@@ -462,7 +472,7 @@ private fun TabList(titles: List<String>, selected: Int, onSelect: (Int) -> Unit
 
 @Composable
 private fun StripArrow(icon: ImageVector, description: String, enabled: Boolean, tint: Color?, onClick: () -> Unit) {
-    UnstyledButton(onClick = onClick, enabled = enabled, modifier = Modifier.width(24.dp).fillMaxHeight().hand()) {
+    UnstyledButton(onClick = onClick, enabled = enabled, indication = LocalIndication.current, modifier = Modifier.width(if (LocalCompact.current) 40.dp else 24.dp).fillMaxHeight().hand()) {
         val colour = tint?.let { if (enabled) it else it.copy(alpha = 0.4f) } ?: if (enabled) Theme.palette.text else Theme.palette.faint
         UnstyledIcon(icon, description, Modifier.size(14.dp), tint = colour)
     }

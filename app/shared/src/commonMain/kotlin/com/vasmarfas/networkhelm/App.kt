@@ -43,6 +43,7 @@ import com.vasmarfas.networkhelm.ui.settings.BrowserAccessDialog
 import com.vasmarfas.networkhelm.ui.settings.SettingsDialog
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import com.vasmarfas.networkhelm.ui.theme.TouchMetrics
 import com.vasmarfas.networkhelm.ui.tools.ToolsDialog
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
@@ -77,7 +78,8 @@ fun App(shell: Shell, tabsInTitle: Boolean = false) {
     LaunchedEffect(shell, read, shell.settings.current.checkUpdates) { if (read) shell.checkRelease() }
     ShellTheme(shell) {
         BoxWithConstraints(Modifier.fillMaxSize().background(Theme.palette.workspace).safeDrawingPadding()) {
-            CompositionLocalProvider(LocalCompact provides (maxWidth < CompactWidth || maxHeight < CompactHeight)) { HintHost { Routers(shell, tabsInTitle) } }
+            val compact = maxWidth < CompactWidth || maxHeight < CompactHeight
+            CompositionLocalProvider(LocalCompact provides compact) { TouchMetrics(compact) { HintHost { Routers(shell, tabsInTitle) } } }
         }
     }
 }
@@ -149,7 +151,7 @@ private fun Routers(shell: Shell, tabsInTitle: Boolean) {
             SettingsDialog(shell.settings, shell.services.browserAccess, onBrowserAccess = {
                 shell.settingsShown = false
                 shell.accessShown = true
-            }) { shell.settingsShown = false }
+            }, themeEditor = shell.themeEditor) { shell.settingsShown = false }
         }
         if (shell.toolsShown) ToolsDialog { shell.toolsShown = false }
         if (shell.accessShown) shell.services.browserAccess?.let { BrowserAccessDialog(it) { shell.accessShown = false } }

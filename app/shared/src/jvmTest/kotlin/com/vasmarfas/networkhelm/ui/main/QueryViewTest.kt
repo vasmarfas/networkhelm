@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.ui.main
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertTextEquals
@@ -59,7 +60,7 @@ class QueryViewTest {
         listOf(Argument("address", ValueType.Text()), Argument("count", ValueType.Integer(), optional = true)),
     )
 
-    private fun pack(action: Boolean = false, risky: Boolean = false, confirm: String? = null, close: Boolean = false, fallback: PackFallback? = null, notes: Map<String, String> = emptyMap()) = Pack(
+    private fun pack(action: Boolean = false, risky: Boolean = false, confirm: String? = null, close: Boolean = false, fallback: PackFallback? = null, notes: Map<String, String> = emptyMap(), fasttrack: Boolean = false) = Pack(
         menu = listOf("Echo"),
         window = PackWindow("Echo", listOf(PackTab("Echo", key))),
         paths = mapOf(
@@ -69,6 +70,7 @@ class QueryViewTest {
                 labels = mapOf("address" to "Echo To", "seq" to "Seq #", "summary" to "Summary", "lost" to "Lost Packets", "rate" to "Tx/Rx Current", "uptime" to "Uptime"),
                 bits = listOf("rate"),
                 confirm = risky,
+                fasttrack = fasttrack,
                 native = PackNative(
                     listOf(22),
                     emptyList(),
@@ -114,6 +116,12 @@ class QueryViewTest {
 
     private fun router(made: Pack, output: List<Item>, endless: Boolean = true, refused: Set<String> = emptySet(), shown: MenuSchema = schema, gone: Set<String> = emptySet()) =
         FakeRouter(schemas = mapOf(key to shown), made = listOf(made), output = mapOf("$key/start" to output), endless = endless, refused = refused, gone = gone)
+
+    @Test
+    fun aToolThatTurnsFastTrackOffSaysSoBeforeItStarts() = runDesktopComposeUiTest(1100, 700) {
+        show(router(pack(fasttrack = true), emptyList()))
+        onNodeWithText("FastTrack", substring = true).assertIsDisplayed()
+    }
 
     @Test
     fun aQueryStartsWhenTheRequiredFieldIsGivenAndSendsOnlyWhatWasTouched() = runDesktopComposeUiTest(1100, 700) {

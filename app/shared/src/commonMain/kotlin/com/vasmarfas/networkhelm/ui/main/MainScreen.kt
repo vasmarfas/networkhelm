@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,9 +17,11 @@ import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -127,6 +130,7 @@ import com.vasmarfas.networkhelm.ui.terminal.TelnetView
 import com.vasmarfas.networkhelm.ui.terminal.TerminalView
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.ThemeIcon
+import com.vasmarfas.networkhelm.ui.theme.on
 import com.vasmarfas.networkhelm.ui.theme.tintOf
 import com.vasmarfas.networkhelm.ui.workspace.WindowState
 import com.vasmarfas.networkhelm.ui.workspace.Workspace
@@ -134,6 +138,7 @@ import com.vasmarfas.networkhelm.update.Release
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -292,7 +297,7 @@ fun MainScreen(
                 Text(
                     stringResource(if (link == LinkState.Reconnecting) Res.string.link_lost else Res.string.link_closed),
                     Modifier.fillMaxWidth().background(palette.danger).padding(horizontal = 12.dp, vertical = 4.dp),
-                    color = palette.onAccent,
+                    color = palette.on(palette.danger),
                 )
             }
             safeMode?.let { held -> Stranded(held) { problem = it } }
@@ -403,8 +408,15 @@ private fun Phone(tab: RouterTab, onSecure: (suspend () -> Unit)?, modifier: Mod
             IconButton(Lucide.ArrowLeft, stringResource(Res.string.main_back), { tab.workspace.close(front) }, Modifier.testTag("back"))
             Text(front.title, style = Theme.type.strong, singleLine = true, overflow = TextOverflow.Ellipsis)
         }
-        Box(Modifier.weight(1f).fillMaxWidth().background(Theme.palette.surface)) {
-            key(front.id) { WindowContent(tab, front, onSecure) }
+        BoxWithConstraints(Modifier.weight(1f).fillMaxWidth().background(Theme.palette.surface)) {
+            // a phone on its side has less height than the bars of a window, which then scrolls under the bars of the app
+            val typing = WindowInsets.ime.getBottom(LocalDensity.current) > 0
+            val tall = if (typing) maxHeight else maxOf(maxHeight, WINDOW_HEIGHT)
+            Box(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+                Box(Modifier.fillMaxWidth().height(tall)) {
+                    key(front.id) { WindowContent(tab, front, onSecure) }
+                }
+            }
         }
     }
 }
@@ -509,7 +521,7 @@ private fun Toolbar(
         tab.session.safeMode?.takeIf { canWrite }?.let { safeMode ->
             val draft = tab.session.capabilities.safeMode == SafeModeKind.ApplyRollback
             val active by remember(safeMode) { safeMode.active }.collectAsState(false)
-            val actions by remember(safeMode, active) { if (active || draft) safeMode.actions else flowOf(0) }.collectAsState(0)
+            val actions by remember(safeMode, active) { if (active || draft) safeMode.actions.catch { emit(0) } else flowOf(0) }.collectAsState(0)
             val title = stringResource(if (draft) Res.string.main_apply else Res.string.main_safe_mode)
             val held = stringResource(if (draft) Res.string.apply_held else Res.string.safe_held)
             if (active) {
@@ -548,7 +560,7 @@ private fun Toolbar(
                 Modifier.clip(RoundedCornerShape(Theme.metrics.radius)).background(palette.warning)
                     .then(if (opens) Modifier.clickable { tab.openPrepare(prepare) }.hand() else Modifier)
                     .padding(horizontal = 8.dp, vertical = 2.dp).testTag("unencrypted"),
-                color = palette.onAccent,
+                color = palette.on(palette.warning),
                 style = Theme.type.small,
             )
         }
@@ -622,7 +634,7 @@ private fun RouterUpdateChip(tab: RouterTab, version: String, compact: Boolean) 
                         Text(
                             stringResource(Res.string.update_router_update),
                             Modifier.clip(RoundedCornerShape(Theme.metrics.radius)).background(palette.success).clickable(onClick = go).hand().padding(horizontal = 14.dp, vertical = 5.dp).testTag("router-update-open"),
-                            color = palette.onAccent,
+                            color = palette.on(palette.success),
                         )
                         IconButton(Lucide.List, stringResource(Res.string.update_router_changes), go, Modifier.testTag("router-update-changes"))
                     }
@@ -642,7 +654,7 @@ private fun UpdateChip(text: String, hint: String, color: Color, compact: Boolea
             Text(
                 text,
                 modifier.clip(RoundedCornerShape(Theme.metrics.radius)).background(color).clickable(onClick = onClick).hand().padding(horizontal = 10.dp, vertical = 3.dp),
-                color = Theme.palette.onAccent,
+                color = Theme.palette.on(color),
                 style = Theme.type.small,
                 singleLine = true,
                 overflow = TextOverflow.Ellipsis,
@@ -717,7 +729,7 @@ private fun LeftMenu(tab: RouterTab, search: FocusRequester, modifier: Modifier)
 @Composable
 private fun Band(colour: Color) {
     Box(Modifier.width(16.dp).fillMaxHeight().background(colour), contentAlignment = Alignment.BottomCenter) {
-        Text("NetworkHelm", Modifier.padding(bottom = 10.dp).sideways(), color = Theme.palette.onAccent, style = Theme.type.small, maxLines = 1)
+        Text("NetworkHelm", Modifier.padding(bottom = 10.dp).sideways(), color = Theme.palette.on(colour), style = Theme.type.small, maxLines = 1)
     }
 }
 
@@ -758,13 +770,14 @@ private fun Stranded(safeMode: SafeMode, onProblem: (String?) -> Unit) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Text(stringResource(Res.string.safe_stranded), Modifier.weight(1f), color = palette.onAccent)
+        Text(stringResource(Res.string.safe_stranded), Modifier.weight(1f), color = palette.on(palette.warning))
         Button(stringResource(Res.string.safe_rollback), { settle(false) }, primary = true)
         Button(stringResource(Res.string.safe_keep), { settle(true) })
     }
 }
 
 private val history = MenuPath.parse("system/history")
+private val WINDOW_HEIGHT = 360.dp
 
 // print gives the newest record first: undo takes the newest it can undo, redo the oldest it can redo
 @Composable

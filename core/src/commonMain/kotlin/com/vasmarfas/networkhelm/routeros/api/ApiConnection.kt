@@ -16,11 +16,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import kotlin.concurrent.Volatile
 import kotlin.coroutines.ContinuationInterceptor
 
 class ApiTrapException(val category: Int?, message: String) : Exception(message)
 
-class ApiConnectionClosedException(message: String, cause: Throwable? = null) : Exception(message, cause)
+open class ApiConnectionClosedException(message: String, cause: Throwable? = null) : Exception(message, cause)
 
 class ApiResult(val rows: List<Map<String, String>>, val done: Map<String, String>)
 
@@ -35,6 +36,10 @@ class ApiConnection(
     private var nextTag = 0L
     private var closedBy: Throwable? = null
     private val closed = CompletableDeferred<ApiConnectionClosedException>()
+
+    @Volatile
+    internal var heard = 0L
+        private set
 
     private val reader = scope.launch { readLoop() }
 
@@ -124,6 +129,7 @@ class ApiConnection(
         try {
             while (true) {
                 val reply = parseReply(sentences.next()?.map(encoding::decode) ?: break)
+                heard++
                 val target = reply.tag?.let { tag -> stateLock.withLock { pending[tag] } }
                 if (target != null) {
                     target.trySend(reply)

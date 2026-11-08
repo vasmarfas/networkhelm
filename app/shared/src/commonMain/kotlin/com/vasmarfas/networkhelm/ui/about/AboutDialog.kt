@@ -44,6 +44,7 @@ import com.vasmarfas.networkhelm.ui.workspace.VerticalScrollbar
 import org.jetbrains.compose.resources.painterResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
+import networkhelm.app.shared.generated.resources.about_chat
 import networkhelm.app.shared.generated.resources.about_close
 import networkhelm.app.shared.generated.resources.about_description
 import networkhelm.app.shared.generated.resources.about_site
@@ -56,6 +57,7 @@ import networkhelm.app.shared.generated.resources.networkhelm
 private const val SITE = "https://vasmarfas.com"
 private const val SOURCE = "https://github.com/vasmarfas/networkhelm"
 private const val TELEGRAM = "https://t.me/vasmarfas_channel"
+private const val CHAT = "https://t.me/vasmarfas_chat"
 private const val SUPPORT = "https://github.com/vasmarfas/networkhelm/blob/master/SUPPORT.md"
 
 @Composable
@@ -87,6 +89,7 @@ fun AboutDialog(onClose: () -> Unit) {
                     Button(stringResource(Res.string.about_site), { links.openUri(SITE) }, Modifier.testTag("about-site"))
                     Button(stringResource(Res.string.about_source), { links.openUri(SOURCE) }, Modifier.testTag("about-source"))
                     Button(stringResource(Res.string.about_telegram), { links.openUri(TELEGRAM) }, Modifier.testTag("about-telegram"))
+                    Button(stringResource(Res.string.about_chat), { links.openUri(CHAT) }, Modifier.testTag("about-chat"))
                 }
                 TabStrip(aboutTexts.map { it.first }, shown, { shown = it })
                 Box(Modifier.fillMaxWidth().height(240.dp)) {

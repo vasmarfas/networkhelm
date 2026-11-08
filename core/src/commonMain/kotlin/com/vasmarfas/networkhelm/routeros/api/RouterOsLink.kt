@@ -9,6 +9,9 @@ import kotlinx.coroutines.flow.FlowCollector
 interface RouterOsLink {
     suspend fun call(words: List<String>): ApiResult
 
+    // the rows of a print; a link that reads a big table in portions tells after each how many of how many it has
+    suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> = call(words).rows
+
     fun command(words: List<String>, sent: CompletableDeferred<Unit>? = null): Flow<ApiReply>
 }
 

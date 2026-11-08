@@ -68,7 +68,7 @@ The services are visible in WinBox and in the console: `/ip service print`. Any 
 
 | Way | Port | Notes |
 | --- | --- | --- |
-| WinBox | 8291 | the console carries the whole interface, so no API, REST or SSH is needed; the program picks it first when the port answers |
+| WinBox | 8291 | the console carries the whole interface, so no API, REST or SSH is needed; the program picks it first when the port answers; the login on this port does not work on RouterOS 6.42, pick the API there |
 | API-SSL | 8729 | encrypted; needs a certificate: without one RouterOS answers with anonymous TLS, which the program does not use |
 | API | 8728 | not encrypted |
 | REST over HTTPS and HTTP | 443 and 80 | RouterOS 7.1 and later only, the `www-ssl` and `www` services |
@@ -197,6 +197,9 @@ Settings → Theme offers three looks. Modern is the default: flat controls in t
 | "the SNMP agent answered inconsistentValue for …" (or wrongValue, wrongLength, noCreation) | the agent does not take this value or this row: a required column of a new row is missing, the index is taken, the value is out of range | fill the other columns of the row, take another index, check the allowed values in the documentation of the device |
 | "Android does not let NetworkHelm reach the local network" | the permission is not granted | in the Android settings of the app allow "Nearby devices" |
 | "The connection was lost after sending the command …" | the link dropped at the moment of the edit | check the router first: the command may have run, and a repeat would run it twice |
+| "The connection to the router is lost, reconnecting…" | the link dropped or the router rebooted; on a phone the system also closes the connections of an app in the background | wait: the session comes back by itself, open forms keep what you typed; after a return to the app on a phone this takes up to half a minute |
+| "Loading… 2187 of 34998" at the bottom of a list | over WinBox, SSH and REST a table of more than 2 000 rows comes in portions, so that the router does not have to hold it in memory whole; on a local network 30 000 rows take about 10 seconds over REST and 40 over WinBox | wait: the list is ready when the count turns into the number of items |
+| "Not loaded" and a "Retry" button under a list | the rows did not arrive; the reason stands beside the button | press "Retry" or F5 |
 | The router stopped answering right after you typed the address | its protection against password guessing took the port check for a login attempt | wait for the block to end and turn the check off in "Settings" |
 | "The browser blocked the request …" | a page in a browser can only send HTTP, and RouterOS sends no CORS headers | open the app through a gateway, or connect with the app |
 | The program does not start | on a computer it writes the cause to the file `NetworkHelm-startup-error.log` in the temporary folder | take the file (`%TEMP%` on Windows, `/tmp` on Linux) and attach it to your report with the version of the system |

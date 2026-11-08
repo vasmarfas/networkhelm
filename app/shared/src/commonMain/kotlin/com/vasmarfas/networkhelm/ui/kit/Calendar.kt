@@ -29,6 +29,7 @@ import com.composables.icons.lucide.Lucide
 import com.composeunstyled.Text
 import com.composeunstyled.UnstyledDropdownMenu
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import com.vasmarfas.networkhelm.ui.theme.on
 import kotlin.time.Clock
 import kotlinx.datetime.LocalDate
 import kotlinx.datetime.TimeZone
@@ -104,7 +105,7 @@ private fun Month(day: LocalDate?, onPick: (LocalDate) -> Unit) {
                                 .hand(),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text("$number", color = if (chosen) palette.onAccent else palette.text)
+                            Text("$number", color = if (chosen) palette.on(palette.accent) else palette.text)
                         }
                     }
                 }

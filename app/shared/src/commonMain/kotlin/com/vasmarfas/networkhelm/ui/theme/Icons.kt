@@ -497,6 +497,15 @@ val ClassicIcons: Map<String, String> = mapOf(
     "button/comment" to "message-square:warning",
 )
 
+val MaterialIcons: Map<String, String> = mapOf(
+    "button/new" to "plus:accent",
+    "button/remove" to "trash-2:muted",
+    "button/enable" to "circle-check:muted",
+    "button/disable" to "circle-x:muted",
+    "button/comment" to "pencil:muted",
+    "button/filter" to "funnel:muted",
+)
+
 enum class IconTint { Text, Muted, Accent, Success, Warning, Danger }
 
 class ThemeIcon(val vector: ImageVector, val tint: IconTint?)

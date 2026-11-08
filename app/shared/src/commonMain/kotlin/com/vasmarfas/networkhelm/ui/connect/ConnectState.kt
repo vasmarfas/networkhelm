@@ -32,6 +32,7 @@ import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.offline.openConfig
 import com.vasmarfas.networkhelm.openwrt.OpenWrtLogin
+import com.vasmarfas.networkhelm.routeros.LoginTimeoutException
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
@@ -787,7 +788,7 @@ class ConnectState(
         return when {
             "SSLHandshakeException" in causes -> Problem.Handshake(host)
             "ConnectException" in causes -> Problem.Refused(host, port)
-            "SocketTimeoutException" in causes -> Problem.Timeout(host)
+            "SocketTimeoutException" in causes || generateSequence<Throwable>(e) { it.cause }.any { it is LoginTimeoutException } -> Problem.Timeout(host)
             "UnknownHostException" in causes -> Problem.UnknownHost(host)
             "NoRouteToHostException" in causes -> Problem.Unreachable(host)
             else -> Problem.Other(host, e.message ?: e::class.simpleName.orEmpty())

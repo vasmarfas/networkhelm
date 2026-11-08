@@ -34,6 +34,48 @@ import networkhelm.app.shared.generated.resources.tools_b_seconds
 import networkhelm.app.shared.generated.resources.tools_b_size
 import networkhelm.app.shared.generated.resources.tools_b_speed
 import networkhelm.app.shared.generated.resources.tools_b_time
+import networkhelm.app.shared.generated.resources.unit_b
+import networkhelm.app.shared.generated.resources.unit_b_s
+import networkhelm.app.shared.generated.resources.unit_bit_s
+import networkhelm.app.shared.generated.resources.unit_gb
+import networkhelm.app.shared.generated.resources.unit_gb_s
+import networkhelm.app.shared.generated.resources.unit_gbit_s
+import networkhelm.app.shared.generated.resources.unit_gib
+import networkhelm.app.shared.generated.resources.unit_kb
+import networkhelm.app.shared.generated.resources.unit_kb_s
+import networkhelm.app.shared.generated.resources.unit_kbit_s
+import networkhelm.app.shared.generated.resources.unit_kib
+import networkhelm.app.shared.generated.resources.unit_mb
+import networkhelm.app.shared.generated.resources.unit_mb_s
+import networkhelm.app.shared.generated.resources.unit_mbit_s
+import networkhelm.app.shared.generated.resources.unit_mib
+import networkhelm.app.shared.generated.resources.unit_tb
+import networkhelm.app.shared.generated.resources.unit_tib
+
+private val SizeUnit.label: StringResource
+    get() = when (this) {
+        SizeUnit.B -> Res.string.unit_b
+        SizeUnit.KB -> Res.string.unit_kb
+        SizeUnit.MB -> Res.string.unit_mb
+        SizeUnit.GB -> Res.string.unit_gb
+        SizeUnit.TB -> Res.string.unit_tb
+        SizeUnit.KiB -> Res.string.unit_kib
+        SizeUnit.MiB -> Res.string.unit_mib
+        SizeUnit.GiB -> Res.string.unit_gib
+        SizeUnit.TiB -> Res.string.unit_tib
+    }
+
+private val SpeedUnit.label: StringResource
+    get() = when (this) {
+        SpeedUnit.Bit -> Res.string.unit_bit_s
+        SpeedUnit.Kbit -> Res.string.unit_kbit_s
+        SpeedUnit.Mbit -> Res.string.unit_mbit_s
+        SpeedUnit.Gbit -> Res.string.unit_gbit_s
+        SpeedUnit.Bps -> Res.string.unit_b_s
+        SpeedUnit.KBps -> Res.string.unit_kb_s
+        SpeedUnit.MBps -> Res.string.unit_mb_s
+        SpeedUnit.GBps -> Res.string.unit_gb_s
+    }
 
 private enum class Wanted(val title: StringResource) {
     Time(Res.string.tools_b_time),
@@ -66,10 +108,10 @@ internal fun TransferPane() {
         Segments(find, Wanted.entries, { stringResource(it.title) }, { find = it }, Modifier.testTag("transfer-find"))
     }
     Labeled(stringResource(Res.string.tools_b_size)) {
-        Quantity(size, sizeResult, find != Wanted.Size, sizeUnit, SizeUnit.entries, { it.symbol }, { sizeUnit = it }, "transfer-size")
+        Quantity(size, sizeResult, find != Wanted.Size, sizeUnit, SizeUnit.entries, { stringResource(it.label) }, { sizeUnit = it }, "transfer-size")
     }
     Labeled(stringResource(Res.string.tools_b_speed)) {
-        Quantity(speed, speedResult, find != Wanted.Speed, speedUnit, SpeedUnit.entries, { it.symbol }, { speedUnit = it }, "transfer-speed")
+        Quantity(speed, speedResult, find != Wanted.Speed, speedUnit, SpeedUnit.entries, { stringResource(it.label) }, { speedUnit = it }, "transfer-speed")
     }
     Labeled(stringResource(Res.string.tools_b_time)) {
         if (find == Wanted.Time) {
@@ -90,13 +132,13 @@ internal fun TransferPane() {
         for ((rate, unit) in Transfer.references) {
             if (speedValue != null && rate * unit.bitsPerSecond == speedValue * speedUnit.bitsPerSecond) continue
             val taken = Transfer.seconds(sizeValue, sizeUnit, rate, unit, extra) ?: continue
-            Fact("${Transfer.rounded(rate)} ${unit.symbol}", Transfer.timeText(taken, hour, minute, second))
+            Fact("${Transfer.rounded(rate)} ${stringResource(unit.label)}", Transfer.timeText(taken, hour, minute, second))
         }
     }
 }
 
 @Composable
-private fun <U> Quantity(input: TextFieldState, result: Double?, editable: Boolean, unit: U, units: List<U>, symbol: (U) -> String, onUnit: (U) -> Unit, tag: String) {
+private fun <U> Quantity(input: TextFieldState, result: Double?, editable: Boolean, unit: U, units: List<U>, symbol: @Composable (U) -> String, onUnit: (U) -> Unit, tag: String) {
     Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
         if (editable) {
             TextField(input, Modifier.width(120.dp).testTag(tag), mono = true, error = input.text.isNotBlank() && Transfer.amount(input.text.toString()) == null)

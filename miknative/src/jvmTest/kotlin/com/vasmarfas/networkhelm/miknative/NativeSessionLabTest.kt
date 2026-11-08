@@ -42,7 +42,7 @@ class NativeSessionLabTest {
             when (event) {
                 is ListEvent.Snapshot -> event.items.firstOrNull { "pairing-status" in it.values }
                 is ListEvent.Upsert -> event.item.takeIf { "pairing-status" in it.values }
-                is ListEvent.Removed -> null
+                is ListEvent.Removed, is ListEvent.Progress -> null
             }
         }.first()
         assertEquals("paired", listed["pairing-status"])

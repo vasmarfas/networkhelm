@@ -1,10 +1,14 @@
 package com.vasmarfas.networkhelm.ui.kit
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.ScrollState
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -38,6 +42,7 @@ import androidx.compose.foundation.text.selection.LocalTextSelectionColors
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,17 +54,22 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.FocusDirection
 import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEventType
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.PointerIcon
@@ -100,6 +110,7 @@ import com.composeunstyled.UnstyledTooltip
 import com.vasmarfas.networkhelm.ui.theme.Palette
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.lit
+import com.vasmarfas.networkhelm.ui.theme.on
 import com.vasmarfas.networkhelm.ui.theme.panel
 import com.vasmarfas.networkhelm.ui.theme.shaded
 import org.jetbrains.compose.resources.stringResource
@@ -118,6 +129,23 @@ private fun Modifier.onEnter(action: (() -> Unit)?): Modifier = if (action == nu
     if (enter) action()
     enter
 }
+
+@Composable
+fun CountPill(text: String, modifier: Modifier = Modifier) {
+    val palette = Theme.palette
+    val face = when {
+        Theme.classic -> modifier
+        Theme.material -> modifier.border(1.dp, palette.faint, RoundedCornerShape(8.dp)).padding(horizontal = 8.dp)
+        else -> modifier.background(palette.line, RoundedCornerShape(50)).padding(horizontal = 7.dp)
+    }
+    Text(text, face, style = Theme.type.small, color = if (Theme.classic) palette.muted else palette.text)
+}
+
+internal const val MOTION_MILLIS = 150
+
+// the states of Material change in a short fade, the other themes at once
+@Composable
+internal fun Color.eased(): Color = if (Theme.material) animateColorAsState(this, tween(MOTION_MILLIS)).value else this
 
 @Composable
 fun ToolbarButton(
@@ -140,9 +168,11 @@ fun ToolbarButton(
         UnstyledButton(
             onClick = onClick,
             enabled = enabled,
+            indication = LocalIndication.current,
             contentPadding = PaddingValues(horizontal = if (material) 10.dp else 6.dp),
             modifier = modifier
                 .height(Theme.metrics.toolbar)
+                .then(if (LocalCompact.current) Modifier.widthIn(min = 40.dp) else Modifier)
                 .then(if (classic) Modifier.padding(vertical = 1.dp) else Modifier)
                 .clip(if (material) RoundedCornerShape(50) else RoundedCornerShape(Theme.metrics.radius))
                 .background(if (active) palette.selection else if (classic) palette.raised else palette.surface.copy(alpha = 0f))
@@ -174,8 +204,9 @@ fun IconButton(
         UnstyledButton(
             onClick = onClick,
             enabled = enabled,
+            indication = LocalIndication.current,
             modifier = modifier
-                .then(if (material) Modifier.size(Theme.metrics.row) else Modifier.size(28.dp, Theme.metrics.row))
+                .then(if (material) Modifier.size(Theme.metrics.row) else Modifier.size(if (LocalCompact.current) 40.dp else 28.dp, Theme.metrics.row))
                 .clip(if (material) RoundedCornerShape(50) else RoundedCornerShape(Theme.metrics.radius))
                 .background(if (active) palette.selection else if (classic) palette.raised else palette.surface.copy(alpha = 0f))
                 .then(if (classic) Modifier.bevel(palette) else Modifier)
@@ -224,6 +255,7 @@ fun Button(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, en
     UnstyledButton(
         onClick = onClick,
         enabled = enabled,
+        indication = LocalIndication.current,
         contentPadding = PaddingValues(
             horizontal = when {
                 material -> if (compact) 16.dp else 24.dp
@@ -238,7 +270,8 @@ fun Button(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, en
             .then(
                 when {
                     classic -> Modifier.background(palette.raised).bevel(palette, if (primary && enabled) palette.text else palette.line)
-                    material -> Modifier.background(if (filled) fill else if (enabled) palette.selection else palette.text.copy(alpha = 0.12f))
+                    material && filled -> Modifier.background(fill.eased())
+                    material -> if (enabled) Modifier.border(1.dp, palette.faint, shape) else Modifier.background(palette.text.copy(alpha = 0.12f))
                     else -> Modifier.background(if (filled) fill else palette.surface).border(1.dp, if (filled) fill else palette.line, shape)
                 },
             )
@@ -250,8 +283,9 @@ fun Button(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, en
                 style = if (material) Theme.type.strong else LocalTextStyle.current,
                 color = when {
                     !enabled -> palette.faint
-                    filled -> palette.onAccent
+                    filled -> palette.on(fill)
                     danger -> palette.danger
+                    material -> palette.accent
                     else -> palette.text
                 },
                 singleLine = true,
@@ -299,7 +333,7 @@ fun TextField(
                 .padding(horizontal = if (material) 12.dp else 6.dp),
         ) {
             TextInput(
-                if (material) Modifier.fillMaxHeight().wrapContentHeight() else Modifier.padding(vertical = if (Theme.classic) 0.dp else 4.dp),
+                Modifier.fillMaxHeight().wrapContentHeight(),
                 placeholder = placeholder?.let { { Text(it, color = palette.faint) } },
             )
         }
@@ -310,7 +344,16 @@ fun TextField(
 @Composable
 fun Modifier.scrim(color: Color, onDismiss: (() -> Unit)? = null): Modifier {
     val dismiss by rememberUpdatedState(onDismiss)
-    return background(color).pointerInput(Unit) { detectTapGestures { dismiss?.invoke() } }
+    val focus = remember { FocusRequester() }
+    var inside by remember { mutableStateOf(false) }
+    LaunchedEffect(onDismiss != null) { if (!inside) focus.requestFocus() }
+    return background(color)
+        .pointerInput(Unit) { detectTapGestures { dismiss?.invoke() } }
+        .onKeyEvent { event -> (event.type == KeyEventType.KeyDown && event.key == Key.Escape).also { if (it) dismiss?.invoke() } }
+        .focusProperties { onExit = { if (requestedFocusDirection != FocusDirection.Enter) cancelFocusChange() } }
+        .onFocusChanged { inside = it.hasFocus }
+        .focusRequester(focus)
+        .focusable()
 }
 
 // the scroll goes between the face and the inner padding, so that the padding scrolls with the content;
@@ -321,7 +364,13 @@ fun Modifier.dialogPanel(padding: Dp, scroll: ScrollState? = null): Modifier {
     val material = Theme.material
     val face = if (material) {
         val shape = RoundedCornerShape(28.dp)
-        shadow(6.dp, shape).background(palette.panel)
+        val shown = remember { Animatable(0f) }
+        LaunchedEffect(Unit) { shown.animateTo(1f, tween(MOTION_MILLIS)) }
+        graphicsLayer {
+            alpha = shown.value
+            scaleX = 0.96f + 0.04f * shown.value
+            scaleY = scaleX
+        }.shadow(6.dp, shape).background(palette.panel)
     } else {
         val shape = RoundedCornerShape(Theme.metrics.radius)
         background(palette.surface, shape).border(1.dp, palette.line, shape)
@@ -359,12 +408,12 @@ fun SecretField(state: TextFieldState, modifier: Modifier = Modifier, enabled: B
                 .height(Theme.metrics.control)
                 .clip(shape)
                 .background(palette.surface)
-                .border(if (material && focused) 2.dp else 1.dp, if (!material) palette.line else if (focused) palette.accent else palette.faint, shape)
+                .border(if (material && focused) 2.dp else 1.dp, if (focused) palette.accent else if (material) palette.faint else palette.line, shape)
                 .padding(start = if (material) 12.dp else 6.dp, end = if (material) 8.dp else 2.dp),
             decorator = { input ->
                 Row(Modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { input() }
-                    UnstyledButton(onClick = { shown = !shown }, modifier = Modifier.size(20.dp).hand()) {
+                    UnstyledButton(onClick = { shown = !shown }, indication = LocalIndication.current, modifier = Modifier.size(if (LocalCompact.current) 40.dp else 20.dp).hand()) {
                         val description = stringResource(if (shown) Res.string.form_hide_secret else Res.string.form_show_secret)
                         UnstyledIcon(if (shown) Lucide.EyeOff else Lucide.Eye, description, Modifier.size(14.dp), tint = palette.muted)
                     }
@@ -382,25 +431,27 @@ fun Checkbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
     val shape = RoundedCornerShape(if (Theme.classic) 0.dp else if (material) 2.dp else 3.dp)
     val box = if (material) 18.dp else 16.dp
     val mark = if (material) 14.dp else 12.dp
+    val target = if (LocalCompact.current) 40.dp else box
     UnstyledCheckbox(
         checked = checked,
         onCheckedChange = onCheckedChange,
         enabled = enabled,
-        modifier = modifier
-            .size(box)
-            .clip(shape)
-            .background(if (filled) palette.accent else palette.surface)
-            .border(if (material && !filled) 2.dp else 1.dp, if (filled) palette.accent else if (material) palette.muted else palette.line, shape)
-            .hand(enabled),
+        indication = LocalIndication.current,
+        modifier = modifier.size(target).hand(enabled),
     ) {
-        if (unset && !checked) {
-            Box(Modifier.size(box), contentAlignment = Alignment.Center) {
-                UnstyledIcon(Lucide.Minus, null, Modifier.size(mark), tint = palette.faint)
-            }
-        }
-        CheckedIndicator {
-            Box(Modifier.size(box), contentAlignment = Alignment.Center) {
-                UnstyledIcon(Lucide.Check, null, Modifier.size(mark), tint = if (filled) palette.onAccent else if (enabled) palette.text else palette.faint)
+        Box(Modifier.size(target), contentAlignment = Alignment.Center) {
+            Box(
+                Modifier
+                    .size(box)
+                    .clip(shape)
+                    .background((if (filled) palette.accent else palette.surface).eased())
+                    .border(if (material && !filled) 2.dp else 1.dp, (if (filled) palette.accent else if (material) palette.muted else palette.line).eased(), shape),
+                contentAlignment = Alignment.Center,
+            ) {
+                if (unset && !checked) UnstyledIcon(Lucide.Minus, null, Modifier.size(mark), tint = palette.faint)
+                CheckedIndicator {
+                    UnstyledIcon(Lucide.Check, null, Modifier.size(mark), tint = if (filled) palette.on(palette.accent) else if (enabled) palette.text else palette.faint)
+                }
             }
         }
     }
@@ -410,7 +461,7 @@ fun Checkbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
 fun Toggle(on: Boolean, title: String, hint: String?, tag: String, enabled: Boolean = true, onChange: (Boolean) -> Unit) {
     Row(verticalAlignment = Alignment.Top, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Checkbox(on, onChange, Modifier.testTag(tag), enabled)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(Modifier.padding(top = if (LocalCompact.current) 10.dp else 0.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             DisableSelection { Text(title, Modifier.clickable(enabled) { onChange(!on) }.hand(enabled), color = if (enabled) Theme.palette.text else Theme.palette.faint) }
             if (hint != null) Text(hint, color = Theme.palette.muted, style = Theme.type.small)
         }

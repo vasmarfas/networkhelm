@@ -414,7 +414,7 @@ class MainScreenLabTest {
         runBlocking { tab.loadMenu(bundledMenu()) }
         fun entries(items: List<MenuEntry>): List<MenuEntry> = items.flatMap { listOf(it) + entries(it.items) }
         val bundled = entries(bundledMenu().items).mapNotNull { it.path }.toSet()
-        val shown = entries(tab.menu.orEmpty()).filter { it.path != null }
+        val shown = entries(tab.menu.orEmpty()).filter { it.path != null && it.window == null }
         val paths = shown.mapNotNull { it.path }
         assertEquals(paths.size, paths.toSet().size, "an entry stands once: $paths")
         println("DYNAMIC entries beyond the bundled menu: ${paths.filter { it !in bundled }}")
@@ -749,7 +749,7 @@ class MainScreenLabTest {
             show("Addresses", "ip/address", "bridge1")
             show("Pool", "ip/pool", "pool1")
             show("ARP", "ip/arp", "ether1")
-            show("Services", "ip/service", "ssh")
+            show("Services", "ip/service", "api-ssl")
             show("Neighbors", "ip/neighbor", "ether1")
             show("DHCP Client", "ip/dhcp-client", "client1")
             show("DHCP Server", "ip/dhcp-server", "server1")
@@ -782,7 +782,7 @@ class MainScreenLabTest {
             waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("DYNAMIC")).fetchSemanticsNodes().isNotEmpty() }
             assertTrue(onAllNodes(hasText("OK")).fetchSemanticsNodes().isEmpty(), "a dynamic route is not edited")
             picture("lab-route-dialog")
-            onNodeWithText("Cancel").performClick()
+            onNodeWithText("Close").performClick()
         }
     }
 

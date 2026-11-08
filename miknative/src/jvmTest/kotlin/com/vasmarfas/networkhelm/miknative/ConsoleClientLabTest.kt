@@ -17,9 +17,11 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import kotlinx.coroutines.withTimeoutOrNull
@@ -27,6 +29,7 @@ import org.junit.Assume.assumeTrue
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.time.Duration.Companion.seconds
@@ -54,7 +57,7 @@ class ConsoleClientLabTest {
     }
 
     private suspend fun clean(session: RouterOsSession) {
-        val ids = session.watch(list, Filter.Equals("list", "rd-test-console")).first().let { (it as ListEvent.Snapshot).items.map { item -> item.id } }
+        val ids = session.watch(list, Filter.Equals("list", "rd-test-console")).filterIsInstance<ListEvent.Snapshot>().first().items.map { it.id }
         if (ids.isNotEmpty()) session.remove(list, ids)
     }
 
@@ -87,6 +90,28 @@ class ConsoleClientLabTest {
         assertTrue(session.device.identity.isNotEmpty())
         assertTrue(session.device.packages.isNotEmpty(), session.device.packages.toString())
         assertTrue(session.capabilities.terminal && session.capabilities.files)
+    }
+
+    @Test
+    fun aTableOverOnePortionComesWithItsProgressAndGoesInLinesThatFit() = session { session ->
+        val script = ":for i from=0 to=2499 do={ /ip firewall address-list add list=rd-test-console address=(\"10.99.\" . (\$i / 256) . \".\" . (\$i % 256)) timeout=10m }"
+        session.run(MenuPath.Root, "execute", mapOf("script" to script)).toList()
+        val filter = Filter.Equals("list", "rd-test-console")
+        assertEquals(2500, session.count(list, filter))
+        val events = session.watch(list, filter).transformWhile {
+            emit(it)
+            it !is ListEvent.Snapshot
+        }.toList()
+        val rows = assertIs<ListEvent.Snapshot>(events.last()).items
+        assertEquals(2500, rows.map { it.id }.toSet().size)
+        assertTrue(rows.all { it["list"] == "rd-test-console" && it["address"].orEmpty().startsWith("10.99.") })
+        assertEquals(listOf(ListEvent.Progress(2000, 2500), ListEvent.Progress(2500, 2500)), events.dropLast(1))
+        val safe = assertNotNull(session.safeMode)
+        assertTrue(safe.enter())
+        assertEquals(2500, withTimeout(60.seconds) { session.watch(list, filter).filterIsInstance<ListEvent.Snapshot>().first() }.items.size)
+        safe.rollback()
+        session.remove(list, rows.map { it.id })
+        assertEquals(0, session.count(list, filter))
     }
 
     @Test

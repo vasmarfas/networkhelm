@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.ui.workspace
 
+import androidx.compose.foundation.LocalIndication
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -72,7 +73,7 @@ internal fun InternalWindow(
     val material = Theme.material
     val radius = if (material) 16.dp else Theme.metrics.radius
     val inactiveTitle = palette.inactiveTitle
-    val titleColor = if (!material && (active || inactiveTitle != null)) palette.onAccent else palette.text
+    val titleColor = if ((!material || palette.title == null) && (active || inactiveTitle != null)) palette.onAccent else palette.text
     val size = if (window.maximized) viewport else window.size
     Box(
         Modifier
@@ -144,7 +145,7 @@ internal expect fun resizeIcon(x: Int, y: Int): PointerIcon
 
 @Composable
 private fun TitleButton(icon: ImageVector, tint: Color, onClick: () -> Unit) {
-    UnstyledButton(onClick = onClick, modifier = Modifier.widthIn(min = 28.dp).fillMaxHeight().hand()) {
+    UnstyledButton(onClick = onClick, indication = LocalIndication.current, modifier = Modifier.widthIn(min = 28.dp).fillMaxHeight().hand()) {
         UnstyledIcon(icon, null, Modifier.size(Theme.metrics.icon), tint = tint)
     }
 }

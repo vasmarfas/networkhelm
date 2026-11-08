@@ -30,4 +30,9 @@ sealed interface ListEvent {
     @Serializable
     @SerialName("removed")
     data class Removed(val id: String) : ListEvent
+
+    // a big table is on its way in portions; its rows come with the snapshot
+    @Serializable
+    @SerialName("progress")
+    data class Progress(val read: Int, val total: Int) : ListEvent
 }

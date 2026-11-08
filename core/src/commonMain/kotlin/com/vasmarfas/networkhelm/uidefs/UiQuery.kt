@@ -272,7 +272,7 @@ fun withQueries(packs: List<Pack>, bundled: Collection<Pack>): List<Pack> {
             val console = target.paths[tab.path]?.takeIf { it.native?.query == null }?.let { PackFallback(it, it.form?.let(target.forms::get), target.labels) }
             val native = path.native?.let { it.copy(query = it.query?.copy(fallback = console)) }
             val merged = target.changed(
-                target.paths + (tab.path to path.copy(form = form?.let { tab.path }, native = native)),
+                target.paths + (tab.path to path.copy(form = form?.let { tab.path }, native = native, fasttrack = target.paths[tab.path]?.fasttrack == true)),
                 target.forms.minus(tab.path) + listOfNotNull(form?.let { tab.path to it }),
                 target.prio ?: query.prio,
             )

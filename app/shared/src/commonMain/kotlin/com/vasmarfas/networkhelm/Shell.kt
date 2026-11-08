@@ -28,6 +28,7 @@ import com.vasmarfas.networkhelm.ui.main.RouterSearch
 import com.vasmarfas.networkhelm.ui.main.RouterTab
 import com.vasmarfas.networkhelm.ui.main.WindowSpec
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
+import com.vasmarfas.networkhelm.ui.theme.ThemeFile
 import com.vasmarfas.networkhelm.ui.workspace.WindowState
 import com.vasmarfas.networkhelm.update.Release
 import com.vasmarfas.networkhelm.update.newerRelease
@@ -48,6 +49,7 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
     val settings = AppSettings(services.storage)
     var about by mutableStateOf(false)
     var settingsShown by mutableStateOf(false)
+    val themeEditor = mutableStateOf<ThemeFile?>(null)
     var toolsShown by mutableStateOf(false)
     var accessShown by mutableStateOf(false)
     val search = RouterSearch(scope)
@@ -106,11 +108,19 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
         detached += Detached(tab, spec, window.size)
     }
 
-    val canGoBack: Boolean get() = routers.getOrNull(selected)?.workspace?.windows?.isNotEmpty() == true
+    val canGoBack: Boolean
+        get() = about || settingsShown || toolsShown || accessShown || searchShown || routers.getOrNull(selected)?.workspace?.windows?.isNotEmpty() == true
 
     fun back() {
-        val workspace = routers.getOrNull(selected)?.workspace ?: return
-        workspace.windows.lastOrNull()?.let(workspace::close)
+        when {
+            searchShown -> searchShown = false
+            accessShown -> accessShown = false
+            toolsShown -> toolsShown = false
+            themeEditor.value != null -> themeEditor.value = null
+            settingsShown -> settingsShown = false
+            about -> about = false
+            else -> routers.getOrNull(selected)?.workspace?.let { workspace -> workspace.windows.lastOrNull()?.let(workspace::close) }
+        }
     }
 
     fun attach(window: Detached) {

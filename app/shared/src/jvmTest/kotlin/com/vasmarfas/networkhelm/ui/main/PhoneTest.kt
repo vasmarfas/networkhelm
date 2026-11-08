@@ -38,6 +38,7 @@ import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.readText
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import com.vasmarfas.networkhelm.ui.theme.TouchMetrics
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.Locale
@@ -86,6 +87,20 @@ class PhoneTest {
         onNodeWithTag("back").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("IP")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(tab.workspace.windows.isEmpty())
+    }
+
+    @Test
+    fun aPhoneOnItsSideScrollsAWindowUnderTheBars() = runDesktopComposeUiTest(880, 320) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val addresses = listOf(Item("*1", mapOf("address" to "192.0.2.1/24", "network" to "192.0.2.0", "interface" to "ether1")))
+        val tab = RouterTab(FakeRouter(rows = mapOf("ip/address" to addresses)), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme { CompositionLocalProvider(LocalCompact provides true) { TouchMetrics(true) { MainScreen(tab, onDisconnect = {}) } } } }
+        waitUntil(timeoutMillis = 10_000) { tab.menu != null }
+        tab.open(MenuEntry("Addresses", "ip/address"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.1/24", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        onNode(hasText("192.0.2.1/24", substring = true)).performScrollTo().assertIsDisplayed()
+        picture("phone-side-window")
     }
 
     @Test

@@ -51,6 +51,8 @@ data class Capabilities(
     val offline: Boolean = false,
 )
 
+const val LINK_LOST = "the connection to the router is lost"
+
 enum class ErrorCategory {
     MissingItem,
     ArgumentValue,

@@ -15,6 +15,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.vasmarfas.networkhelm.app.desktopServices
+import com.vasmarfas.networkhelm.app.quit
 import com.vasmarfas.networkhelm.app.reportStartupFailure
 import com.vasmarfas.networkhelm.ui.about.appIcon
 import com.vasmarfas.networkhelm.ui.kit.HintHost
@@ -50,7 +51,7 @@ private fun startApplication() = application {
         Frame(shell.settings.current.scale) {
             val tab = shell.routers.getOrNull(shell.selected)
             DecoratedWindow(
-                onCloseRequest = ::exitApplication,
+                onCloseRequest = { quit() },
                 title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
                 icon = appIcon(),
             ) {

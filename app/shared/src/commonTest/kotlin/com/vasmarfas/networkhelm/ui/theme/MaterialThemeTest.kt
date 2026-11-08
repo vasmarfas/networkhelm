@@ -1,7 +1,5 @@
 package com.vasmarfas.networkhelm.ui.theme
 
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import com.vasmarfas.networkhelm.app.AppSettings
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -10,11 +8,6 @@ import kotlin.test.assertNotEquals
 import kotlin.test.assertTrue
 
 class MaterialThemeTest {
-
-    private fun contrast(first: Color, second: Color): Float {
-        val (light, dark) = listOf(first.luminance(), second.luminance()).sortedDescending()
-        return (light + 0.05f) / (dark + 0.05f)
-    }
 
     @Test
     fun materialComesAfterTheOtherBundledThemesAndFollowsTheSystem() {
@@ -51,8 +44,8 @@ class MaterialThemeTest {
     fun aThemeFileWrittenBeforeTheFlagStillLoads() {
         val text = """
             {"name": "Old", "light": {"workspace": "#E9ECEF", "surface": "#FFFFFF", "raised": "#F3F5F7", "line": "#D5DAE0", "text": "#1E2329",
-            "muted": "#5F6873", "faint": "#A3ABB4", "accent": "#1F6FD9", "onAccent": "#FFFFFF", "selection": "#CFE2FC", "badge": "#E3E7EB",
-            "danger": "#D23B33", "success": "#23895A", "warning": "#B97A12", "grid": "#DFE3E7"}, "classic": false}
+            "muted": "#5B646F", "faint": "#A3ABB4", "accent": "#1C64C4", "onAccent": "#FFFFFF", "selection": "#CFE2FC", "badge": "#E3E7EB",
+            "danger": "#BF322A", "success": "#1E754D", "warning": "#8D5D0E", "grid": "#DFE3E7"}, "classic": false}
         """
         val old = AppSettings.json.decodeFromString(ThemeFile.serializer(), text)
         assertEquals(ThemeFile("Old", light = LightPalette), old)

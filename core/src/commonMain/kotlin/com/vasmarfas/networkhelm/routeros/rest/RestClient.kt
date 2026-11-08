@@ -7,10 +7,12 @@ import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiReply
 import com.vasmarfas.networkhelm.routeros.api.ApiResult
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
+import com.vasmarfas.networkhelm.routeros.api.BigTables
 import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
 import com.vasmarfas.networkhelm.routeros.api.rounds
 import com.vasmarfas.networkhelm.transport.ByteStream
+import com.vasmarfas.networkhelm.transport.closingAfter
 import com.vasmarfas.networkhelm.transport.httpRequest
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -29,6 +31,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.io.encoding.Base64
+import kotlin.time.Duration.Companion.minutes
+
+// RouterOS gives a REST command 60 seconds, the rest is for the rows to come over a slow link
+private val REQUEST_TIME = 2.minutes
 
 class RestClient(
     private val host: String,
@@ -39,11 +45,35 @@ class RestClient(
     private val authorization = "Basic " + Base64.encode("$user:$password".encodeToByteArray())
 
     private val requests = Semaphore(4)
+    private val tables = BigTables()
 
-    override suspend fun call(words: List<String>): ApiResult {
+    override suspend fun call(words: List<String>): ApiResult = read(words) { _, _ -> }
+
+    override suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> = read(words, progress).rows
+
+    private suspend fun read(words: List<String>, progress: suspend (Int, Int) -> Unit): ApiResult {
+        var ids = emptyList<String>()
+        val menu = words.first().takeIf { it.endsWith("/print") && "=count-only=" !in words }
+        return tables.read(words, menu, progress, ::answer) { part ->
+            if (ids.isEmpty()) ids = answer(listOf(words.first(), "=.proplist=.id") + words.filter { it.startsWith("?") }).rows.mapNotNull { it[".id"] }
+            val asked = ids.subList(minOf(part.first, ids.size), minOf(part.last + 1, ids.size))
+            try {
+                if (asked.isEmpty()) emptyList() else answer(words.filterNot { it.startsWith("?") } + "=from=${asked.joinToString(",")}").rows
+            } catch (e: ApiTrapException) {
+                ids = emptyList()
+                if (e.message.orEmpty().contains("from")) null else throw e
+            }
+        }
+    }
+
+    private suspend fun answer(words: List<String>): ApiResult {
         val headers = mapOf("Authorization" to authorization, "Content-Type" to "application/json")
         val response = try {
-            requests.withPermit { httpRequest(open(), host, "POST", "/rest" + words.first(), headers, arguments(words).toString().encodeToByteArray()) }
+            requests.withPermit {
+                open().closingAfter(REQUEST_TIME) { stream ->
+                    httpRequest(stream, host, "POST", "/rest" + words.first(), headers, arguments(words).toString().encodeToByteArray())
+                }
+            }
         } catch (e: CancellationException) {
             throw e
         } catch (e: DeviceException) {

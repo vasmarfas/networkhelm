@@ -6,8 +6,11 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.assert
+import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
+import androidx.compose.ui.test.isFocused
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
@@ -24,6 +27,8 @@ import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.search.SearchLimit
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.test.TestScope
 import java.io.File
 import java.util.Locale
 import javax.imageio.ImageIO
@@ -37,6 +42,14 @@ class RouterSearchTest {
     private fun SkikoComposeUiTest.picture(name: String) {
         val directory = File("build/screenshots").also { it.mkdirs() }
         ImageIO.write(captureToImage().toAwtImage(), "png", File(directory, "$name.png"))
+    }
+
+    @Test
+    fun theFieldOfTheSearchHasTheKeyboardWhenTheDialogOpens() = runDesktopComposeUiTest(900, 600) {
+        Locale.setDefault(Locale.ENGLISH)
+        setContent { NetworkHelmTheme { RouterSearchDialog(RouterSearch(TestScope()), emptyList(), { _, _ -> }) {} } }
+        waitForIdle()
+        onNode(isFocused()).assert(hasTestTag("router-search-query") or hasAnyAncestor(hasTestTag("router-search-query")))
     }
 
     @Test

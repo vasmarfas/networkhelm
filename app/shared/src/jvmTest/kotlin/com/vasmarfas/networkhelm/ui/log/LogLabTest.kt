@@ -22,6 +22,7 @@ import com.vasmarfas.networkhelm.routeros.RouterOsProtocol
 import com.vasmarfas.networkhelm.routeros.connectRouterOs
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.rows
+import com.vasmarfas.networkhelm.session.watchSettings
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
 import com.vasmarfas.networkhelm.transport.TrustPolicy
 import com.vasmarfas.networkhelm.ui.main.MainScreen
@@ -112,8 +113,15 @@ class LogLabTest {
 
     private fun clockOf(name: String, session: DeviceSession) {
         val clock = runBlocking { readClock(session) }
-        println("LOG[$name] clock of the router: today ${clock.today}, skew ${clock.skew} s")
-        assertTrue(abs(clock.skew) < 600, "the clock of $name is read from the router: ${clock.skew}")
+        // the clock gives the local time of the router, so a router outside UTC is ahead or behind by its offset
+        val offset = if (name.startsWith("openwrt")) 0 else runBlocking { session.watchSettings(MenuPath.parse("system/clock"), listOf("gmt-offset")).first()["gmt-offset"] }?.let(::seconds) ?: 0
+        println("LOG[$name] clock of the router: today ${clock.today}, skew ${clock.skew} s, offset $offset s")
+        assertTrue(abs(clock.skew - offset) < 600, "the clock of $name is read from the router: ${clock.skew}")
+    }
+
+    private fun seconds(offset: String): Long {
+        val (hours, minutes) = offset.drop(1).split(':').map { it.toLong() }
+        return (if (offset.startsWith('-')) -1 else 1) * (hours * 3600 + minutes * 60)
     }
 
     @Test

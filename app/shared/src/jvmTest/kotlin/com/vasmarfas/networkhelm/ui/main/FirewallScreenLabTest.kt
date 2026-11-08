@@ -108,7 +108,7 @@ class FirewallScreenLabTest {
             connectOpnsense(OpnsenseLogin(lab.getProperty("opnsense.host"), lab.getProperty("opnsense.key"), lab.getProperty("opnsense.secret")), trust(lab, "opnsense"))
         }
         try {
-            aliasInTheWindow(session, mapOf("name" to "rd_test", "content" to "192.0.2.1", "description" to "rd-test"), "type" to "host", "opnsense-alias")
+            aliasInTheWindow(session, mapOf("name" to "rd_test", "content" to "192.0.2.1", "description" to "rd-test"), "type" to "Host(s)", "opnsense-alias")
         } finally {
             removeAlias(session)
         }

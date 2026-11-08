@@ -4,7 +4,7 @@
 
 Сейчас это релиз-кандидат, 1.0.0-rc2. Проверял я его в основном на виртуальных роутерах (в таблице ниже написано, на каких именно), так что на живом железе возможны сюрпризы. Если что-то не открылось или неудобно, напишите в [Issues](https://github.com/vasmarfas/networkhelm/issues).
 
-**English:** [README.md](README.md)
+**English:** [README.md](README.md) · **Чат в Telegram:** [@vasmarfas_chat](https://t.me/vasmarfas_chat)
 
 ![Окно настроек интерфейса](.github/screenshots/interfaces-dialog.png)
 

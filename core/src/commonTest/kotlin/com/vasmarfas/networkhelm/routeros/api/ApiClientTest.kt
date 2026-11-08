@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.routeros.api
 
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -67,6 +68,23 @@ class ApiClientTest {
         assertEquals("/system/identity/print", first.nextSent().first())
         val down = assertIs<ApiLink.Down>(client.state.first { it !is ApiLink.Up })
         assertTrue(down.cause.message.orEmpty().startsWith("no answer"), down.cause.message)
+    }
+
+    @Test
+    fun aReadLongerThanTheKeepAliveIsNotTakenForALostRouter() = runTest {
+        val first = FakeRouterStream()
+        val client = ApiClient(ApiConnection(first, ApiEncoding.Utf8, backgroundScope), backgroundScope) {
+            ApiConnection(FakeRouterStream(), ApiEncoding.Utf8, backgroundScope)
+        }
+        val read = async { client.call("/ip/firewall/address-list/print") }
+        val tag = tagOf(first.nextSent())
+        repeat(20) { round ->
+            delay(5_000)
+            first.reply("!re", "=address=10.0.0.$round", ".tag=$tag")
+        }
+        first.reply("!done", ".tag=$tag")
+        assertEquals(20, read.await().rows.size)
+        assertIs<ApiLink.Up>(client.state.value)
     }
 
     @Test

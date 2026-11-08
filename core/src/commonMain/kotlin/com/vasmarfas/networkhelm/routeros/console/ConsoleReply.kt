@@ -16,6 +16,7 @@ private val MAPPED = Regex("::ffff:(\\d{1,3}(\\.\\d{1,3}){3})")
 internal val PROMPT = Regex("\\[[^\\]\\n]*\\] (<SAFE>|>) ?$")
 
 private val ECHOED = Regex("^(\\S+ )?\\d\\d:\\d\\d:\\d\\d echo: ")
+private val BUSY = Regex("^Console does not respond\\.$|^Restart console [^\n]*\\[y/N\\] ?$|^Console responded, action cancelled$")
 
 internal fun clean(raw: String): String = raw.replace(ESCAPES, "").replace("\r", "")
 
@@ -48,7 +49,7 @@ internal fun decode(bytes: ByteArray, from: Int, to: Int): String = buildString(
 internal class Answer(val ok: Boolean, val text: String)
 
 internal fun answer(raw: String, begin: String, end: String): Answer {
-    val lines = clean(raw).split('\n').filterNot(ECHOED::containsMatchIn)
+    val lines = clean(raw).split('\n').filterNot { ECHOED.containsMatchIn(it) || BUSY.containsMatchIn(it) }
     val from = lines.indexOf(begin)
     val to = lines.lastIndexOf(end)
     if (from >= 0 && to > from) return Answer(true, lines.subList(from + 1, to).joinToString("\n"))

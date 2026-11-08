@@ -4,7 +4,7 @@ A program for managing routers. It is modelled on WinBox: a menu tree on the lef
 
 Right now it is a release candidate, 1.0.0-rc2. I tested it mostly on virtual routers (the table below says which ones), so a real device may still surprise it. If something does not open or is awkward to use, please open an [issue](https://github.com/vasmarfas/networkhelm/issues).
 
-**Русский:** [README.ru.md](README.ru.md)
+**Русский:** [README.ru.md](README.ru.md) · **Telegram chat:** [@vasmarfas_chat](https://t.me/vasmarfas_chat)
 
 ![The window of an interface](.github/screenshots/interfaces-dialog.png)
 

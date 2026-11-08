@@ -34,6 +34,12 @@ class WatchTest {
     }
 
     @Test
+    fun theProgressOfABigTableIsNotARowsList() = runTest {
+        val rows = flowOf(ListEvent.Progress(2_000, 5_000), ListEvent.Progress(4_000, 5_000), ListEvent.Snapshot(listOf(item("*1")))).rows().toList()
+        assertEquals(listOf(emptyList(), listOf(item("*1"))), rows)
+    }
+
+    @Test
     fun aPolledListSendsASnapshotForEachReadingThatDiffers() = runTest {
         val readings = ArrayDeque(
             listOf(

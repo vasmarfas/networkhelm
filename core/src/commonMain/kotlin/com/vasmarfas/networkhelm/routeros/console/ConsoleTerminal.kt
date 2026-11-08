@@ -9,13 +9,20 @@ import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.random.Random
 
 private val CONFIRM = Regex("\\[y/N\\]:? ?$")
+
+// the consoles of a router are one process: one that waits a second for a busy one asks this, a yes ends them all, a no loses the line,
+// and without an answer the console goes on by itself when the process comes back
+private val RESTART = Regex("Restart console[^\n]*\\[y/N\\] ?$")
 private val ARGUMENT = Regex("(?:^|\n)([A-Za-z][A-Za-z0-9-]*): ?$")
 private val NEW_PASSWORD = Regex("new password> ?$")
+private val LICENSE = Regex("software license\\? \\[Y/n\\]:? ?$")
 private const val TAIL = 400
 private const val QUIET_MILLIS = 150L
+private const val ECHO_MILLIS = 2_000L
 private const val ASK_MILLIS = 400L
 private const val SAFE_MILLIS = 5_000L
 private const val SILENT_MILLIS = 10_000L
+private const val ANSWER_MILLIS = 120_000L
 private const val CTRL_C: Byte = 0x03
 private const val CTRL_X: Byte = 0x18
 
@@ -25,6 +32,8 @@ internal const val RELAY = "[[:parse [/terminal/ask prompt=\"NetworkHelm> \"]]]"
 internal const val ASKING = "NetworkHelm>"
 
 private fun silence(said: String) = "the console of the router fell silent in the middle of a line" + if (said.isBlank()) "" else ": ${said.trim().takeLast(160)}"
+
+internal class SilentConsoleException(said: String) : ApiConnectionClosedException(silence(said))
 
 // the router prints log messages with action echo into every console and redraws the prompt after each,
 // so a prompt proves nothing: only the end marker, or the beginning one after a failure, ends a command
@@ -39,7 +48,8 @@ internal class ConsoleTerminal private constructor(private val channel: ShellCha
     var expired = false
         private set
 
-    // RouterOS 6 now and then stops for good in the middle of an echo, so a quick line gives up a silent console
+    // RouterOS 6 now and then stops for good in the middle of an echo, at times after it has run the line: a quick line gives up
+    // the silent console and is asked again, any other line gives up once its echo has stood still as long
     suspend fun run(line: String, quick: Boolean = false): Answer {
         val begin = "rd$token-${count}b"
         val end = "rd$token-${count++}e"
@@ -68,14 +78,21 @@ internal class ConsoleTerminal private constructor(private val channel: ShellCha
         val chunk = ByteArray(32 * 1024)
         var confirmed = false
         var quiet = false
+        var quietMillis = QUIET_MILLIS
         var plain = ""
         while (true) {
             val asking = if (quiet || asked != null) null else begin?.let { question(plain, received, it) }
             val size = when {
-                quiet || asking != null -> withTimeoutOrNull(if (quiet) QUIET_MILLIS else ASK_MILLIS) { channel.read(chunk, 0, chunk.size) }
-                quick -> withTimeoutOrNull(SILENT_MILLIS) { channel.read(chunk, 0, chunk.size) }
-                    ?: throw ApiConnectionClosedException(silence(plain))
-                else -> channel.read(chunk, 0, chunk.size)
+                quiet || asking != null -> withTimeoutOrNull(if (quiet) quietMillis else ASK_MILLIS) { channel.read(chunk, 0, chunk.size) }
+                quick && !RESTART.containsMatchIn(plain) -> withTimeoutOrNull(SILENT_MILLIS) { channel.read(chunk, 0, chunk.size) }
+                    ?: throw SilentConsoleException(plain)
+                else -> withTimeoutOrNull(SILENT_MILLIS) { channel.read(chunk, 0, chunk.size) }
+                    ?: if (end != null && !RESTART.containsMatchIn(plain) && end !in clean(received.text())) {
+                        throw SilentConsoleException(plain)
+                    } else {
+                        withTimeoutOrNull(ANSWER_MILLIS - SILENT_MILLIS) { channel.read(chunk, 0, chunk.size) }
+                            ?: throw ApiConnectionClosedException("the router did not answer in ${ANSWER_MILLIS / 1000} s")
+                    }
             }
             if (size == null) {
                 if (quiet) return received.text()
@@ -94,18 +111,23 @@ internal class ConsoleTerminal private constructor(private val channel: ShellCha
                 expired = true
                 channel.write(byteArrayOf(CTRL_C))
             }
+            // a router that nobody logged in to over a console yet shows its license first
+            if (quick && begin == null && LICENSE.containsMatchIn(plain)) channel.write("n\r".encodeToByteArray())
             when {
                 PROMPT.containsMatchIn(plain) -> {
                     val seen = if (begin == null) "" else clean(received.text())
                     when {
                         end != null && "\n$end\n" in seen -> return received.text()
                         begin != null && "\n$begin\n" in seen -> return received.text()
-                        // a prompt may be of an earlier message or redrawn halfway through the line;
-                        // right after the echo alone it answers a line the router could not read
-                        begin == null || begin in seen -> quiet = true
+                        // a prompt may be of an earlier message or redrawn halfway through the line, which a busy router leaves for a while;
+                        // right after the echo it answers a line the router could not read
+                        begin == null || begin in seen -> {
+                            quiet = true
+                            quietMillis = if (begin == null || end != null && end in seen) QUIET_MILLIS else ECHO_MILLIS
+                        }
                     }
                 }
-                CONFIRM.containsMatchIn(plain) && !confirmed -> {
+                CONFIRM.containsMatchIn(plain) && !RESTART.containsMatchIn(plain) && !confirmed -> {
                     confirmed = true
                     channel.write("y\r".encodeToByteArray())
                 }

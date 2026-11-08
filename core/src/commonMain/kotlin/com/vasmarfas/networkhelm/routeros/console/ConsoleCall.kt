@@ -18,6 +18,7 @@ internal class ConsoleCall(
     val probe: Boolean = false,
     val proplist: List<String> = emptyList(),
     val quick: Boolean = false,
+    val heavy: Boolean = false,
 )
 
 internal const val AS_VALUE = "bad parameter as-value"
@@ -26,7 +27,8 @@ private const val SENSITIVE = "show-sensitive"
 private const val STATS_DETAIL = "stats-detail"
 private const val STATS = "stats"
 private const val PROPLIST = "proplist"
-private const val FIND = "find"
+internal const val FIND = "find"
+internal const val FROM = "from"
 private val NAME = Regex("\\.?[A-Za-z0-9][A-Za-z0-9._-]*")
 private val ID = Regex("\\*[0-9A-Fa-f]+")
 private val NUMBER = Regex("-?[0-9]+(\\.[0-9]+)?")
@@ -41,12 +43,12 @@ private val READS = setOf("print", "export", "get", "find", "inspect", "ping", "
 private const val ROWS = "options=json.no-string-conversion"
 private const val HEX = "0123456789ABCDEF"
 
-internal fun consoleCall(words: List<String>, yesNo: Set<String>, refused: Map<String, Set<String>> = emptyMap(), encoding: ApiEncoding = ApiEncoding.Utf8): ConsoleCall {
+internal fun consoleCall(words: List<String>, yesNo: Set<String>, refused: Map<String, Set<String>> = emptyMap(), encoding: ApiEncoding = ApiEncoding.Utf8, portion: IntRange? = null): ConsoleCall {
     val call = Words(words, encoding)
     val path = call.path
     val menu = "/" + path.joinToString("/")
     val verb = path.last()
-    if (call.command == "/execute") return ConsoleCall(call.arguments.first { it.first == "script" }.second, Reply.Text)
+    if (call.command == "/execute") return ConsoleCall(call.arguments.first { it.first == "script" }.second, Reply.Text, changes = true)
     val numbers = call.numbers
     val proplist = call.proplist
     val named = call.named
@@ -66,8 +68,11 @@ internal fun consoleCall(words: List<String>, yesNo: Set<String>, refused: Map<S
                 listOf(STATS_DETAIL, STATS).firstOrNull { it !in refusals }?.let { add(listOf(it)) }
             }
             val asked = if (PROPLIST in refusals) "" else list
-            val line = views.joinToString("; ") { flags -> serialized("$menu as-value${flags.joinToString("") { " $it" }}${given()}$asked$select") }
-            ConsoleCall(line, Reply.Rows, menu = key, offered = views.flatten().toSet() + listOfNotNull(PROPLIST.takeIf { asked.isNotEmpty() }), proplist = proplist)
+            val part = portion.takeIf { FIND !in refusals && FROM !in refusals }
+            val rows = if (part == null) select else " from=\$part"
+            val reads = views.joinToString("; ") { flags -> serialized("$menu as-value${flags.joinToString("") { " $it" }}${given()}$asked$rows") }
+            val line = if (part == null) reads else ":local part [:pick [$key/find$select] ${part.first} ${part.last + 1}]; :if ([:len \$part] > 0) do={ $reads } else={ :put \"[]\" }"
+            ConsoleCall(line, Reply.Rows, menu = key, offered = views.flatten().toSet() + listOfNotNull(PROPLIST.takeIf { asked.isNotEmpty() }) + if (part == null) emptySet() else setOf(FIND, FROM), proplist = proplist, heavy = part != null)
         }
         verb == "add" -> ConsoleCall(":put [$menu${given()}]", Reply.Id, changes = true)
         verb in CHANGES -> ConsoleCall("$menu$numbers${given()}", Reply.Nothing, changes = true)
@@ -78,27 +83,29 @@ internal fun consoleCall(words: List<String>, yesNo: Set<String>, refused: Map<S
         verb == "export" -> ConsoleCall("$menu${given()}", Reply.Text)
         // :serialize cuts the time of a reply to whole seconds, :put keeps the microseconds
         menu == "/tool/ping" -> ConsoleCall(":put [$menu${given()} as-value]", Reply.Pairs)
-        menu == "/password" -> ConsoleCall("$menu${given()}", Reply.Nothing)
+        menu == "/password" -> ConsoleCall("$menu${given()}", Reply.Nothing, changes = true)
         else -> ConsoleCall(
             serialized("$menu${given()}$numbers$list as-value$select"), Reply.Rows, ConsoleCall("$menu$numbers${given()}", Reply.Text, changes = changes), changes,
         )
     }
 }
 
-internal fun classicCall(words: List<String>, yesNo: Set<String>, refused: Map<String, Set<String>>, encoding: ApiEncoding = ApiEncoding.Utf8): ConsoleCall {
+internal fun classicCall(words: List<String>, yesNo: Set<String>, refused: Map<String, Set<String>>, encoding: ApiEncoding = ApiEncoding.Utf8, portion: IntRange? = null): ConsoleCall {
     val call = Words(words, encoding)
-    if (call.command == "/execute") return ConsoleCall(call.arguments.first { it.first == "script" }.second, Reply.Text)
+    if (call.command == "/execute") return ConsoleCall(call.arguments.first { it.first == "script" }.second, Reply.Text, changes = true)
     val menu = "/" + call.path.dropLast(1).joinToString(" ")
     val verb = call.path.last()
     val named = call.named
     fun given() = named.joinToString("") { (name, value) -> " " + argument(name, value, name in yesNo, encoding) }
     val select = where(call.query, classic = true, encoding = encoding)
     return when {
-        call.command == "/password" -> ConsoleCall("/password${given()}", Reply.Nothing)
+        call.command == "/password" -> ConsoleCall("/password${given()}", Reply.Nothing, changes = true)
         verb == "print" && named.any { it.first == "count-only" } -> ConsoleCall("$menu print count-only$select", Reply.Count, probe = true, quick = true)
         verb == "print" -> {
+            val found = "[$menu find$select]"
+            val rows = if (portion == null) found else "[:pick $found ${portion.first} ${portion.last + 1}]"
             if (FIND in refused[menu].orEmpty()) ConsoleCall("\$rdrow [$menu get]", Reply.Records, proplist = call.proplist, quick = true)
-            else ConsoleCall(":foreach i in=[$menu find$select] do={ \$rdrow [$menu get \$i] }", Reply.Records, menu = menu, offered = setOf(FIND), proplist = call.proplist, quick = true)
+            else ConsoleCall(":foreach i in=$rows do={ \$rdrow [$menu get \$i] }", Reply.Records, menu = menu, offered = setOf(FIND), proplist = call.proplist, quick = true, heavy = portion != null)
         }
         verb == "add" -> ConsoleCall(":put [$menu add${given()}]", Reply.Id, changes = true)
         verb in CHANGES -> ConsoleCall(":put [$menu $verb${call.numbers}${given()}]", Reply.Nothing, changes = true)

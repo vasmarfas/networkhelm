@@ -13,7 +13,6 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -50,6 +49,8 @@ import com.vasmarfas.networkhelm.ui.chart.Series
 import com.vasmarfas.networkhelm.ui.chart.bits
 import com.vasmarfas.networkhelm.ui.form.FormState
 import com.vasmarfas.networkhelm.ui.kit.Button
+import com.vasmarfas.networkhelm.ui.kit.CountPill
+import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.SplitState
 import com.vasmarfas.networkhelm.ui.kit.TabStrip
 import com.vasmarfas.networkhelm.ui.kit.VerticalSplit
@@ -62,6 +63,7 @@ import kotlin.math.roundToInt
 import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
@@ -99,7 +101,7 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
         for ((name, source) in pack?.preselect.orEmpty()) {
             if (name in tab.prefill || schema.argument(name) == null) continue
             val rows = try {
-                (session.watch(MenuPath.parse(source)).first() as? ListEvent.Snapshot)?.items.orEmpty()
+                session.watch(MenuPath.parse(source)).filterIsInstance<ListEvent.Snapshot>().first().items
             } catch (e: DeviceException) {
                 continue
             }
@@ -265,6 +267,16 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
         }
     }
 
+    val compact = LocalCompact.current
+    val notice = @Composable { lines: Int ->
+        val failed = problem
+        if (failed != null) {
+            Text(deviceMessage(failed), color = palette.danger, style = Theme.type.small, maxLines = lines)
+        } else if (pack?.fasttrack == true) {
+            Text(stringResource(Res.string.command_fasttrack), color = palette.warning, style = Theme.type.small, maxLines = lines)
+        }
+    }
+
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             if (sections.size > 1) {
@@ -273,22 +285,17 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
             Box(Modifier.weight(1f).fillMaxWidth()) {
                 if (fieldsOnly) inputs() else VerticalSplit(split, Modifier.fillMaxSize(), first = inputs, second = outputs)
             }
+            if (compact) Box(Modifier.fillMaxWidth().background(palette.raised).padding(start = 8.dp, end = 8.dp, top = 4.dp)) { notice(Int.MAX_VALUE) }
             Row(
                 Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 4.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 if (columns.isNotEmpty()) {
-                    val pill = if (Theme.classic) Modifier else Modifier.background(palette.line, RoundedCornerShape(50)).padding(horizontal = 7.dp)
-                    Text(pluralStringResource(Res.plurals.list_items, visible.size, visible.size), pill.testTag("command-count"), style = Theme.type.small, color = if (Theme.classic) palette.muted else palette.text)
+                    CountPill(pluralStringResource(Res.plurals.list_items, visible.size, visible.size), Modifier.testTag("command-count"))
                 }
                 Box(Modifier.weight(1f)) {
-                    val failed = problem
-                    if (failed != null) {
-                        Text(deviceMessage(failed), color = palette.danger, style = Theme.type.small, maxLines = 2)
-                    } else if (pack?.fasttrack == true) {
-                        Text(stringResource(Res.string.command_fasttrack), color = palette.warning, style = Theme.type.small, maxLines = 2)
-                    }
+                    if (!compact) notice(2)
                 }
                 Button(stringResource(Res.string.command_stop), { running?.cancel() }, enabled = running != null)
                 Button(stringResource(Res.string.command_start), { if (tab.shown?.confirm == true) asking = true else start() }, enabled = running == null, primary = true)

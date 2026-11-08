@@ -18,6 +18,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -217,6 +218,8 @@ fun ThemeEditor(source: ThemeFile, onCancel: () -> Unit, onSave: (ThemeFile) -> 
     val palette = Theme.palette
     val copyName = stringResource(Res.string.theme_copy, source.name)
     val name = remember(source) { TextFieldState(if (source in BundledThemes) copyName else source.name) }
+    // the page of a browser gets its strings after the first composition
+    LaunchedEffect(copyName) { if (source in BundledThemes && name.text.isEmpty()) name.setTextAndPlaceCursorAtEnd(copyName) }
     var theme by remember(source) { mutableStateOf(source) }
     var dark by remember(source) { mutableIntStateOf(if (source.light == null) 1 else 0) }
     var group by remember { mutableStateOf(IconGroup.Menu) }
@@ -383,7 +386,7 @@ private fun Sample() {
     Box(Modifier.fillMaxWidth().background(palette.workspace).padding(16.dp)) {
         Column(Modifier.fillMaxWidth().clip(shape).background(palette.surface).border(1.dp, palette.frame ?: if (palette.title == null) palette.accent else palette.line, shape)) {
             Row(Modifier.fillMaxWidth().height(metrics.title).background(palette.title ?: palette.accent).padding(horizontal = metrics.padding), verticalAlignment = Alignment.CenterVertically) {
-                Text("Addresses", color = if (Theme.material) palette.text else palette.onAccent, style = Theme.type.strong)
+                Text("Addresses", color = if (Theme.material && palette.title != null) palette.text else palette.onAccent, style = Theme.type.strong)
             }
             TabStrip(listOf("Addresses", "Routes", "ARP"), 0, {}, Modifier.fillMaxWidth().background(palette.raised))
             Row(Modifier.fillMaxWidth().height(metrics.toolbar).background(palette.raised), verticalAlignment = Alignment.CenterVertically) {
@@ -401,7 +404,12 @@ private fun Sample() {
             SampleRow("D", "198.51.100.7/24", "bridge", palette.selection, palette.text)
             SampleRow("X", "203.0.113.1/24", "ether2", palette.surface, palette.faint)
             SampleRow("I", "192.0.2.254/24", "vlan10", palette.surface, palette.danger)
-            Row(Modifier.fillMaxWidth().padding(metrics.padding), horizontalArrangement = Arrangement.spacedBy(metrics.gap), verticalAlignment = Alignment.CenterVertically) {
+            FlowRow(
+                Modifier.fillMaxWidth().padding(metrics.padding),
+                horizontalArrangement = Arrangement.spacedBy(metrics.gap),
+                verticalArrangement = Arrangement.spacedBy(metrics.gap),
+                itemVerticalAlignment = Alignment.CenterVertically,
+            ) {
                 TextField(remember { TextFieldState("192.0.2.1/24") }, Modifier.width(160.dp), mono = true)
                 Button(stringResource(Res.string.form_ok), {}, primary = true)
                 Button(stringResource(Res.string.list_cancel), {})

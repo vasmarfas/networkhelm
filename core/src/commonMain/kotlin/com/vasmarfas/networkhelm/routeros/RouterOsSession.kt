@@ -6,6 +6,7 @@ import com.vasmarfas.networkhelm.model.DeviceInfo
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
@@ -13,6 +14,7 @@ import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.SafeModeKind
+import com.vasmarfas.networkhelm.openwrt.RequestOutcomeUnknownException
 import com.vasmarfas.networkhelm.packs.Pack
 import com.vasmarfas.networkhelm.packs.PackNative
 import com.vasmarfas.networkhelm.packs.bundledMenu
@@ -92,7 +94,7 @@ class RouterOsSession(
     private val schema: suspend (MenuPath) -> MenuSchema = inspect?.let { it::describe } ?: printing::describe
     private val outlined: suspend (MenuPath) -> MenuSchema = inspect?.let { it::outline } ?: printing::outline
 
-    override val safeMode: SafeMode? = client.safeMode ?: when {
+    override val safeMode: SafeMode? = client.safeMode?.let(::SafeModeErrors) ?: when {
         capabilities.safeMode == SafeModeKind.ApiSession -> ApiSafeMode(scope)
         capabilities.safeMode == SafeModeKind.SshConsole && ssh != null && scope != null ->
             ConsoleSafeMode(ssh, scope, { count(MenuPath.parse("system/history"), Filter.Equals("floating-undo", "true")) }, pollInterval)
@@ -187,15 +189,15 @@ class RouterOsSession(
     private fun nativeSpec(path: MenuPath): PackNative? =
         nativeWindows.takeIf { it.stands(path) }?.let { it.spec(path) ?: throw DeviceException(ErrorCategory.MissingItem, "no window of the native channel at $path") }
 
-    override suspend fun add(path: MenuPath, values: Map<String, String>): String = deviceErrors {
-        nativeSpec(path)?.let { return@deviceErrors nativeWindows.create(it, values) }
+    override suspend fun add(path: MenuPath, values: Map<String, String>): String = changing {
+        nativeSpec(path)?.let { return@changing nativeWindows.create(it, values) }
         inspect?.forgetNames()
         client.call(listOf(path.apiCommand("add")) + values.words()).done["ret"]
             ?: throw DeviceException(ErrorCategory.Api, "${path.apiCommand("add")} answered without an id")
     }
 
-    override suspend fun set(path: MenuPath, id: String?, changes: Map<String, String?>) = deviceErrors {
-        nativeSpec(path)?.let { return@deviceErrors nativeWindows.change(it, id, changes) }
+    override suspend fun set(path: MenuPath, id: String?, changes: Map<String, String?>) = changing {
+        nativeSpec(path)?.let { return@changing nativeWindows.change(it, id, changes) }
         inspect?.forgetNames()
         val target = listOfNotNull(id?.let { "=.id=$it" })
         val values = changes.mapNotNull { (name, value) -> value?.let { name to it } }.toMap()
@@ -204,16 +206,16 @@ class RouterOsSession(
     }
 
     override suspend fun remove(path: MenuPath, ids: List<String>) {
-        deviceErrors {
-            nativeSpec(path)?.let { return@deviceErrors nativeWindows.delete(it, ids) }
+        changing {
+            nativeSpec(path)?.let { return@changing nativeWindows.delete(it, ids) }
             inspect?.forgetNames()
-            client.call(path.apiCommand("remove"), "=.id=" + ids.joinToString(","))
+            for (part in ids.chunked(REMOVED_AT_ONCE)) client.call(path.apiCommand("remove"), "=.id=" + part.joinToString(","))
         }
     }
 
     override suspend fun move(path: MenuPath, ids: List<String>, before: String?) {
-        deviceErrors {
-            nativeSpec(path)?.let { return@deviceErrors nativeWindows.move(it, ids, before) }
+        changing {
+            nativeSpec(path)?.let { return@changing nativeWindows.move(it, ids, before) }
             client.call(listOfNotNull(path.apiCommand("move"), "=numbers=" + ids.joinToString(","), before?.let { "=destination=$it" }))
         }
     }
@@ -276,7 +278,7 @@ class RouterOsSession(
             }
             sent.await()
             val items = LinkedHashMap<String, Item>()
-            api.call(print(path, properties) + query).rows.map(::item).forEach { items[it.id] = it }
+            api.table(print(path, properties) + query) { read, total -> emit(ListEvent.Progress(read, total)) }.map(::item).forEach { items[it.id] = it }
             emit(ListEvent.Snapshot(items.values.toList()))
             try {
                 for (event in updates) {
@@ -403,6 +405,9 @@ class RouterOsSession(
     private companion object {
         const val UI_PACKS = 15
 
+        // the line of the console of RouterOS 6 ends at 2 500 characters
+        const val REMOVED_AT_ONCE = 200
+
         const val END = "*FFFFFFFF"
         val LOG = MenuPath.parse("log")
         val service = setOf(".id", ".dead", ".nextid")
@@ -417,10 +422,27 @@ private inline fun <T> deviceErrors(block: () -> T): T = try {
     throw e.toDeviceException()
 }
 
+// an edit that lost the link may have been done, and a repeat could do it twice
+private inline fun <T> changing(block: () -> T): T = try {
+    block()
+} catch (e: Exception) {
+    val failure = e.toDeviceException()
+    throw if (failure is DeviceException && failure.category == ErrorCategory.ConnectionLost) RequestOutcomeUnknownException(e) else failure
+}
+
+private class SafeModeErrors(private val inner: SafeMode) : SafeMode by inner {
+    override suspend fun enter() = deviceErrors { inner.enter() }
+
+    override suspend fun commit() = deviceErrors { inner.commit() }
+
+    override suspend fun rollback() = deviceErrors { inner.rollback() }
+}
+
 private fun <T> Flow<T>.asDeviceErrors(): Flow<T> = catch { throw it.toDeviceException() }
 
 private fun Throwable.toDeviceException(): Throwable = when (this) {
     is ApiTrapException -> DeviceException(ErrorCategory.ofTrap(category), message.orEmpty(), this)
-    is ApiConnectionClosedException -> DeviceException(ErrorCategory.ConnectionLost, message.orEmpty(), this)
+    is ApiConnectionClosedException -> DeviceException(ErrorCategory.ConnectionLost, LINK_LOST, this)
+    is DeviceException -> if (category == ErrorCategory.ConnectionLost && this !is RequestOutcomeUnknownException) DeviceException(ErrorCategory.ConnectionLost, LINK_LOST, this) else this
     else -> this
 }

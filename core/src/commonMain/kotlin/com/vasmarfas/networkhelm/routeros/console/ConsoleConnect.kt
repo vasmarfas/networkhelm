@@ -32,7 +32,7 @@ suspend fun connectRouterOsConsole(
 ): RouterOsSession? {
     val open: suspend () -> ShellChannel = { ssh.shell("xterm-256color", CONSOLE_COLUMNS, CONSOLE_ROWS) }
     for (dialect in dialects) {
-        val client = ConsoleClient(dialect = dialect, encoding = encoding, open = open)
+        val client = ConsoleClient(dialect = dialect, encoding = encoding, alive = { ssh.connected }, open = open)
         val session = try {
             if (understood(client, dialect)) {
                 client.warm(scope)

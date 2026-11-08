@@ -45,6 +45,7 @@ import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapNotNull
@@ -180,7 +181,7 @@ private fun trafficOf(tab: RouterTab, named: String, received: Series, sent: Ser
 
 // without an interface of its own the route names it in the gateway: after the %, or as the bare name
 private suspend fun uplink(session: DeviceSession): String? {
-    val routes = (session.watch(ROUTES, Filter.Equals("dst-address", "0.0.0.0/0")).first() as? ListEvent.Snapshot)?.items.orEmpty()
+    val routes = session.watch(ROUTES, Filter.Equals("dst-address", "0.0.0.0/0")).filterIsInstance<ListEvent.Snapshot>().first().items
     val route = routes.firstOrNull { it["active"] == "true" } ?: routes.firstOrNull() ?: return null
     route["interface"]?.takeIf { it.isNotEmpty() }?.let { return it }
     for (key in listOf("immediate-gw", "gateway")) {

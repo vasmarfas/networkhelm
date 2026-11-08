@@ -26,6 +26,7 @@ import com.vasmarfas.networkhelm.uidefs.WebAccess
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.Serializable
 
 enum class RouterOsProtocol(val tls: Boolean, val rest: Boolean, val defaultPort: Int) {
@@ -51,6 +52,10 @@ class RouterOsLogin(
     val nativePort: Int? = null,
 )
 
+private const val LOGIN_MILLIS = 10_000L
+
+class LoginTimeoutException : DeviceException(ErrorCategory.ConnectionLost, "the router did not answer the login")
+
 suspend fun connectRouterOs(
     login: RouterOsLogin,
     trust: TrustPolicy,
@@ -64,7 +69,7 @@ suspend fun connectRouterOs(
     suspend fun open(): ApiConnection {
         val connection = ApiConnection(stream(), login.encoding, scope)
         try {
-            connection.login(login.user, login.password)
+            withTimeoutOrNull(LOGIN_MILLIS) { connection.login(login.user, login.password) } ?: throw LoginTimeoutException()
         } catch (e: Exception) {
             connection.close()
             throw if (e is ApiTrapException) DeviceException(ErrorCategory.PermissionDenied, e.message.orEmpty(), e) else e

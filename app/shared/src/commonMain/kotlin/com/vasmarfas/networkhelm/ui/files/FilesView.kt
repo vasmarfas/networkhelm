@@ -91,6 +91,7 @@ import com.vasmarfas.networkhelm.session.atMostEvery
 import com.vasmarfas.networkhelm.session.rows
 import com.vasmarfas.networkhelm.session.watchSettings
 import com.vasmarfas.networkhelm.ui.chart.WHOLE_BYTES
+import com.vasmarfas.networkhelm.ui.kit.CountPill
 import com.vasmarfas.networkhelm.ui.kit.DropdownItem
 import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
@@ -629,14 +630,13 @@ internal fun FilesView(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val pill = if (Theme.classic) Modifier else Modifier.background(palette.line, RoundedCornerShape(50)).padding(horizontal = 7.dp)
                     val total = tree.countIn(root)
                     val counted = when {
                         reading -> stringResource(Res.string.window_loading)
                         text.isNotEmpty() -> pluralStringResource(Res.plurals.list_items_of, total, rows.count { it.entry.name.contains(text, ignoreCase = true) }, total)
                         else -> pluralStringResource(Res.plurals.list_items, total, total)
                     }
-                    Text(counted, pill, style = Theme.type.small, color = if (Theme.classic) palette.muted else palette.text)
+                    CountPill(counted)
                     if (chosen.isNotEmpty()) {
                         Text(stringResource(Res.string.list_selected, chosen.size), style = Theme.type.small, color = palette.muted)
                         val weight = chosen.filter { !it.directory }.sumOf { it.size ?: 0L }

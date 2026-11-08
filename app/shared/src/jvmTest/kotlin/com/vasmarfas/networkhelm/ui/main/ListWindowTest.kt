@@ -44,8 +44,11 @@ import com.vasmarfas.networkhelm.app.Settings
 import com.vasmarfas.networkhelm.journal.EditKind
 import com.vasmarfas.networkhelm.journal.EditRecord
 import com.vasmarfas.networkhelm.model.Argument
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
@@ -60,6 +63,7 @@ import com.vasmarfas.networkhelm.ui.table.CommentMode
 import com.vasmarfas.networkhelm.ui.table.RowTone
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -110,6 +114,79 @@ class ListWindowTest {
         picture("list-loading")
         assertTrue(onAllNodes(hasText("Loading…")).fetchSemanticsNodes().isNotEmpty())
         assertTrue(onAllNodes(hasText("0 items")).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aBigTableCountsItsRowsWhileTheyCome() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val router = FakeRouter(mapOf("ip/firewall/filter" to rules))
+        val finish = CompletableDeferred<Unit>()
+        val portions = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                emit(ListEvent.Progress(2_000, 35_000))
+                finish.await()
+                emit(ListEvent.Snapshot(rules))
+                awaitCancellation()
+            }
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(portions, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Loading… 2000 of 35000")).fetchSemanticsNodes().isNotEmpty() }
+        finish.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("${rules.size} items")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasText("Loading…", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aListThatLostTheLinkOffersToAskAgainAndAsksByItselfWhenTheLinkIsBack() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val router = FakeRouter(mapOf("ip/firewall/filter" to rules))
+        var broken = true
+        val failing = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                emit(ListEvent.Snapshot(rules))
+                if (broken) throw DeviceException(ErrorCategory.ConnectionLost, LINK_LOST)
+                awaitCancellation()
+            }
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(failing, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("retry")).fetchSemanticsNodes().isNotEmpty() }
+        broken = false
+        router.link.value = LinkState.Reconnecting
+        waitForIdle()
+        router.link.value = LinkState.Up
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("retry")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun aListThatFailedToLoadSaysSoAndIsAskedAgain() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val router = FakeRouter(mapOf("ip/firewall/filter" to rules))
+        var broken = true
+        val failing = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                if (broken) throw DeviceException(ErrorCategory.Api, "the console fell over")
+                emit(ListEvent.Snapshot(rules))
+                awaitCancellation()
+            }
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(failing, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("the console fell over")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasText("Not loaded")).fetchSemanticsNodes().isNotEmpty())
+        assertTrue(onAllNodes(hasText("Loading…")).fetchSemanticsNodes().isEmpty())
+        broken = false
+        onNodeWithTag("retry").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasText("the console fell over")).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasTestTag("retry")).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -429,11 +506,13 @@ class ListWindowTest {
         router.counted.tryEmit(mapOf("*1" to mapOf("bytes" to "1700000", "packets" to "792")))
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("792")).fetchSemanticsNodes().isNotEmpty() }
 
+        val polled = router.polled.size
         router.link.value = LinkState.Reconnecting
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection to the router is lost, reconnecting…")).fetchSemanticsNodes().isNotEmpty() }
         picture("list-link-lost")
         router.link.value = LinkState.Up
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection to the router is lost, reconnecting…")).fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 5_000) { router.polled.size > polled }
     }
 
     @Test

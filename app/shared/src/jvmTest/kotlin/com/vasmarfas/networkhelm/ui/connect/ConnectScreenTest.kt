@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.ui.connect
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assertIsDisplayed
@@ -10,6 +11,7 @@ import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.assertIsOff
 import androidx.compose.ui.test.assertIsOn
+import androidx.compose.ui.test.assertTextContains
 import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasSetTextAction
@@ -24,11 +26,13 @@ import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.vasmarfas.networkhelm.app.Access
@@ -75,6 +79,7 @@ import com.vasmarfas.networkhelm.winbox.WinBoxSession
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import java.io.File
@@ -673,6 +678,17 @@ class ConnectScreenTest {
     }
 
     @Test
+    fun aPortOfNeighborsThatCannotBeHeardSaysSo() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val services = Services(storage, MemoryTrustStore(), flow { throw IOException("Address already in use") }, refreshNeighbors = {}) { _, _, _ -> router }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        onNodeWithText("Neighbors").performClick()
+        waitForIdle()
+        onNodeWithTag("neighbors-status").assertTextContains("5678", substring = true)
+    }
+
+    @Test
     fun enterInThePasswordConnects() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         var opened: DeviceSession? = null
@@ -681,6 +697,17 @@ class ConnectScreenTest {
         onNodeWithTag("address").performTextInput("192.0.2.1")
         onNodeWithTag("password").performTextInput("rd-test")
         onNodeWithTag("password").performImeAction()
+        waitUntil { opened != null }
+    }
+
+    @Test
+    fun enterInTheAddressConnectsToo() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        var opened: DeviceSession? = null
+        val services = Services(MemoryStorage(), MemoryTrustStore(), null) { _, _, _ -> router }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session } } }
+        onNodeWithTag("address").performTextInput("192.0.2.1")
+        onNodeWithTag("address").performKeyInput { pressKey(Key.Enter) }
         waitUntil { opened != null }
     }
 

@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.selection.DisableSelection
@@ -81,6 +80,7 @@ import com.composables.icons.lucide.MessageSquare
 
 import com.composables.icons.lucide.Pause
 import com.composables.icons.lucide.Play
+import com.composables.icons.lucide.RefreshCw
 
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Zap
@@ -99,6 +99,9 @@ import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
+import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
@@ -135,6 +138,7 @@ import com.vasmarfas.networkhelm.ui.chart.limit
 import com.vasmarfas.networkhelm.ui.files.FilesView
 import com.vasmarfas.networkhelm.ui.kit.Button
 import com.vasmarfas.networkhelm.ui.kit.Checkbox
+import com.vasmarfas.networkhelm.ui.kit.CountPill
 import com.vasmarfas.networkhelm.ui.kit.DropdownItem
 import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
@@ -178,8 +182,10 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import networkhelm.app.shared.generated.resources.link_lost
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
@@ -217,9 +223,11 @@ import networkhelm.app.shared.generated.resources.list_find_previous
 import networkhelm.app.shared.generated.resources.list_items
 import networkhelm.app.shared.generated.resources.list_items_of
 import networkhelm.app.shared.generated.resources.list_live
+import networkhelm.app.shared.generated.resources.list_loading_rows
 import networkhelm.app.shared.generated.resources.list_move_down
 import networkhelm.app.shared.generated.resources.list_move_up
 import networkhelm.app.shared.generated.resources.list_new
+import networkhelm.app.shared.generated.resources.list_not_loaded
 import networkhelm.app.shared.generated.resources.list_open
 import networkhelm.app.shared.generated.resources.list_paste
 import networkhelm.app.shared.generated.resources.list_paste_failed
@@ -228,6 +236,7 @@ import networkhelm.app.shared.generated.resources.list_paste_question
 import networkhelm.app.shared.generated.resources.list_paused
 import networkhelm.app.shared.generated.resources.list_remove
 import networkhelm.app.shared.generated.resources.list_remove_question
+import networkhelm.app.shared.generated.resources.list_retry
 import networkhelm.app.shared.generated.resources.list_selected
 import networkhelm.app.shared.generated.resources.window_device_mode
 import networkhelm.app.shared.generated.resources.window_loading
@@ -426,10 +435,21 @@ private fun ListView(
     val fixed = pack?.where.orEmpty().filterValues { it.size == 1 }.mapValues { it.value.single() }
     var paused by remember(path) { mutableStateOf(false) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var reading by remember(path) { mutableStateOf<ListEvent.Progress?>(null) }
+    val up = remember(session) { session.link }.collectAsState(LinkState.Up).value == LinkState.Up
+    LaunchedEffect(up) {
+        if (up && problem == LINK_LOST) {
+            problem = null
+            refresh++
+        }
+    }
     val recall = tab.recall
     val recalled = "$name|$filter"
     val arrived = remember(session, path, refresh) {
-        session.watch(path, filter).rows().drop(1).atMostEvery(150.milliseconds).catch { (it as? DeviceException)?.let { e -> problem = e.message } }
+        session.watch(path, filter).onEach { reading = it as? ListEvent.Progress }.rows().drop(1).atMostEvery(150.milliseconds).catch {
+            reading = null
+            (it as? DeviceException)?.let { e -> problem = e.message }
+        }
     }.collectAsState(recall?.rows?.get(recalled)).value
     if (arrived != null && arrived.size <= RECALLED_ROWS) SideEffect { recall?.rows?.set(recalled, arrived) }
     val rows = arrived.orEmpty().heldWhile(paused)
@@ -475,9 +495,9 @@ private fun ListView(
     val monitor = pack?.monitor
     val names = if (monitor == null) emptyList() else rows.mapNotNull { it["name"] }
     var monitored by remember(path) { mutableStateOf<Map<String, Map<String, String>>>(emptyMap()) }
-    LaunchedEffect(session, monitor, names) {
+    LaunchedEffect(session, monitor, names, up) {
         val argument = monitor?.argument
-        if (monitor == null || argument == null || names.isEmpty()) return@LaunchedEffect
+        if (monitor == null || argument == null || names.isEmpty() || !up) return@LaunchedEffect
         val command = MenuPath.parse(monitor.command)
         try {
             session.run(command.parent ?: MenuPath.Root, command.segments.last(), mapOf(argument to names.joinToString(",")))
@@ -490,8 +510,8 @@ private fun ListView(
     val counters = (visible.map { halfOf[it] ?: it } + pack?.totals.orEmpty()).distinct()
         .filter { it in pack?.readonly.orEmpty() && moving.matches(it) && (monitor == null || it !in monitored.values.firstOrNull().orEmpty()) }
     var live by remember(path) { mutableStateOf<Map<String, Map<String, String>>>(emptyMap()) }
-    LaunchedEffect(session, path, counters) {
-        if (counters.isEmpty()) return@LaunchedEffect
+    LaunchedEffect(session, path, counters, up) {
+        if (counters.isEmpty() || !up) return@LaunchedEffect
         try {
             session.counters(path, counters, filter).onTheSecond().collect { if (!paused) live = it }
         } catch (e: DeviceException) {
@@ -633,6 +653,11 @@ private fun ListView(
         }
     }
 
+    fun reload() {
+        problem = null
+        refresh++
+    }
+
     fun onKey(event: KeyEvent): Boolean {
         val ctrl = event.isCtrlPressed || event.isMetaPressed
         when {
@@ -644,7 +669,7 @@ private fun ListView(
             ctrl && event.key == Key.M && canComment && state.selected.isNotEmpty() -> comment()
             ctrl && event.key == Key.E && canSwitch -> enable(!event.isShiftPressed)
             ctrl && event.key == Key.F -> find.requestFocus()
-            event.key == Key.F5 -> refresh++
+            event.key == Key.F5 -> reload()
             else -> return false
         }
         return true
@@ -856,7 +881,12 @@ private fun ListView(
                     for (action in actions.filter(::available)) MenuLine(action.title, "") { pick { run(action) } }
                 },
             )
-            problem?.let { Text(deviceMessage(it), Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 2.dp).testTag("problem"), style = Theme.type.small, color = palette.danger) }
+            problem?.let {
+                Row(Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(deviceMessage(it), Modifier.weight(1f).testTag("problem"), style = Theme.type.small, color = palette.danger)
+                    if (arrived == null || it == LINK_LOST) ToolbarButton(stringResource(Res.string.list_retry), Lucide.RefreshCw, ::reload, Modifier.testTag("retry"))
+                }
+            }
             DisableSelection {
                 Row(
                     Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 3.dp),
@@ -864,12 +894,12 @@ private fun ListView(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val count = when {
-                        arrived == null -> stringResource(Res.string.window_loading)
+                        reading != null -> reading?.let { stringResource(Res.string.list_loading_rows, it.read, it.total) }.orEmpty()
+                        arrived == null -> stringResource(if (problem == null) Res.string.window_loading else Res.string.list_not_loaded)
                         shown.size == rows.size -> pluralStringResource(Res.plurals.list_items, shown.size, shown.size)
                         else -> pluralStringResource(Res.plurals.list_items_of, rows.size, shown.size, rows.size)
                     }
-                    val pill = if (classic) Modifier else Modifier.background(palette.line, RoundedCornerShape(50)).padding(horizontal = 7.dp)
-                    Text(count, pill, style = Theme.type.small, color = if (classic) palette.muted else palette.text)
+                    CountPill(count)
                     if (state.selected.isNotEmpty()) Text(stringResource(Res.string.list_selected, state.selected.size), style = Theme.type.small, color = palette.muted)
                     if (!compact) {
                         for (property in pack?.totals.orEmpty()) {
@@ -882,9 +912,9 @@ private fun ListView(
                         val live = stringResource(if (paused) Res.string.list_paused else Res.string.list_live)
                         Row(
                             Modifier.toggleable(!paused, role = Role.Switch) { paused = !it }.hand().padding(horizontal = 2.dp)
-                                .then(if (compact) Modifier.semantics { contentDescription = live } else Modifier),
+                                .then(if (compact) Modifier.size(40.dp).semantics { contentDescription = live } else Modifier),
                             verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            horizontalArrangement = if (compact) Arrangement.Center else Arrangement.spacedBy(4.dp),
                         ) {
                             UnstyledIcon(if (paused) Lucide.Pause else Lucide.Play, null, Modifier.size(if (compact) 14.dp else 10.dp), tint = if (paused) palette.warning else palette.success)
                             if (!compact) Text(live, style = Theme.type.small, color = if (paused) palette.warning else palette.muted, singleLine = true)
@@ -1076,8 +1106,11 @@ internal fun Confirm(
 }
 
 @Composable
-internal fun deviceMessage(text: String): String =
-    if (text == RequestOutcomeUnknownException.MESSAGE) stringResource(Res.string.error_request_outcome_unknown) else text
+internal fun deviceMessage(text: String): String = when (text) {
+    RequestOutcomeUnknownException.MESSAGE -> stringResource(Res.string.error_request_outcome_unknown)
+    LINK_LOST -> stringResource(Res.string.link_lost)
+    else -> text
+}
 
 @Composable
 internal fun Note(text: String, error: Boolean = false) {

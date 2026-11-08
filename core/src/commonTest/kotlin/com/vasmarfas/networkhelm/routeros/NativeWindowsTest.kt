@@ -109,6 +109,7 @@ class NativeWindowsTest {
             }
             is ListEvent.Upsert -> into[event.item.id] = event.item
             is ListEvent.Removed -> into.remove(event.id)
+            is ListEvent.Progress -> Unit
         }
     }
 
@@ -219,6 +220,13 @@ class NativeWindowsTest {
         assertEquals(1, side.opened)
         assertEquals(8291, side.port)
         assertEquals(3, objects.reads)
+    }
+
+    @Test
+    fun aPortThatAFirewallClosedCountsAsAServiceThatIsOff() = runTest {
+        val windows = native(NativeSide { throw IllegalStateException("Connection refused: getsockopt") })
+        assertEquals(null, windows.facts())
+        assertEquals(ErrorCategory.Unsupported, assertFailsWith<DeviceException> { windows.create(spec, emptyMap()) }.category)
     }
 
     @Test

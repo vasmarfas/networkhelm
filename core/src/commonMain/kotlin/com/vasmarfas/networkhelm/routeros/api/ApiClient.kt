@@ -97,9 +97,15 @@ class ApiClient(
         }
     }
 
+    // the answer to a ping waits behind the rows of a big table, so what proves the link is anything heard from the router
     private suspend fun ping(connection: ApiConnection) {
+        var heard = connection.heard
         while (true) {
             delay(keepAlive)
+            if (connection.heard != heard) {
+                heard = connection.heard
+                continue
+            }
             val answered = try {
                 withTimeoutOrNull(keepAlive) { connection.call("/system/identity/print") } != null
             } catch (e: ApiTrapException) {
@@ -107,10 +113,11 @@ class ApiClient(
             } catch (e: ApiConnectionClosedException) {
                 return
             }
-            if (!answered) {
+            if (!answered && connection.heard == heard) {
                 connection.close(ApiConnectionClosedException("no answer from the router in $keepAlive"))
                 return
             }
+            heard = connection.heard
         }
     }
 

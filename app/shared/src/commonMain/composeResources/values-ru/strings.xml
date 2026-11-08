@@ -7,7 +7,7 @@
     <string name="connect_secrets_unavailable">Защищённое хранилище недоступно; запомнить пароли не получится.</string>
     <string name="error_request_outcome_unknown">Соединение потеряно после отправки команды. Результат неизвестен; проверьте состояние роутера перед повтором.</string>
     <string name="connect_address">Адрес</string>
-    <string name="connect_address_hint">имя или IP, при необходимости с портом</string>
+    <string name="connect_address_hint">имя или IP, можно с портом</string>
     <string name="connect_port">Порт</string>
     <string name="error_port">Порт — число от 1 до 65535.</string>
     <string name="connect_user">Пользователь</string>
@@ -76,7 +76,7 @@
     <string name="error_saved_list">Список сохранённых роутеров не прочитан и оставлен как есть: %1$s</string>
     <string name="error_rejected">Подключение отменено.</string>
 
-    <string name="trust_new_tls">%1$s предъявил сертификат, которого этот клиент ещё не видел. Сверьте отпечаток с выводом /certificate print на роутере.</string>
+    <string name="trust_new_tls">%1$s предъявил сертификат, которого этот клиент ещё не видел. Сверьте отпечаток с тем, что показывает устройство (на RouterOS — /certificate print).</string>
     <string name="trust_new_ssh">%1$s предъявил ключ SSH, которого этот клиент ещё не видел. Сверьте отпечаток с ключом хоста, который показывает роутер.</string>
     <string name="trust_changed_tls">%1$s предъявил не тот сертификат, что в прошлый раз. Так бывает после переустановки или замены сертификата — и когда кто-то вклинился в соединение.</string>
     <string name="trust_changed_ssh">%1$s предъявил не тот ключ SSH, что в прошлый раз. Так бывает после переустановки или замены ключа — и когда кто-то вклинился в соединение.</string>
@@ -94,6 +94,7 @@
     <string name="neighbors_refresh">Обновить</string>
     <string name="neighbors_hint">Роутеры объявляют себя раз в 30–60 с. «Обновить» просит их ответить сразу; RouterOS 7 отвечает за две секунды.</string>
     <string name="neighbors_not_sent">Запрос не ушёл: его не принял ни один сетевой интерфейс.</string>
+    <string name="neighbors_not_heard">Не удалось слушать порт UDP 5678: его могла занять другая программа, например WinBox.</string>
 
     <string name="main_undo">Отменить</string>
     <string name="main_redo">Повторить</string>
@@ -193,6 +194,7 @@
     <string name="about_site">Сайт автора</string>
     <string name="about_source">Исходный код и обращения</string>
     <string name="about_telegram">Канал в Telegram</string>
+    <string name="about_chat">Чат в Telegram</string>
     <string name="about_support">Поддержать проект</string>
     <string name="about_summary">Исходный код открыт для чтения, лицензия PolyForm Noncommercial 1.0.0. Не связано с MikroTik и проектом OpenWrt; MikroTik, RouterOS, WinBox и OpenWrt — товарные знаки их владельцев.</string>
     <string name="main_disconnect">Отключиться</string>
@@ -256,6 +258,9 @@
     <string name="list_do_not_ask">Больше не спрашивать</string>
     <string name="list_columns">Колонки</string>
     <string name="list_live">Обновляется</string>
+    <string name="list_loading_rows">Загрузка… %1$d из %2$d</string>
+    <string name="list_not_loaded">Не загружено</string>
+    <string name="list_retry">Повторить</string>
     <string name="list_paused">На паузе</string>
     <string name="list_selected">выделено: %1$d</string>
     <string name="list_cancel">Отмена</string>
@@ -803,6 +808,23 @@
     <string name="tools_b_port_32400">Медиасервер</string>
     <string name="tools_b_port_51820">VPN</string>
     <string name="tools_b_port_62078">Службы устройств Apple</string>
+    <string name="unit_b">Б</string>
+    <string name="unit_kb">кБ</string>
+    <string name="unit_mb">МБ</string>
+    <string name="unit_gb">ГБ</string>
+    <string name="unit_tb">ТБ</string>
+    <string name="unit_kib">КиБ</string>
+    <string name="unit_mib">МиБ</string>
+    <string name="unit_gib">ГиБ</string>
+    <string name="unit_tib">ТиБ</string>
+    <string name="unit_bit_s">бит/с</string>
+    <string name="unit_kbit_s">кбит/с</string>
+    <string name="unit_mbit_s">Мбит/с</string>
+    <string name="unit_gbit_s">Гбит/с</string>
+    <string name="unit_b_s">Б/с</string>
+    <string name="unit_kb_s">кБ/с</string>
+    <string name="unit_mb_s">МБ/с</string>
+    <string name="unit_gb_s">ГБ/с</string>
     <string name="tools_n1_method">Способ</string>
     <string name="tools_n1_family">Версия IP</string>
     <string name="tools_n1_any">Любая</string>

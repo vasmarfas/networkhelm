@@ -13,6 +13,7 @@ import kotlinx.coroutines.flow.channelFlow
 import kotlinx.coroutines.flow.conflate
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapNotNull
@@ -24,8 +25,9 @@ import kotlinx.coroutines.flow.transform
 import kotlin.time.Clock
 import kotlin.time.Duration
 
-fun Flow<ListEvent>.rows(): Flow<List<Item>> = runningFold(emptyList<Item>()) { rows, event ->
+fun Flow<ListEvent>.rows(): Flow<List<Item>> = filterNot { it is ListEvent.Progress }.runningFold(emptyList<Item>()) { rows, event ->
     when (event) {
+        is ListEvent.Progress -> rows
         is ListEvent.Snapshot -> event.items
         is ListEvent.Removed -> rows.filterNot { it.id == event.id }
         is ListEvent.Upsert -> {
@@ -107,6 +109,6 @@ fun DeviceSession.watchSettings(path: MenuPath, properties: List<String>? = null
         when (event) {
             is ListEvent.Snapshot -> event.items.firstOrNull()
             is ListEvent.Upsert -> event.item
-            is ListEvent.Removed -> null
+            is ListEvent.Removed, is ListEvent.Progress -> null
         }
     }

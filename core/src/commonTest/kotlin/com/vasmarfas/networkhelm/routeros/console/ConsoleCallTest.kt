@@ -27,6 +27,21 @@ class ConsoleCallTest {
     }
 
     @Test
+    fun aPortionPicksItsRowsOutOfFindAndReadsThemInEveryView() {
+        val call = consoleCall(listOf("/ip/address/print", "=.proplist=.id,address", "?disabled=false"), emptySet(), emptyMap(), portion = 2_000 until 4_000)
+        val views = listOf("", " detail show-sensitive", " stats-detail").joinToString("; ") { rows("/ip/address/print as-value$it proplist=address from=\$part") }
+        assertEquals(":local part [:pick [/ip/address/find where disabled=\"no\"] 2000 4000]; :if ([:len \$part] > 0) do={ $views } else={ :put \"[]\" }", call.line)
+        assertEquals(setOf("detail", "show-sensitive", "stats-detail", "proplist", "find", "from"), call.offered)
+    }
+
+    @Test
+    fun aMenuWithoutFindOrFromIsAskedWholeEvenForAPortion() {
+        val whole = call("/ip/address/print").line
+        assertEquals(whole, consoleCall(listOf("/ip/address/print"), emptySet(), mapOf("/ip/address" to setOf("from")), portion = 0 until 2_000).line)
+        assertEquals(whole, consoleCall(listOf("/ip/address/print"), emptySet(), mapOf("/ip/address" to setOf("find")), portion = 0 until 2_000).line)
+    }
+
+    @Test
     fun aMenuIsAskedInThreeViewsAndWithoutTheWordsItHasRefused() {
         fun dns(vararg refused: String) = call("/ip/dns/print", refused = mapOf("/ip/dns" to refused.toSet()))
         fun views(vararg flags: String) = flags.joinToString("; ") { rows("/ip/dns/print as-value$it") }

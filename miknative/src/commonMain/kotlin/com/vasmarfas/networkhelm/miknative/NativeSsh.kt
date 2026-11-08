@@ -41,6 +41,8 @@ class NativeSsh private constructor(
 
     override val fileStore = true
 
+    override val connected get() = connection.alive
+
     override fun close() {
         closed = true
         connection.close()

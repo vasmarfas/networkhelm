@@ -49,6 +49,7 @@ import com.composables.icons.lucide.X
 import com.composeunstyled.Text
 import com.composeunstyled.UnstyledDropdownMenu
 import com.composeunstyled.UnstyledIcon
+import com.vasmarfas.networkhelm.ui.kit.CountPill
 import com.vasmarfas.networkhelm.ui.kit.DropdownItem
 import com.vasmarfas.networkhelm.ui.kit.Hint
 import com.vasmarfas.networkhelm.ui.kit.IconButton
@@ -393,8 +394,7 @@ internal fun LogStatus(state: LogState, shown: Int, all: Int, counts: Map<Severi
                 shown == all -> pluralStringResource(Res.plurals.log_lines, shown, shown)
                 else -> pluralStringResource(Res.plurals.log_lines_of, all, shown, all)
             }
-            val pill = if (Theme.classic) Modifier else Modifier.background(palette.line, RoundedCornerShape(50)).padding(horizontal = 7.dp)
-            Text(count, pill.testTag("log-count"), style = Theme.type.small, color = if (Theme.classic) palette.muted else palette.text)
+            CountPill(count, Modifier.testTag("log-count"))
             if (selected > 0) Text(stringResource(Res.string.list_selected, selected), style = Theme.type.small, color = palette.muted)
             val problems = (counts[Severity.Critical] ?: 0) + (counts[Severity.Error] ?: 0)
             if (problems > 0 && !compact) {

@@ -76,7 +76,7 @@
     <string name="error_saved_list">The list of saved routers could not be read and is left as it is: %1$s</string>
     <string name="error_rejected">The connection was cancelled.</string>
 
-    <string name="trust_new_tls">%1$s presented a certificate this client has not seen. Compare the fingerprint with the one /certificate print shows on the router.</string>
+    <string name="trust_new_tls">%1$s presented a certificate this client has not seen. Compare the fingerprint with the one the device shows (/certificate print on RouterOS).</string>
     <string name="trust_new_ssh">%1$s presented an SSH host key this client has not seen. Compare the fingerprint with the one the router shows for its host key.</string>
     <string name="trust_changed_tls">%1$s presented a different certificate than last time. That happens after a reinstall or a new certificate, and also when someone sits in the middle of the connection.</string>
     <string name="trust_changed_ssh">%1$s presented a different SSH host key than last time. That happens after a reinstall or a new key, and also when someone sits in the middle of the connection.</string>
@@ -94,6 +94,7 @@
     <string name="neighbors_refresh">Refresh</string>
     <string name="neighbors_hint">Routers announce themselves every 30 to 60 s. Refresh asks them to answer now; RouterOS 7 does within two seconds.</string>
     <string name="neighbors_not_sent">The request did not go out: no network interface took it.</string>
+    <string name="neighbors_not_heard">Cannot listen on UDP port 5678: another program, WinBox for one, may hold it.</string>
 
     <string name="main_undo">Undo</string>
     <string name="main_redo">Redo</string>
@@ -193,6 +194,7 @@
     <string name="about_site">Website</string>
     <string name="about_source">Source and issues</string>
     <string name="about_telegram">Telegram channel</string>
+    <string name="about_chat">Telegram chat</string>
     <string name="about_support">Support the project</string>
     <string name="about_summary">Source-available under the PolyForm Noncommercial License 1.0.0. Not affiliated with MikroTik or the OpenWrt project; MikroTik, RouterOS, WinBox and OpenWrt are trademarks of their owners.</string>
     <string name="main_disconnect">Disconnect</string>
@@ -256,6 +258,9 @@
     <string name="list_do_not_ask">Do not ask again</string>
     <string name="list_columns">Columns</string>
     <string name="list_live">Live</string>
+    <string name="list_loading_rows">Loading… %1$d of %2$d</string>
+    <string name="list_not_loaded">Not loaded</string>
+    <string name="list_retry">Retry</string>
     <string name="list_paused">Paused</string>
     <string name="list_selected">%1$d selected</string>
     <string name="list_cancel">Cancel</string>
@@ -793,6 +798,23 @@
     <string name="tools_b_port_32400">Media server</string>
     <string name="tools_b_port_51820">VPN</string>
     <string name="tools_b_port_62078">Apple device services</string>
+    <string name="unit_b">B</string>
+    <string name="unit_kb">kB</string>
+    <string name="unit_mb">MB</string>
+    <string name="unit_gb">GB</string>
+    <string name="unit_tb">TB</string>
+    <string name="unit_kib">KiB</string>
+    <string name="unit_mib">MiB</string>
+    <string name="unit_gib">GiB</string>
+    <string name="unit_tib">TiB</string>
+    <string name="unit_bit_s">bit/s</string>
+    <string name="unit_kbit_s">kbit/s</string>
+    <string name="unit_mbit_s">Mbit/s</string>
+    <string name="unit_gbit_s">Gbit/s</string>
+    <string name="unit_b_s">B/s</string>
+    <string name="unit_kb_s">kB/s</string>
+    <string name="unit_mb_s">MB/s</string>
+    <string name="unit_gb_s">GB/s</string>
     <string name="tools_n1_method">Method</string>
     <string name="tools_n1_family">IP version</string>
     <string name="tools_n1_any">Any</string>
