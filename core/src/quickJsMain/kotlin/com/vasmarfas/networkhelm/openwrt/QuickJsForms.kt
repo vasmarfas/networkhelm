@@ -6,6 +6,7 @@ import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.ssh.SshSession
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.IO
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -58,10 +59,23 @@ class QuickJsForms(
         try {
             engine.evaluationTimeoutMillis = 10_000
             engine.memoryLimit = memoryLimit
-            engine.function<String?>("hostUbus") { args -> runBlocking { read(args[0] as String, args[1] as String, args[2] as String) }?.let(::escaped) }
-            engine.function<String?>("hostModule") { args -> runBlocking { module(args[0] as String) }?.let(::escaped) }
+            // QuickJS for iOS hands the exception of a host function to the script as an error that the page may catch,
+            // so the first one is kept and thrown after the run, where the JVM build has thrown it at once
+            var refused: Exception? = null
+            fun <T> host(work: suspend () -> T): T {
+                refused?.let { throw it }
+                return try {
+                    runBlocking { work() }
+                } catch (e: Exception) {
+                    refused = e
+                    throw e
+                }
+            }
+            engine.function<String?>("hostUbus") { args -> host { read(args[0] as String, args[1] as String, args[2] as String) }?.let(::escaped) }
+            engine.function<String?>("hostModule") { args -> host { module(args[0] as String) }?.let(::escaped) }
             engine.evaluate<Any?>(luciStub, "luci-stub.js")
             engine.evaluate<Any?>(escaped("$entry(${Json.encodeToString(source)})"), path.substringAfterLast('/'))
+            refused?.let { throw it }
             // a page that cannot be evaluated is left without a form; only the memory limit stops the work on the rest
             engine.evaluate<String?>("schemaError")?.takeIf { OUT_OF_MEMORY in it }?.let { throw DeviceException(ErrorCategory.Api, it) }
             if (engine.evaluate<Boolean>("typeof schemaResult === 'string' && schemaResult.length > $resultLimit")) {

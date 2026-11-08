@@ -2,7 +2,7 @@ package com.vasmarfas.networkhelm.miknative
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
-import java.security.MessageDigest
+import com.vasmarfas.networkhelm.routeros.api.md5
 
 internal const val MAC_TELNET_PORT = 20561
 internal const val MAC_TELNET_HEADER_LEN = 22
@@ -145,17 +145,7 @@ internal fun parseControlBlocks(payload: ByteArray): List<ParsedControlBlock> {
     return blocks
 }
 
-internal fun macTelnetMd5(password: String, salt: ByteArray): ByteArray {
-    val digest = MessageDigest.getInstance("MD5")
-    digest.update(0.toByte())
-    digest.update(password.encodeToByteArray())
-    digest.update(salt)
-    val hash = digest.digest()
-    val out = ByteArray(17)
-    out[0] = 0
-    hash.copyInto(out, 1)
-    return out
-}
+internal fun macTelnetMd5(password: String, salt: ByteArray): ByteArray = byteArrayOf(0) + md5(byteArrayOf(0) + password.encodeToByteArray() + salt)
 
 internal fun encodeTerminalDimension(value: Int): ByteArray = byteArrayOf(
     (value and 0xFF).toByte(),

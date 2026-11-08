@@ -130,7 +130,7 @@ class ConnectLabTest {
         val target = System.getProperty("networkhelm.macTarget").orEmpty()
         val from = System.getProperty("networkhelm.macFrom").orEmpty()
         assumeTrue("-PmacTarget and -PmacFrom do not name the link", target.isNotEmpty() && from.isNotEmpty())
-        val link = checkNotNull(listBroadcastInterfaces().firstOrNull { it.address.hostAddress == from }) { "no interface has the address $from" }
+        val link = checkNotNull(listBroadcastInterfaces().firstOrNull { it.address == from }) { "no interface has the address $from" }
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(
             MemoryStorage(), MemoryTrustStore(), neighbors = null,

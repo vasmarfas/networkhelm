@@ -10,6 +10,7 @@ fun Services.withDemo(): Services = Services(
     connectLogin = { login, trust -> demoRouter(login.host) ?: connectLogin(login, trust) },
     networkInterfaces = networkInterfaces,
     connectMacTelnet = connectMacTelnet,
+    typedMac = typedMac,
     connectTcp8291 = connectTcp8291,
     readWinBoxBook = readWinBoxBook,
     connect = { login, trust, scope -> demoRouter(login.host) ?: connect(login, trust, scope) },

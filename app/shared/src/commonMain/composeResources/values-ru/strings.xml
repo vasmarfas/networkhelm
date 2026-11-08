@@ -70,6 +70,7 @@
     <string name="error_unsupported">Так этот клиент подключиться не может: %1$s</string>
     <string name="error_mac_telnet_unsupported">MAC-Telnet не поддерживается на этой платформе.</string>
     <string name="error_mac_telnet_no_interface">Нет сетевого интерфейса с адресом IPv4. MAC-Telnet отправляет широковещательные пакеты через такой интерфейс.</string>
+    <string name="error_own_mac">Введите MAC-адрес этого устройства: Настройки → Wi-Fi → (i) у сети → Адрес Wi-Fi.</string>
     <string name="error_tcp_8291_unsupported">TCP 8291 не поддерживается на этой платформе.</string>
     <string name="error_no_rest">У роутера нет REST: он появился в RouterOS 7.1. Подключитесь по API-SSL или API.</string>
     <string name="error_other">Не удалось подключиться к %1$s: %2$s</string>
@@ -465,6 +466,7 @@
     <string name="settings_look_light">Светлый</string>
     <string name="settings_look_dark">Тёмный</string>
     <string name="settings_language">Язык</string>
+    <string name="settings_language_system">Его выбирает система: на iPhone и iPad — в Настройках → NetworkHelm → Язык, в браузере — по языку браузера.</string>
     <string name="settings_scale">Масштаб</string>
     <string name="settings_edit">Изменить тему</string>
     <string name="settings_import">Загрузить тему</string>
@@ -652,6 +654,8 @@
     <string name="protocol_mac_telnet">MAC-Telnet (UDP 20561)</string>
     <string name="protocol_tcp_8291">TCP 8291 (порт WinBox)</string>
     <string name="connect_interface">Интерфейс</string>
+    <string name="connect_own_mac">MAC этого устройства</string>
+    <string name="connect_own_mac_hint">iOS не сообщает приложениям MAC-адрес устройства, а роутер отвечает по MAC-Telnet на адрес, который назвал клиент. С частным адресом «Адрес Wi-Fi» у каждой сети свой.</string>
     <string name="neighbor_connect_mac_telnet">Подключиться по MAC-Telnet</string>
     <string name="dashboard_download">Загрузка</string>
     <string name="dashboard_upload">Отдача</string>

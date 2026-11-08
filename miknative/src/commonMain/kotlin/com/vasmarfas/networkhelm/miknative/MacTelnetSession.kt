@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.miknative
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.routeros.LoginTimeoutException
 import com.vasmarfas.networkhelm.ssh.ExecResult
 import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.ShellChannel
@@ -18,11 +19,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeout
-import java.io.ByteArrayOutputStream
-import java.net.InetAddress
-import java.net.SocketTimeoutException
-import java.security.SecureRandom
-import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.concurrent.Volatile
+import kotlin.time.TimeSource
 
 private val RETRANSMIT_INTERVALS_MS = longArrayOf(15, 20, 30, 50, 90, 170, 330, 660, 1000)
 private const val START_RETRANSMIT_MS = 250L
@@ -31,19 +29,25 @@ private const val NATIVE_WRITE_CHUNK = 1450
 private const val NATIVE_START_MS = 4_000L
 private const val KEEPALIVE_MS = 5_000L
 
+private val clock = TimeSource.Monotonic.markNow()
+
+private fun now() = clock.elapsedNow().inWholeMilliseconds
+
+internal fun randomKey() = secureRandomBytes(2).let { ((it[0].toInt() and 0xFF) shl 8) or (it[1].toInt() and 0xFF) }
+
 class MacTelnetSession internal constructor(
     private val sink: MacTelnetTransport,
     val sourceMac: MacAddress,
     val destinationMac: MacAddress,
     private val user: String,
     private val password: String,
-    val sessionKey: Int = SecureRandom().nextInt(0x10000),
+    val sessionKey: Int = randomKey(),
     private var terminalWidth: Int = 80,
     private var terminalHeight: Int = 24,
     private val terminalType: String = "vt102",
     private val offerMtwei: Boolean = true,
     private val native: Boolean = false,
-    private val destinationAddress: InetAddress = InetAddress.getByName("255.255.255.255"),
+    private val destinationAddress: String = BROADCAST,
     private val keepAliveMillis: Long = KEEPALIVE_MS,
     private val scope: CoroutineScope,
 ) : ShellChannel {
@@ -59,7 +63,7 @@ class MacTelnetSession internal constructor(
     }
 
     private val writeLock = Mutex()
-    private val stateLock = Any()
+    private val stateLock = reentrantLock()
     private var state = State.INIT
     private var outCounter = 0L
     private var expectedInCounter = 0L
@@ -83,7 +87,7 @@ class MacTelnetSession internal constructor(
     private var failure: Throwable? = null
 
     @Volatile
-    private var lastSent = System.currentTimeMillis()
+    private var lastSent = now()
 
     val readyDeferred = CompletableDeferred<Unit>()
     val closedDeferred = CompletableDeferred<Unit>()
@@ -94,12 +98,12 @@ class MacTelnetSession internal constructor(
 
     private suspend fun retransmissionLoop() {
         while (scope.isActive && state != State.CLOSED) {
-            val toResend = synchronized(stateLock) {
-                if (state == State.CLOSED) return@synchronized null
-                val frame = pending ?: return@synchronized null
+            val toResend = stateLock.locked {
+                if (state == State.CLOSED) return@locked null
+                val frame = pending ?: return@locked null
                 if (frame.attempts >= 15) {
                     fail(DeviceException(ErrorCategory.ConnectionLost, "MAC-Telnet peer not responding"))
-                    return@synchronized null
+                    return@locked null
                 }
                 val delayTime = when {
                     state == State.SESSION_START_SENT -> START_RETRANSMIT_MS
@@ -115,7 +119,7 @@ class MacTelnetSession internal constructor(
             }
             val (frame, waitMs) = toResend
             delay(waitMs)
-            synchronized(stateLock) {
+            stateLock.locked {
                 if (pending === frame && state != State.CLOSED) {
                     frame.attempts++
                     try {
@@ -129,13 +133,13 @@ class MacTelnetSession internal constructor(
     }
 
     private fun keepAlive() {
-        synchronized(stateLock) {
-            if (state == State.READY && System.currentTimeMillis() - lastSent >= keepAliveMillis) acknowledge(expectedInCounter)
+        stateLock.locked {
+            if (state == State.READY && now() - lastSent >= keepAliveMillis) acknowledge(expectedInCounter)
         }
     }
 
     fun start() {
-        synchronized(stateLock) {
+        stateLock.locked {
             if (state != State.INIT) return
             state = State.SESSION_START_SENT
             val frame = packet(MacTelnetPacketType.SESSION_START, outCounter)
@@ -151,7 +155,7 @@ class MacTelnetSession internal constructor(
             return
         }
 
-        synchronized(stateLock) {
+        stateLock.locked {
             if (state == State.CLOSED) return
             if (header.version != 1 || header.sessionKey != sessionKey) return
             if (header.sourceMac != destinationMac || header.destinationMac != sourceMac) return
@@ -184,14 +188,13 @@ class MacTelnetSession internal constructor(
             return
         }
         state = State.AUTH_BEGIN_SENT
-        val blocks = ByteArrayOutputStream()
-        blocks.write(encodeControlBlock(MacTelnetControlType.BEGIN_AUTH))
+        var blocks = encodeControlBlock(MacTelnetControlType.BEGIN_AUTH)
         if (offerMtwei) {
             val client = EcSrp5Client(identityUser(), password)
             srpClient = client
-            blocks.write(encodeControlBlock(MacTelnetControlType.PASSWORD_SALT, client.hello()))
+            blocks += encodeControlBlock(MacTelnetControlType.PASSWORD_SALT, client.hello())
         }
-        sendData(blocks.toByteArray())
+        sendData(blocks)
     }
 
     private fun identityUser(): String = user.substringBefore('+')
@@ -261,15 +264,14 @@ class MacTelnetSession internal constructor(
             }
         }
 
-        val blocks = ByteArrayOutputStream()
-        blocks.write(encodeControlBlock(MacTelnetControlType.PASSWORD, passwordValue))
-        blocks.write(encodeControlBlock(MacTelnetControlType.USERNAME, user.encodeToByteArray()))
-        blocks.write(encodeControlBlock(MacTelnetControlType.TERMINAL_TYPE, terminalType.encodeToByteArray()))
-        blocks.write(encodeControlBlock(MacTelnetControlType.TERMINAL_WIDTH, encodeTerminalDimension(terminalWidth)))
-        blocks.write(encodeControlBlock(MacTelnetControlType.TERMINAL_HEIGHT, encodeTerminalDimension(terminalHeight)))
+        val blocks = encodeControlBlock(MacTelnetControlType.PASSWORD, passwordValue) +
+            encodeControlBlock(MacTelnetControlType.USERNAME, user.encodeToByteArray()) +
+            encodeControlBlock(MacTelnetControlType.TERMINAL_TYPE, terminalType.encodeToByteArray()) +
+            encodeControlBlock(MacTelnetControlType.TERMINAL_WIDTH, encodeTerminalDimension(terminalWidth)) +
+            encodeControlBlock(MacTelnetControlType.TERMINAL_HEIGHT, encodeTerminalDimension(terminalHeight))
 
         state = State.AUTH_SENT
-        sendData(blocks.toByteArray())
+        sendData(blocks)
     }
 
     private fun handleTerminalData(data: ByteArray) {
@@ -340,7 +342,7 @@ class MacTelnetSession internal constructor(
     override fun resize(columns: Int, rows: Int) {
         terminalWidth = columns
         terminalHeight = rows
-        val ready = synchronized(stateLock) { state == State.READY }
+        val ready = stateLock.locked { state == State.READY }
         if (!ready) return
         val blocks = encodeControlBlock(MacTelnetControlType.TERMINAL_WIDTH, encodeTerminalDimension(columns)) +
             encodeControlBlock(MacTelnetControlType.TERMINAL_HEIGHT, encodeTerminalDimension(rows))
@@ -357,7 +359,7 @@ class MacTelnetSession internal constructor(
 
     private suspend fun sendAndAwaitAck(payload: ByteArray) {
         val ackDeferred = CompletableDeferred<Unit>()
-        synchronized(stateLock) {
+        stateLock.locked {
             failure?.let { throw it }
             if (state == State.CLOSED) throw DeviceException(ErrorCategory.ConnectionLost, "MAC-Telnet session is closed")
             val frame = packet(MacTelnetPacketType.DATA, outCounter) + payload
@@ -369,7 +371,7 @@ class MacTelnetSession internal constructor(
     }
 
     override fun close() {
-        synchronized(stateLock) {
+        stateLock.locked {
             if (state == State.CLOSED) return
             state = State.CLOSED
             val previousPending = pending
@@ -387,7 +389,7 @@ class MacTelnetSession internal constructor(
     }
 
     private fun fail(error: Throwable) {
-        synchronized(stateLock) {
+        stateLock.locked {
             if (state == State.CLOSED) return
             state = State.CLOSED
             val previousPending = pending
@@ -419,7 +421,7 @@ class MacTelnetSession internal constructor(
 
     private fun emit(bytes: ByteArray) {
         sink.send(bytes, destinationAddress, MAC_TELNET_PORT)
-        lastSent = System.currentTimeMillis()
+        lastSent = now()
     }
 }
 
@@ -429,7 +431,8 @@ class MacTelnetSsh internal constructor(
     first: MacTelnetSession,
     private val open: suspend (term: String, columns: Int, rows: Int, key: Int) -> MacTelnetSession,
 ) : SshSession {
-    private val sessions = CopyOnWriteArrayList(listOf(first))
+    private val lock = reentrantLock()
+    private val sessions = mutableListOf(first)
     private var spare: MacTelnetSession? = first
 
     @Volatile
@@ -441,22 +444,21 @@ class MacTelnetSsh internal constructor(
 
     override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel {
         if (closed) throw DeviceException(ErrorCategory.ConnectionLost, "the MAC-Telnet connection is closed")
-        val reused = synchronized(this) { spare.also { spare = null } }
+        val reused = lock.locked { spare.also { spare = null } }
         if (reused != null) {
             reused.resize(columns, rows)
             return reused
         }
-        sessions.removeIf { it.closedDeferred.isCompleted }
-        var key: Int
-        do {
-            key = SecureRandom().nextInt(0x10000)
-        } while (sessions.any { it.sessionKey == key })
-        val session = try {
-            open(term, columns, rows, key)
-        } catch (e: SocketTimeoutException) {
-            throw DeviceException(ErrorCategory.ConnectionLost, e.message.orEmpty(), e)
+        val key = lock.locked {
+            sessions.removeAll { it.closedDeferred.isCompleted }
+            var candidate: Int
+            do {
+                candidate = randomKey()
+            } while (sessions.any { it.sessionKey == candidate })
+            candidate
         }
-        sessions += session
+        val session = open(term, columns, rows, key)
+        lock.locked { sessions += session }
         if (closed) session.close()
         return session
     }
@@ -469,7 +471,7 @@ class MacTelnetSsh internal constructor(
 
     override fun close() {
         closed = true
-        sessions.forEach { it.close() }
+        lock.locked { sessions.toList() }.forEach { it.close() }
     }
 
     private fun unsupported(what: String) =
@@ -482,12 +484,12 @@ suspend fun connectMacTelnet(
     password: String,
     scope: CoroutineScope,
     sourceMac: MacAddress,
-    transport: MacTelnetTransport = UdpMacTelnetTransport(),
-    destinationAddress: InetAddress = InetAddress.getByName("255.255.255.255"),
+    transport: MacTelnetTransport = macTelnetTransport(),
+    destinationAddress: String = BROADCAST,
     terminalWidth: Int = 80,
     terminalHeight: Int = 24,
     timeoutMillis: Long = 10_000L,
-    transports: () -> MacTelnetTransport = { UdpMacTelnetTransport() },
+    transports: () -> MacTelnetTransport = ::macTelnetTransport,
     terminalType: String = "vt102",
     keepAliveMillis: Long = KEEPALIVE_MS,
 ): MacTelnetSsh {
@@ -517,15 +519,13 @@ suspend fun connectMacTelnet(
             return session
         } catch (e: TimeoutCancellationException) {
             session.close()
-            throw SocketTimeoutException("MAC-Telnet connection to $destinationMac timed out").apply {
-                initCause(e)
-            }
+            throw LoginTimeoutException()
         } catch (t: Throwable) {
             session.close()
             throw t
         }
     }
-    val first = login(transport, terminalType, terminalWidth, terminalHeight, SecureRandom().nextInt(0x10000))
+    val first = login(transport, terminalType, terminalWidth, terminalHeight, randomKey())
     return MacTelnetSsh(first) { term, columns, rows, key -> login(transports(), term, columns, rows, key) }
 }
 
@@ -537,8 +537,8 @@ suspend fun connectMacNative(
     password: String,
     scope: CoroutineScope,
     sourceMac: MacAddress,
-    transport: MacTelnetTransport = UdpMacTelnetTransport(),
-    destinationAddress: InetAddress = InetAddress.getByName("255.255.255.255"),
+    transport: MacTelnetTransport = macTelnetTransport(),
+    destinationAddress: String = BROADCAST,
     timeoutMillis: Long = NATIVE_START_MS,
 ): NativeConnection {
     val session = MacTelnetSession(

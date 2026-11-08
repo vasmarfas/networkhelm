@@ -49,7 +49,10 @@ class Services(
     },
     val connectLogin: suspend (Login, TrustPolicy) -> DeviceSession = { login, trust -> login.connect(trust) },
     val networkInterfaces: (() -> List<String>)? = null,
-    val connectMacTelnet: (suspend (mac: String, user: String, pass: String, ifaceName: String?, encoding: ApiEncoding, scope: CoroutineScope) -> DeviceSession)? = null,
+    // link: the label from networkInterfaces, or the MAC of this device that the user typed where typedMac is set
+    val connectMacTelnet: (suspend (mac: String, user: String, pass: String, link: String?, encoding: ApiEncoding, scope: CoroutineScope) -> DeviceSession)? = null,
+    // iOS does not tell apps the MAC of the device, and the router sends its answers of MAC-Telnet to the MAC the client names
+    val typedMac: Boolean = false,
     val connectTcp8291: (suspend (host: String, port: Int, user: String, pass: String, encoding: ApiEncoding, scope: CoroutineScope) -> DeviceSession)? = null,
     val readWinBoxBook: ((ByteArray) -> List<WinBoxSession>?)? = null,
     val releases: (suspend () -> String?)? = null,

@@ -70,6 +70,7 @@
     <string name="error_unsupported">This client cannot connect that way: %1$s</string>
     <string name="error_mac_telnet_unsupported">MAC-Telnet is not supported on this platform.</string>
     <string name="error_mac_telnet_no_interface">No network interface with an IPv4 address is up. MAC-Telnet sends its broadcasts through one.</string>
+    <string name="error_own_mac">Type the MAC address of this device: Settings → Wi-Fi → (i) next to the network → Wi-Fi Address.</string>
     <string name="error_tcp_8291_unsupported">TCP 8291 is not supported on this platform.</string>
     <string name="error_no_rest">The router has no REST: it came with RouterOS 7.1. Connect over API-SSL or API.</string>
     <string name="error_other">Could not connect to %1$s: %2$s</string>
@@ -465,6 +466,7 @@
     <string name="settings_look_light">Light</string>
     <string name="settings_look_dark">Dark</string>
     <string name="settings_language">Language</string>
+    <string name="settings_language_system">The system picks it: on an iPhone or iPad in Settings → NetworkHelm → Language, in a browser by the language of the browser.</string>
     <string name="settings_scale">Scale</string>
     <string name="settings_edit">Edit theme</string>
     <string name="settings_import">Import theme</string>
@@ -642,6 +644,8 @@
     <string name="protocol_mac_telnet">MAC-Telnet (UDP 20561)</string>
     <string name="protocol_tcp_8291">TCP 8291 (WinBox port)</string>
     <string name="connect_interface">Interface</string>
+    <string name="connect_own_mac">MAC of this device</string>
+    <string name="connect_own_mac_hint">iOS does not tell apps the MAC address of the device, and the router answers MAC-Telnet to the address the client names. With a private address the Wi-Fi Address differs for each network.</string>
     <string name="neighbor_connect_mac_telnet">Connect with MAC-Telnet</string>
     <string name="dashboard_download">Download</string>
     <string name="dashboard_upload">Upload</string>

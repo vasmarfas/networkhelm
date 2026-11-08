@@ -105,6 +105,7 @@ sealed interface Problem {
     data object MacTelnetUnsupported : Problem
 
     data object MacTelnetNoInterface : Problem
+    data object OwnMac : Problem
 
     data object Tcp8291Unsupported : Problem
 
@@ -239,6 +240,8 @@ class ConnectState(
     val snmpPrivacy: String? get() = privacy.text.toString().takeIf { protocol == Access.Snmp3 && password.text.isNotEmpty() && it.isNotEmpty() }
     val networkInterfaces: List<String> = services.networkInterfaces?.invoke().orEmpty()
     var selectedInterface by mutableStateOf(networkInterfaces.firstOrNull().orEmpty())
+    val typedMac: Boolean get() = services.typedMac
+    val ownMac = TextFieldState()
     private val chosenPort: Int? get() = port.text.toString().toIntOrNull()?.takeIf { it in 1..65535 }
     val portInvalid: Boolean get() = port.text.isNotEmpty() && chosenPort == null
     val portHint: Int get() = parseAddress(address.text.toString())?.port ?: protocol.defaultPort
@@ -251,6 +254,7 @@ class ConnectState(
     }
 
     init {
+        if (services.typedMac) scope.launch { services.storage.read(OWN_MAC)?.let(ownMac::setTextAndPlaceCursorAtEnd) }
         scope.launch {
             snapshotFlow { address.text.toString() }.collect { text ->
                 val isMac = isMacAddress(text.trim())
@@ -411,6 +415,10 @@ class ConnectState(
             problem = Problem.MacTelnetUnsupported
             return
         }
+        if (access == Access.MacTelnet && services.typedMac && !isMacAddress(ownMac.text.toString().trim())) {
+            problem = Problem.OwnMac
+            return
+        }
         if (access == Access.MacTelnet && services.networkInterfaces?.invoke()?.isEmpty() == true) {
             problem = Problem.MacTelnetNoInterface
             return
@@ -459,7 +467,7 @@ class ConnectState(
                     access == Access.MacTelnet -> {
                         val connector = services.connectMacTelnet
                             ?: throw DeviceException(ErrorCategory.Unsupported, "MAC-Telnet")
-                        connector(typed, name, secret, selectedInterface.ifEmpty { null }, encoding, scope + Dispatchers.Default)
+                        connector(typed, name, secret, if (services.typedMac) ownMac.text.toString().trim() else selectedInterface.ifEmpty { null }, encoding, scope + Dispatchers.Default)
                     }
                     access == Access.Tcp8291 -> {
                         val connector = services.connectTcp8291
@@ -470,6 +478,7 @@ class ConnectState(
                     openWrt != null -> services.connectOpenWrt(OpenWrtLogin(toHost, name, secret, openWrt, toPort, chosen?.second, byAgent, sshPort, phrase), reach)
                     else -> services.connectLogin(other(access, toHost, toPort, name, secret, chosen?.second, byAgent, phrase, snmp), reach)
                 }
+                if (access == Access.MacTelnet && services.typedMac) services.storage.write(OWN_MAC, ownMac.text.toString().trim())
                 val renewed = try {
                     val new = if (session.passwordExpired) renew(session, secret) else null
                     remembered(typed, name, new ?: secret, chosen, phrase, hidden)
@@ -798,5 +807,6 @@ class ConnectState(
 
 private const val PROBE_TIMEOUT = 1_500
 private const val DEFAULT_COMMUNITY = "public"
+private const val OWN_MAC = "own-mac"
 
 private val BROWSER_SHUT = setOf(8728, 8729, 8291, 20561, 22, 161, 1900)

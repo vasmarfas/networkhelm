@@ -151,7 +151,7 @@ private fun Routers(shell: Shell, tabsInTitle: Boolean) {
             SettingsDialog(shell.settings, shell.services.browserAccess, onBrowserAccess = {
                 shell.settingsShown = false
                 shell.accessShown = true
-            }, themeEditor = shell.themeEditor) { shell.settingsShown = false }
+            }, themeEditor = shell.themeEditor, updates = shell.services.releases != null) { shell.settingsShown = false }
         }
         if (shell.toolsShown) ToolsDialog { shell.toolsShown = false }
         if (shell.accessShown) shell.services.browserAccess?.let { BrowserAccessDialog(it) { shell.accessShown = false } }

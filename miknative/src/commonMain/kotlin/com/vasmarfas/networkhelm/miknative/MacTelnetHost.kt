@@ -1,8 +1,6 @@
 package com.vasmarfas.networkhelm.miknative
 
-import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.DeviceInfo
-import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.schema.MemorySchemaCache
@@ -26,17 +24,4 @@ suspend fun connectMacTelnetHost(destination: MacAddress, user: String, password
     if (stream != null) return consoleHost(stream, user, encoding, scope, info("RouterOS (MAC)"), schemaCache, native = NativeSide { NativeObjectModel(connect()) })
     val ssh = connectMacTelnet(destination, user, password, scope, link.mac, destinationAddress = link.broadcast, terminalType = "xterm-256color")
     return consoleHost(ssh, user, encoding, scope, info("RouterOS (MAC-Telnet)"), schemaCache)
-}
-
-// Windows names its interfaces eth6 and wlan3 for Java; the description of the adapter says which is which
-fun MacBroadcastInterface.label() = "$displayName, ${address.hostAddress} (${mac.format()})"
-
-fun macTelnetInterfaces(): List<String> = listBroadcastInterfaces().map { it.label() }
-
-suspend fun connectMacTelnetOnInterface(macStr: String, user: String, pass: String, ifaceName: String?, encoding: ApiEncoding, scope: CoroutineScope, schemaCache: SchemaCache = MemorySchemaCache()): DeviceSession {
-    val ifaces = listBroadcastInterfaces()
-    val chosen = ifaces.firstOrNull { it.label() == ifaceName || it.name == ifaceName }
-        ?: ifaces.firstOrNull()
-        ?: throw DeviceException(ErrorCategory.ConnectionLost, "No broadcast network interface available")
-    return connectMacTelnetHost(MacAddress.parse(macStr), user, pass, chosen, encoding, scope, schemaCache)
 }

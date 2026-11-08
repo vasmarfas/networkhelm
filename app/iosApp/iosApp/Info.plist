@@ -6,6 +6,8 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>NetworkHelm connects to the routers on your local network to manage them.</string>
+	<key>NetworkHelmBroadcasts</key>
+	<true/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

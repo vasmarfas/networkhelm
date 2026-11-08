@@ -35,13 +35,16 @@ interface HostOps {
     // null where the address has no name or the lookup took too long
     suspend fun reverse(address: String): String? = null
 
-    // MAC addresses of the neighbours by IPv4 address; empty where the system does not let the table be read
-    suspend fun arp(): Map<String, String> = emptyMap()
+    // MAC addresses of the neighbours by IPv4 address; null where the system does not let the table be read
+    suspend fun arp(): Map<String, String>? = null
 
     suspend fun localNetworks(): List<LocalNetwork> = emptyList()
+
+    // false where the system keeps broadcasts from the app, so Wake-on-LAN would only fail
+    val broadcasts: Boolean get() = true
 }
 
-// the system ping on the desktop and Android; iOS and the browser have none
+// the system ping on the desktop and Android, an ICMP socket on iOS; the browser has none
 expect fun hostOps(): HostOps?
 
 private val ipv4Pattern = Regex("""(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})""")

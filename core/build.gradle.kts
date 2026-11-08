@@ -2,6 +2,7 @@ import groovy.json.JsonOutput
 import org.jetbrains.kotlin.gradle.ExperimentalKotlinGradlePluginApi
 import org.jetbrains.kotlin.gradle.ExperimentalWasmDsl
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import org.jetbrains.kotlin.gradle.plugin.KotlinCompilation
 import org.jetbrains.kotlin.gradle.plugin.KotlinPlatformType
 import org.jetbrains.kotlin.gradle.targets.native.tasks.KotlinNativeSimulatorTest
 import org.snakeyaml.engine.v2.api.LoadSettings
@@ -148,6 +149,12 @@ kotlin {
                 withJvm()
                 withCompilations { it.platformType == KotlinPlatformType.androidJvm }
             }
+            // QuickJS has no build for the browser, and its Android build loads only on a device
+            group("quickJs") {
+                withJvm()
+                withCompilations { it.platformType == KotlinPlatformType.androidJvm && it.name == KotlinCompilation.MAIN_COMPILATION_NAME }
+                withIos()
+            }
         }
     }
 
@@ -209,6 +216,8 @@ kotlin {
         }
         getByName("jvmAndroidMain").dependencies {
             implementation(libs.jsch)
+        }
+        getByName("quickJsMain").dependencies {
             implementation(libs.quickjsKt)
         }
         // Android runs the Java 8 classes of jsch, which need Bouncy Castle for ed25519, curve25519 and chacha20

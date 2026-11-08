@@ -55,7 +55,7 @@ private object SystemHostOps : HostOps {
         }.await()
     }
 
-    override suspend fun arp(): Map<String, String> = when {
+    override suspend fun arp(): Map<String, String>? = when {
         isWindows -> parseArp(capture(listOf("arp", "-a"), ARP_LIMIT_MILLIS))
         isMac -> parseArp(capture(listOf("arp", "-an"), ARP_LIMIT_MILLIS))
         else -> withContext(Dispatchers.IO) { procArp() }
@@ -84,11 +84,11 @@ private suspend fun capture(command: List<String>, limitMillis: Long): String = 
     output.await()
 }
 
-// Android 10 closes /proc/net to apps, and the table then reads as empty
-private fun procArp(): Map<String, String> = try {
+// Android 10 closes /proc/net to apps
+private fun procArp(): Map<String, String>? = try {
     parseArp(File("/proc/net/arp").readText())
 } catch (e: IOException) {
-    emptyMap()
+    null
 }
 
 private fun pingCommand(host: String, timeoutMillis: Int, ttl: Int?, size: Int?, dontFragment: Boolean): List<String> = buildList {

@@ -1,9 +1,7 @@
 package com.vasmarfas.networkhelm.miknative
 
 import com.vasmarfas.networkhelm.model.DeviceException
-import java.io.ByteArrayOutputStream
-import java.net.InetAddress
-import java.util.concurrent.CopyOnWriteArrayList
+import kotlin.concurrent.Volatile
 
 enum class FakeMacAuthMode {
     MTWEI,
@@ -19,15 +17,15 @@ class FakeMacServer(
     private val dropFirstSessionStart: Boolean = false,
 ) : MacTelnetTransport {
 
-    var onClientPacket: ((ByteArray, InetAddress, Int) -> Unit)? = null
+    var onClientPacket: ((ByteArray, String, Int) -> Unit)? = null
     var serverOutCounter = 0L
     var lastClientCounter = 0L
     var sessionKey = 0
     var sessionEstablished = false
     var dropSessionStartCount = if (dropFirstSessionStart) 1 else 0
 
-    val receivedPayloads = CopyOnWriteArrayList<ByteArray>()
-    val receivedTerminalStrings = CopyOnWriteArrayList<String>()
+    val receivedPayloads = mutableListOf<ByteArray>()
+    val receivedTerminalStrings = mutableListOf<String>()
     var lastTerminalWidth: Int? = null
     var lastTerminalHeight: Int? = null
     var holdAcks = false
@@ -39,11 +37,11 @@ class FakeMacServer(
     private var srpServer: EcSrp5Server? = null
     private val md5Salt = ByteArray(16) { (it + 7).toByte() }
 
-    override fun onMessage(handler: (bytes: ByteArray, source: InetAddress, port: Int) -> Unit) {
+    override fun onMessage(handler: (bytes: ByteArray, source: String, port: Int) -> Unit) {
         onClientPacket = handler
     }
 
-    override fun send(bytes: ByteArray, destination: InetAddress, port: Int) {
+    override fun send(bytes: ByteArray, destination: String, port: Int) {
         val header = try {
             decodeHeader(bytes, fromServer = false)
         } catch (e: DeviceException) {
@@ -100,13 +98,9 @@ class FakeMacServer(
                 val srp = srpServer
                 if (authMode == FakeMacAuthMode.MTWEI && srp != null) {
                     val challenge = srp.challenge(block.value)
-                    val out = ByteArrayOutputStream()
-                    out.write(encodeControlBlock(MacTelnetControlType.PASSWORD_SALT, challenge))
-                    sendServerData(out.toByteArray())
+                    sendServerData(encodeControlBlock(MacTelnetControlType.PASSWORD_SALT, challenge))
                 } else if (authMode == FakeMacAuthMode.MD5) {
-                    val out = ByteArrayOutputStream()
-                    out.write(encodeControlBlock(MacTelnetControlType.PASSWORD_SALT, md5Salt))
-                    sendServerData(out.toByteArray())
+                    sendServerData(encodeControlBlock(MacTelnetControlType.PASSWORD_SALT, md5Salt))
                 }
             }
             MacTelnetControlType.PASSWORD -> {
@@ -122,16 +116,9 @@ class FakeMacServer(
 
                 if (authOk) {
                     sessionEstablished = true
-                    val out = ByteArrayOutputStream()
-                    out.write(encodeControlBlock(MacTelnetControlType.END_AUTH))
-                    val banner = "Welcome to RouterOS\r\n[admin@Router] > ".encodeToByteArray()
-                    out.write(banner)
-                    sendServerData(out.toByteArray())
+                    sendServerData(encodeControlBlock(MacTelnetControlType.END_AUTH) + "Welcome to RouterOS\r\n[admin@Router] > ".encodeToByteArray())
                 } else {
-                    val out = ByteArrayOutputStream()
-                    out.write(encodeControlBlock(MacTelnetControlType.END_AUTH))
-                    out.write("Login failed\r\n".encodeToByteArray())
-                    sendServerData(out.toByteArray())
+                    sendServerData(encodeControlBlock(MacTelnetControlType.END_AUTH) + "Login failed\r\n".encodeToByteArray())
                     replyEnd()
                 }
             }
@@ -171,7 +158,7 @@ class FakeMacServer(
             counter = counter,
             fromServer = true,
         )
-        onClientPacket?.invoke(ack, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+        onClientPacket?.invoke(ack, "127.0.0.1", MAC_TELNET_PORT)
     }
 
     private fun sendServerData(payload: ByteArray) {
@@ -187,7 +174,7 @@ class FakeMacServer(
         val packet = ByteArray(header.size + payload.size)
         header.copyInto(packet, 0)
         payload.copyInto(packet, header.size)
-        onClientPacket?.invoke(packet, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+        onClientPacket?.invoke(packet, "127.0.0.1", MAC_TELNET_PORT)
     }
 
     private fun replyEnd() {
@@ -199,7 +186,7 @@ class FakeMacServer(
             counter = serverOutCounter,
             fromServer = true,
         )
-        onClientPacket?.invoke(end, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+        onClientPacket?.invoke(end, "127.0.0.1", MAC_TELNET_PORT)
     }
 
     override fun close() {

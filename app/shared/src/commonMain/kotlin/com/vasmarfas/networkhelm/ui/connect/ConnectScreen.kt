@@ -156,6 +156,8 @@ import networkhelm.app.shared.generated.resources.connect_community
 import networkhelm.app.shared.generated.resources.connect_open_file
 import networkhelm.app.shared.generated.resources.connect_open_file_hint
 import networkhelm.app.shared.generated.resources.connect_opnsense_key
+import networkhelm.app.shared.generated.resources.connect_own_mac
+import networkhelm.app.shared.generated.resources.connect_own_mac_hint
 import networkhelm.app.shared.generated.resources.connect_pfsense_key
 import networkhelm.app.shared.generated.resources.connect_password
 import networkhelm.app.shared.generated.resources.connect_plain_community
@@ -204,6 +206,7 @@ import networkhelm.app.shared.generated.resources.error_no_snmp3
 import networkhelm.app.shared.generated.resources.error_no_upnp
 import networkhelm.app.shared.generated.resources.error_not_config
 import networkhelm.app.shared.generated.resources.error_other
+import networkhelm.app.shared.generated.resources.error_own_mac
 import networkhelm.app.shared.generated.resources.error_port
 import networkhelm.app.shared.generated.resources.error_through_circle
 import networkhelm.app.shared.generated.resources.error_through_missing
@@ -462,6 +465,10 @@ private fun Form(
             Labeled(stringResource(Res.string.connect_interface)) {
                 Select(state.selectedInterface.ifEmpty { state.networkInterfaces.first() }, state.networkInterfaces, { it }, { state.selectedInterface = it }, field.testTag("interface"))
             }
+        }
+        if (state.protocol == Access.MacTelnet && state.typedMac) {
+            Labeled(stringResource(Res.string.connect_own_mac)) { TextField(state.ownMac, field.testTag("own-mac"), placeholder = "aa:bb:cc:dd:ee:ff", mono = true) }
+            Labeled("") { Text(stringResource(Res.string.connect_own_mac_hint), color = palette.muted, style = Theme.type.small) }
         }
         if (state.shut.isNotEmpty()) Labeled("") { Text(stringResource(if (state.standalone) Res.string.connect_browser_shut else Res.string.connect_probe_shut), color = palette.muted, style = Theme.type.small) }
         val community = state.protocol == Access.Snmp
@@ -967,6 +974,7 @@ private fun problemText(problem: Problem): String = when (problem) {
     is Problem.Browser -> stringResource(if (problem.routerOs) Res.string.error_browser_routeros else Res.string.error_browser, problem.host)
     Problem.MacTelnetUnsupported -> stringResource(Res.string.error_mac_telnet_unsupported)
     Problem.MacTelnetNoInterface -> stringResource(Res.string.error_mac_telnet_no_interface)
+    Problem.OwnMac -> stringResource(Res.string.error_own_mac)
     Problem.Tcp8291Unsupported -> stringResource(Res.string.error_tcp_8291_unsupported)
     Problem.NoRest -> stringResource(Res.string.error_no_rest)
     is Problem.Other -> stringResource(Res.string.error_other, problem.host, problem.message)

@@ -79,6 +79,7 @@ internal fun LanScanPane(ops: HostOps?, vendors: suspend () -> MacRegistry) {
     var network by remember { mutableStateOf<LocalNetwork?>(null) }
     var job by remember { mutableStateOf<Job?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var withArp by remember { mutableStateOf(false) }
     val networks by produceState(emptyList<LocalNetwork>()) {
         value = try {
             ops?.localNetworks().orEmpty()
@@ -89,8 +90,8 @@ internal fun LanScanPane(ops: HostOps?, vendors: suspend () -> MacRegistry) {
             emptyList()
         }
     }
-    val loaded by produceState<Result<MacRegistry>?>(null) {
-        if (ops == null) return@produceState
+    val loaded by produceState<Result<MacRegistry>?>(null, withArp) {
+        if (!withArp) return@produceState
         value = try {
             Result.success(vendors())
         } catch (e: CancellationException) {
@@ -120,18 +121,19 @@ internal fun LanScanPane(ops: HostOps?, vendors: suspend () -> MacRegistry) {
         total = list.size
         job = scope.launch {
             try {
+                withArp = ops?.arp() != null
                 val scan = if (ops == null) scanLan(list, null, null) else scanLan(list, { ops.ping(it, ECHO_TIMEOUT_MILLIS) }, { ops.reverse(it) })
                 scan.collect { host ->
                     done++
                     if (host != null) hosts += host
-                    if (ops != null && done % ARP_EVERY == 0) macs.putAll(ops.arp())
+                    if (withArp && done % ARP_EVERY == 0) ops?.arp()?.let(macs::putAll)
                 }
                 if (ops != null) {
                     val table = ops.arp()
-                    macs.putAll(table)
+                    table?.let(macs::putAll)
                     val seen = hosts.map { it.address }.toSet()
                     coroutineScope {
-                        for (address in table.keys) {
+                        for (address in table.orEmpty().keys) {
                             if (address in seen || Ipv4.parse(address)?.let { it in first..last } != true) continue
                             launch { hosts += LanHost(address, null, emptyList(), ops.reverse(address)) }
                         }
@@ -187,7 +189,7 @@ internal fun LanScanPane(ops: HostOps?, vendors: suspend () -> MacRegistry) {
         }
         DataTable(
             rows = hosts.sortedBy { Ipv4.parse(it.address) },
-            columns = listOf(address, name, mac, vendor, time, ports),
+            columns = if (withArp) listOf(address, name, mac, vendor, time, ports) else listOf(address, name, time, ports),
             key = { it.address },
             detail = LocalCompact.current,
             modifier = Modifier.fillMaxWidth().height(TableHeight).testTag("lan-hosts"),

@@ -7,7 +7,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.net.InetAddress
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -42,7 +41,7 @@ class MacTelnetShellsTest {
             scope = this,
             sourceMac = clientMac,
             transport = first,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = timeoutMillis,
             transports = { queue.removeFirst() },
         )
@@ -132,7 +131,7 @@ class MacTelnetShellsTest {
             scope = this,
             sourceMac = clientMac,
             transport = router,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
             keepAliveMillis = 50L,
         )
@@ -159,9 +158,9 @@ class MacTelnetShellsTest {
     @Test
     fun aSecondLoginThatNobodyAnswersIsALostConnection() = runBlocking {
         val silent = object : MacTelnetTransport {
-            override fun send(bytes: ByteArray, destination: InetAddress, port: Int) = Unit
+            override fun send(bytes: ByteArray, destination: String, port: Int) = Unit
 
-            override fun onMessage(handler: (bytes: ByteArray, source: InetAddress, port: Int) -> Unit) = Unit
+            override fun onMessage(handler: (bytes: ByteArray, source: String, port: Int) -> Unit) = Unit
 
             override fun close() = Unit
         }
@@ -172,7 +171,7 @@ class MacTelnetShellsTest {
             scope = this,
             sourceMac = clientMac,
             transport = router(),
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 300L,
             transports = { silent },
         )

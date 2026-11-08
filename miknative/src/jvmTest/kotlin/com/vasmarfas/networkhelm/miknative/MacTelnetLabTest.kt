@@ -28,7 +28,7 @@ class MacTelnetLabTest {
         val from = System.getProperty("networkhelm.macFrom").orEmpty()
         assumeTrue("-PmacTarget and -PmacFrom do not name the link", target.isNotEmpty() && from.isNotEmpty())
         val links = listBroadcastInterfaces()
-        val link = checkNotNull(links.firstOrNull { it.address.hostAddress == from }) { "no interface has the address $from, there are ${links.map { "${it.name} ${it.address.hostAddress} ${it.broadcast.hostAddress} ${it.mac}" }}" }
+        val link = checkNotNull(links.firstOrNull { it.address == from }) { "no interface has the address $from, there are ${links.map { "${it.name} ${it.address} ${it.broadcast} ${it.mac}" }}" }
         withTimeout(60.seconds) {
             val ssh = connectMacTelnet(MacAddress.parse(target), lab.getValue("chr.user"), lab.getValue("chr.password"), this, link.mac, destinationAddress = link.broadcast)
             try {

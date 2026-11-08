@@ -106,7 +106,8 @@ fun ToolsDialog(vendors: suspend () -> MacRegistry = ::bundledVendors, onClose: 
     val tools = NetTool.entries.filter {
         when (it) {
             NetTool.Ping, NetTool.LanScan -> ops != null || tcpListening
-            NetTool.Traceroute, NetTool.Wake -> ops != null
+            NetTool.Traceroute -> ops != null
+            NetTool.Wake -> ops?.broadcasts == true
             NetTool.Ports, NetTool.Dns -> tcpListening
             NetTool.Whois -> http != null || tcpListening
             NetTool.IpInfo, NetTool.Speed -> http != null

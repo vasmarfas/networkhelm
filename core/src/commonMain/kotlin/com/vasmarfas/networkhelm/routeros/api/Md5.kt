@@ -1,6 +1,6 @@
 package com.vasmarfas.networkhelm.routeros.api
 
-internal fun md5(message: ByteArray): ByteArray {
+fun md5(message: ByteArray): ByteArray {
     val padded = ByteArray(((message.size + 8) / 64 + 1) * 64)
     message.copyInto(padded)
     padded[message.size] = 0x80.toByte()

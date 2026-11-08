@@ -2,13 +2,12 @@ package com.vasmarfas.networkhelm.miknative
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.routeros.LoginTimeoutException
 import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import java.io.ByteArrayOutputStream
-import java.net.InetAddress
-import java.net.SocketTimeoutException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -36,7 +35,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -85,7 +84,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -121,7 +120,7 @@ class MacTelnetSessionTest {
                 scope = this,
                 sourceMac = testClientMac,
                 transport = server,
-                destinationAddress = InetAddress.getByName("127.0.0.1"),
+                destinationAddress = "127.0.0.1",
                 timeoutMillis = 5_000L,
             )
         }
@@ -145,7 +144,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -179,7 +178,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -196,14 +195,14 @@ class MacTelnetSessionTest {
     }
 
     @Test
-    fun connectionTimeoutClosesSessionAndFailsWithSocketTimeout() = runBlocking {
+    fun connectionTimeoutClosesSessionAndFailsWithLoginTimeout() = runBlocking {
         val silentTransport = object : MacTelnetTransport {
-            override fun send(bytes: ByteArray, destination: InetAddress, port: Int) {}
-            override fun onMessage(handler: (bytes: ByteArray, source: InetAddress, port: Int) -> Unit) {}
+            override fun send(bytes: ByteArray, destination: String, port: Int) {}
+            override fun onMessage(handler: (bytes: ByteArray, source: String, port: Int) -> Unit) {}
             override fun close() {}
         }
 
-        assertFailsWith<SocketTimeoutException> {
+        assertFailsWith<LoginTimeoutException> {
             connectMacTelnet(
                 destinationMac = testServerMac,
                 user = "admin",
@@ -211,7 +210,7 @@ class MacTelnetSessionTest {
                 scope = this,
                 sourceMac = testClientMac,
                 transport = silentTransport,
-                destinationAddress = InetAddress.getByName("127.0.0.1"),
+                destinationAddress = "127.0.0.1",
                 timeoutMillis = 50L,
             )
         }
@@ -221,11 +220,11 @@ class MacTelnetSessionTest {
     @Test
     fun serverEndBeforeReadyFailsImmediately() = runBlocking {
         val rejectingTransport = object : MacTelnetTransport {
-            private var onMsg: ((ByteArray, InetAddress, Int) -> Unit)? = null
-            override fun onMessage(handler: (bytes: ByteArray, source: InetAddress, port: Int) -> Unit) {
+            private var onMsg: ((ByteArray, String, Int) -> Unit)? = null
+            override fun onMessage(handler: (bytes: ByteArray, source: String, port: Int) -> Unit) {
                 onMsg = handler
             }
-            override fun send(bytes: ByteArray, destination: InetAddress, port: Int) {
+            override fun send(bytes: ByteArray, destination: String, port: Int) {
                 val header = decodeHeader(bytes, fromServer = false)
                 if (header.type == MacTelnetPacketType.SESSION_START) {
                     val end = encodeHeader(
@@ -236,7 +235,7 @@ class MacTelnetSessionTest {
                         counter = 0,
                         fromServer = true,
                     )
-                    onMsg?.invoke(end, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+                    onMsg?.invoke(end, "127.0.0.1", MAC_TELNET_PORT)
                 }
             }
             override fun close() {}
@@ -251,7 +250,7 @@ class MacTelnetSessionTest {
                 scope = this,
                 sourceMac = testClientMac,
                 transport = rejectingTransport,
-                destinationAddress = InetAddress.getByName("127.0.0.1"),
+                destinationAddress = "127.0.0.1",
                 timeoutMillis = 10_000L,
             )
         }
@@ -276,7 +275,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -314,7 +313,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -327,7 +326,7 @@ class MacTelnetSessionTest {
                 counter = 0,
                 fromServer = true,
             )
-            server.onClientPacket?.invoke(wrongKeyPacket, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+            server.onClientPacket?.invoke(wrongKeyPacket, "127.0.0.1", MAC_TELNET_PORT)
 
             val wrongMacPacket = encodeHeader(
                 type = MacTelnetPacketType.ACK,
@@ -337,7 +336,7 @@ class MacTelnetSessionTest {
                 counter = 0,
                 fromServer = true,
             )
-            server.onClientPacket?.invoke(wrongMacPacket, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+            server.onClientPacket?.invoke(wrongMacPacket, "127.0.0.1", MAC_TELNET_PORT)
 
             val shell = ssh.shell("vt102", 80, 24)
             val buf = ByteArray(1024)
@@ -374,7 +373,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -393,7 +392,7 @@ class MacTelnetSessionTest {
                 fromServer = true,
             )
             val gapPacket = gapHeader + gapPayload
-            server.onClientPacket?.invoke(gapPacket, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+            server.onClientPacket?.invoke(gapPacket, "127.0.0.1", MAC_TELNET_PORT)
 
             val validPayload = "VALID_DATA".encodeToByteArray()
             val validHeader = encodeHeader(
@@ -405,7 +404,7 @@ class MacTelnetSessionTest {
                 fromServer = true,
             )
             val validPacket = validHeader + validPayload
-            server.onClientPacket?.invoke(validPacket, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+            server.onClientPacket?.invoke(validPacket, "127.0.0.1", MAC_TELNET_PORT)
 
             val readCount = withTimeout(2_000L) {
                 shell.read(buf, 0, buf.size)
@@ -435,7 +434,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -454,7 +453,7 @@ class MacTelnetSessionTest {
                 counter = server.serverOutCounter,
                 fromServer = true,
             )
-            server.onClientPacket?.invoke(endPacket, InetAddress.getByName("127.0.0.1"), MAC_TELNET_PORT)
+            server.onClientPacket?.invoke(endPacket, "127.0.0.1", MAC_TELNET_PORT)
 
             val readCount = shell.read(buf, 0, buf.size)
             assertTrue(readCount > 0)
@@ -484,7 +483,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 
@@ -522,7 +521,7 @@ class MacTelnetSessionTest {
             scope = this,
             sourceMac = testClientMac,
             transport = server,
-            destinationAddress = InetAddress.getByName("127.0.0.1"),
+            destinationAddress = "127.0.0.1",
             timeoutMillis = 5_000L,
         )
 

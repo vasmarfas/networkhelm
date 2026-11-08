@@ -1,8 +1,13 @@
 package com.vasmarfas.networkhelm.app
 
+import com.vasmarfas.networkhelm.discovery.mndpSightings
+import com.vasmarfas.networkhelm.discovery.requestMndpRefresh
 import com.vasmarfas.networkhelm.miknative.WinBoxAddressBook
+import com.vasmarfas.networkhelm.miknative.connectMacTelnetFrom
 import com.vasmarfas.networkhelm.miknative.connectNativeHost
 import com.vasmarfas.networkhelm.miknative.nativeSide
+import com.vasmarfas.networkhelm.nettools.hostOps
+import com.vasmarfas.networkhelm.openwrt.QuickJsForms
 import com.vasmarfas.networkhelm.session.connectOpenWrtWithSsh
 import com.vasmarfas.networkhelm.session.connectWithSsh
 import com.vasmarfas.networkhelm.transport.TrustKind
@@ -10,17 +15,28 @@ import com.vasmarfas.networkhelm.transport.TrustStore
 import eu.anifantakis.lib.ksafe.KSafe
 import platform.Foundation.NSUserDefaults
 
-// no MNDP: it needs the multicast entitlement, which Apple grants on request
-fun iosServices(): Services = Services(
-    DefaultsStorage(),
-    DefaultsTrustStore(),
-    neighbors = null,
-    secrets = KSafeSecrets(KSafe(fileName = "routers")),
-    connectOpenWrt = { login, trust -> connectOpenWrtWithSsh(login, trust, forms = null) },
-    connect = { login, trust, scope -> connectWithSsh(login, trust, scope, native = login.nativeSide(scope)) },
-    connectTcp8291 = ::connectNativeHost,
-    readWinBoxBook = WinBoxAddressBook::read,
-)
+// the neighbours and MAC-Telnet go by broadcasts, which a device sends and hears only with the multicast entitlement
+// of Apple; until Info.plist says the app has it, they stay hidden
+fun iosServices(): Services {
+    val broadcasts = hostOps()?.broadcasts == true
+    return Services(
+        DefaultsStorage(),
+        DefaultsTrustStore(),
+        neighbors = if (broadcasts) mndpSightings() else null,
+        secrets = KSafeSecrets(KSafe(fileName = "routers")),
+        refreshNeighbors = if (broadcasts) ::requestMndpRefresh else null,
+        connectOpenWrt = { login, trust -> connectOpenWrtWithSsh(login, trust, ::QuickJsForms) },
+        connectMacTelnet = if (broadcasts) {
+            { mac, user, pass, own, encoding, scope -> connectMacTelnetFrom(mac, own.orEmpty(), user, pass, encoding, scope) }
+        } else {
+            null
+        },
+        typedMac = broadcasts,
+        connect = { login, trust, scope -> connectWithSsh(login, trust, scope, native = login.nativeSide(scope)) },
+        connectTcp8291 = ::connectNativeHost,
+        readWinBoxBook = WinBoxAddressBook::read,
+    )
+}
 
 private class DefaultsStorage : Storage {
     private val defaults = NSUserDefaults.standardUserDefaults

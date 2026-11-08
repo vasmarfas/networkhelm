@@ -83,6 +83,7 @@ import networkhelm.app.shared.generated.resources.settings_hide_passwords
 import networkhelm.app.shared.generated.resources.settings_hide_passwords_hint
 import networkhelm.app.shared.generated.resources.settings_import
 import networkhelm.app.shared.generated.resources.settings_language
+import networkhelm.app.shared.generated.resources.settings_language_system
 import networkhelm.app.shared.generated.resources.settings_lines
 import networkhelm.app.shared.generated.resources.settings_look
 import networkhelm.app.shared.generated.resources.settings_look_dark
@@ -115,6 +116,7 @@ fun SettingsDialog(
     access: BrowserAccess? = null,
     onBrowserAccess: () -> Unit = {},
     themeEditor: MutableState<ThemeFile?> = remember { mutableStateOf(null) },
+    updates: Boolean = true,
     onClose: () -> Unit,
 ) {
     val palette = Theme.palette
@@ -144,11 +146,13 @@ fun SettingsDialog(
                 IconButton(Lucide.X, stringResource(Res.string.settings_close), onClose, Modifier.testTag("settings-cross"))
             }
             ScrollArea(Modifier.weight(1f, fill = false), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                if (canSetLanguage) {
-                    Labeled(stringResource(Res.string.settings_language)) {
+                Labeled(stringResource(Res.string.settings_language)) {
+                    if (canSetLanguage) {
                         Select(current.language, listOf(null) + Languages.keys, { tag -> tag?.let(Languages::getValue) ?: stringResource(Res.string.settings_look_system) }, { picked ->
                             act { settings.change { it.copy(language = picked) } }
                         }, Modifier.width(240.dp).testTag("language"))
+                    } else {
+                        Text(stringResource(Res.string.settings_language_system), color = palette.muted, style = Theme.type.small)
                     }
                 }
                 Labeled(stringResource(Res.string.settings_theme)) {
@@ -236,8 +240,10 @@ fun SettingsDialog(
                 Toggle(current.probe, stringResource(Res.string.settings_probe), stringResource(Res.string.settings_probe_hint), "probe") { on ->
                     act { settings.change { it.copy(probe = on) } }
                 }
-                Toggle(current.checkUpdates, stringResource(Res.string.settings_check_updates), stringResource(Res.string.settings_check_updates_hint), "check-updates") { on ->
-                    act { settings.change { it.copy(checkUpdates = on) } }
+                if (updates) {
+                    Toggle(current.checkUpdates, stringResource(Res.string.settings_check_updates), stringResource(Res.string.settings_check_updates_hint), "check-updates") { on ->
+                        act { settings.change { it.copy(checkUpdates = on) } }
+                    }
                 }
                 if (access != null) {
                     Labeled("") {

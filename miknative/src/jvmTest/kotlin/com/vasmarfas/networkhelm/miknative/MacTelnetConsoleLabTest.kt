@@ -36,7 +36,7 @@ class MacTelnetConsoleLabTest {
         val from = System.getProperty("networkhelm.macFrom").orEmpty()
         assumeTrue("-PmacTarget and -PmacFrom do not name the link", target.isNotEmpty() && from.isNotEmpty())
         val links = listBroadcastInterfaces()
-        val chosen = checkNotNull(links.firstOrNull { it.address.hostAddress == from }) { "no interface has the address $from, there are ${links.map { it.address.hostAddress }}" }
+        val chosen = checkNotNull(links.firstOrNull { it.address == from }) { "no interface has the address $from, there are ${links.map { it.address }}" }
         return Triple(lab, MacAddress.parse(target), chosen)
     }
 

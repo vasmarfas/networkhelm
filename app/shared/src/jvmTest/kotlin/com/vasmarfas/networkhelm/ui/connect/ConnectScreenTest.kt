@@ -93,6 +93,7 @@ import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -887,6 +888,34 @@ class ConnectScreenTest {
         onNodeWithText("Connect").performClick()
         waitUntil { onAllNodes(hasText("No network interface", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         assertFalse(called)
+    }
+
+    @Test
+    fun aSystemThatHidesItsMacAsksForItAndKeepsIt() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        var link: String? = null
+        val services = Services(
+            MemoryStorage(),
+            MemoryTrustStore(),
+            null,
+            connectMacTelnet = { _, _, _, own, _, _ ->
+                link = own
+                router
+            },
+            typedMac = true,
+        )
+        var opened = false
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> opened = true } } }
+        onNodeWithTag("address").performTextInput("48:8F:5A:11:22:33")
+        waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Connect").performClick()
+        waitUntil { onAllNodes(hasText("Type the MAC address of this device", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        assertNull(link)
+        onNodeWithTag("own-mac").performTextInput("A6:1F:00:12:34:56")
+        onNodeWithText("Connect").performClick()
+        waitUntil { opened }
+        assertEquals("A6:1F:00:12:34:56", link)
+        assertEquals("A6:1F:00:12:34:56", runBlocking { services.storage.read("own-mac") })
     }
 
     @Test

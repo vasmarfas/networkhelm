@@ -8,7 +8,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
-import java.net.InetAddress
 import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -26,8 +25,8 @@ private class MacBridge(
 ) : MacTelnetTransport {
     private val routerMac = MacAddress.parse("66:77:88:99:aa:bb")
     private val clientMac = MacAddress.parse("00:11:22:33:44:55")
-    private val loopback = InetAddress.getByName("127.0.0.1")
-    private var deliver: ((ByteArray, InetAddress, Int) -> Unit)? = null
+    private val loopback = "127.0.0.1"
+    private var deliver: ((ByteArray, String, Int) -> Unit)? = null
     private var key = 0
     private var taken = 0L
     private var sent = 0L
@@ -49,11 +48,11 @@ private class MacBridge(
         }
     }
 
-    override fun onMessage(handler: (bytes: ByteArray, source: InetAddress, port: Int) -> Unit) {
+    override fun onMessage(handler: (bytes: ByteArray, source: String, port: Int) -> Unit) {
         deliver = handler
     }
 
-    override fun send(bytes: ByteArray, destination: InetAddress, port: Int) {
+    override fun send(bytes: ByteArray, destination: String, port: Int) {
         seen += bytes
         val header = decodeHeader(bytes, fromServer = false)
         key = header.sessionKey
@@ -91,7 +90,7 @@ private class MacBridge(
 class MacNativeSessionTest {
     private val routerMac = MacAddress.parse("66:77:88:99:aa:bb")
     private val clientMac = MacAddress.parse("00:11:22:33:44:55")
-    private val loopback = InetAddress.getByName("127.0.0.1")
+    private val loopback = "127.0.0.1"
 
     private fun CoroutineScope.open(bridge: MacBridge): MacTelnetSession {
         val session = MacTelnetSession(bridge, clientMac, routerMac, "admin", "secret", native = true, destinationAddress = loopback, scope = this)
@@ -203,8 +202,8 @@ class MacNativeSessionTest {
     @Test
     fun aRouterThatDoesNotAnswerTheStartFails() = runBlocking {
         val silent = object : MacTelnetTransport {
-            override fun send(bytes: ByteArray, destination: InetAddress, port: Int) {}
-            override fun onMessage(handler: (bytes: ByteArray, source: InetAddress, port: Int) -> Unit) {}
+            override fun send(bytes: ByteArray, destination: String, port: Int) {}
+            override fun onMessage(handler: (bytes: ByteArray, source: String, port: Int) -> Unit) {}
             override fun close() {}
         }
         val error = assertFailsWith<DeviceException> {

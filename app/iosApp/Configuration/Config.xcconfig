@@ -1,7 +1,11 @@
 TEAM_ID=
 
 PRODUCT_NAME=NetworkHelm
-PRODUCT_BUNDLE_IDENTIFIER=com.vasmarfas.networkhelm.NetworkHelm$(TEAM_ID)
+PRODUCT_BUNDLE_IDENTIFIER=com.vasmarfas.networkhelm
 
-CURRENT_PROJECT_VERSION=1000002
+CURRENT_PROJECT_VERSION=1000099
 MARKETING_VERSION=1.0.0
+
+// TEAM_ID stays empty here: CI passes DEVELOPMENT_TEAM to xcodebuild from a secret,
+// and a local signing team goes into Local.xcconfig, which git does not track
+#include? "Local.xcconfig"
