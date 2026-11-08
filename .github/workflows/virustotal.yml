@@ -14,7 +14,7 @@ on:
         required: true
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   scan:
@@ -41,4 +41,18 @@ jobs:
           TAG: ${{ inputs.tag }}
         run: |
           set -eu
-          { printf '## VirusTotal %s\n\n' "$TAG"; python3 tools/release/virustotal.py files; } | tee -a "$GITHUB_STEP_SUMMARY"
+          python3 tools/release/virustotal.py files > verdicts.md
+          { printf '## VirusTotal %s\n\n' "$TAG"; cat verdicts.md; } | tee -a "$GITHUB_STEP_SUMMARY"
+
+      # the scan takes up to hours, so the body is read only now; a body from before the markers gets the table at its end
+      - name: Add the verdicts to the release
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -eu
+          grep -q '<!-- /virustotal -->' verdicts.md
+          gh release view "$TAG" --json body --jq .body > body.md
+          BLOCK=$(cat verdicts.md) perl -0pi -e 's/<!-- virustotal -->.*?<!-- \/virustotal -->/$ENV{BLOCK}/s or $_ .= "\n\n$ENV{BLOCK}\n"' body.md
+          gh release edit "$TAG" --notes-file body.md

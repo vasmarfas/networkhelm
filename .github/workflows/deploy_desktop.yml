@@ -242,12 +242,15 @@ jobs:
           }
           Remove-Item $pfx -Force
 
-      # Microsoft signs the package for the Store itself; the self-signed certificate beside it only lets it be installed by hand
+      # Microsoft signs the package for the Store itself; the self-signed certificate beside it only lets it be installed by hand.
+      # The x64 and arm64 packages go into one submission, and the Store gives each device the package of its architecture
       - name: Package MSIX
-        if: matrix.name == 'x64'
+        if: matrix.name != 'legacy'
         shell: pwsh
         env:
           VERSION: ${{ steps.version.outputs.name }}
+          ARCH: ${{ matrix.name }}
+          FLAVOR: ${{ matrix.flavor }}
         run: |
           $PSNativeCommandUseErrorActionPreference = $true
           $kit = Get-ChildItem 'C:\Program Files (x86)\Windows Kits\10\bin\*\x64\makeappx.exe' |
@@ -257,6 +260,7 @@ jobs:
           $manifest = Join-Path $root 'AppxManifest.xml'
           $xml = [xml](Get-Content $manifest -Raw)
           $xml.Package.Identity.Version = ($env:VERSION -replace '-.*', '') + '.0'
+          $xml.Package.Identity.ProcessorArchitecture = $env:ARCH
           $xml.Save($manifest)
           # the default config splits resources.pri per scale for bundles, a single package needs one file
           $config = Join-Path $env:RUNNER_TEMP 'priconfig.xml'
@@ -266,12 +270,12 @@ jobs:
           $pri.Save($config)
           & "$kit\makepri.exe" new /pr $root /cf $config /mn $manifest /of (Join-Path $root 'resources.pri') /o
           Copy-Item app/desktopApp/build/compose/binaries/main/app/NetworkHelm/* $root -Recurse
-          $package = "out/NetworkHelm-$env:VERSION-windows.msix"
+          $package = "out/NetworkHelm-$env:VERSION-windows$env:FLAVOR.msix"
           & "$kit\makeappx.exe" pack /d $root /p $package /o
           $cert = New-SelfSignedCertificate -Type Custom -Subject $xml.Package.Identity.Publisher -KeyUsage DigitalSignature `
             -CertStoreLocation Cert:\CurrentUser\My -TextExtension @('2.5.29.37={text}1.3.6.1.5.5.7.3.3', '2.5.29.19={text}')
           & "$kit\signtool.exe" sign /fd SHA256 /sha1 $cert.Thumbprint $package
-          Export-Certificate -Cert $cert -FilePath "out/NetworkHelm-$env:VERSION-windows.cer" | Out-Null
+          Export-Certificate -Cert $cert -FilePath "out/NetworkHelm-$env:VERSION-windows$env:FLAVOR.cer" | Out-Null
 
       - name: Upload
         uses: actions/upload-artifact@v7

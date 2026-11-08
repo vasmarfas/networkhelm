@@ -71,4 +71,6 @@ if image:
 if unproven:
     blocks.append("\\* Experimental: built on its own runner and not yet run on that hardware. / "
                   "Экспериментально: собрано на отдельном раннере, на этом железе пока не запускалось.")
+# the place for the verdicts of virustotal.py, which runs once the release is public
+blocks.append("<!-- virustotal -->\n<!-- /virustotal -->")
 sys.stdout.buffer.write(("\n\n".join(blocks) + "\n").encode("utf-8"))

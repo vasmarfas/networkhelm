@@ -1,9 +1,9 @@
-"""Scans the files of a folder on VirusTotal and prints a table of the verdicts.
+"""Scans the files of a folder on VirusTotal and prints a collapsed table of the verdicts.
 
 A file whose hash VirusTotal already knows is not uploaded again. The free key allows four requests a minute and 32 MB
 a file; bigger files go to an upload address of their own, up to 650 MB. The verdicts only inform: the script ends with 0
 whatever the engines say, because an unsigned installer is flagged by a few of them now and then and the release is
-already public by the time this runs.
+already public by the time this runs. The table comes between the markers that downloads.py leaves in the release body.
 
 Usage: VT_API_KEY=KEY python tools/release/virustotal.py FOLDER
 """
@@ -85,20 +85,28 @@ def verdict(stats):
     if not stats:
         return "no answer in time"
     total = sum(stats.get(name, 0) for name in ("malicious", "suspicious", "undetected", "harmless"))
-    return f"{stats.get('malicious', 0)} malicious, {stats.get('suspicious', 0)} suspicious of {total}"
+    text = f"{stats.get('malicious', 0)}/{total}"
+    return text + f", {stats['suspicious']} suspicious" if stats.get("suspicious") else text
 
 
 if not key:
     print("VT_API_KEY is not set, nothing was scanned")
     sys.exit(0)
 
-rows = ["| File | Verdict | Report |", "|---|---|---|"]
+rows = ["| File | Detections | Report |", "|---|---|---|"]
+flagged = 0
 for path in sorted(p for p in Path(sys.argv[1]).iterdir() if p.is_file()):
     digest = sha256(path)
     try:
-        text = verdict(scan(path, digest))
+        stats = scan(path, digest)
+        text = verdict(stats)
+        flagged += bool(stats and (stats.get("malicious") or stats.get("suspicious")))
     except (urllib.error.URLError, RuntimeError, TimeoutError) as error:
         text = f"error: {error}"
     print(f"{path.name}: {text}", file=sys.stderr, flush=True)
     rows.append(f"| {path.name} | {text} | [{digest[:12]}](https://www.virustotal.com/gui/file/{digest}) |")
-print("\n".join(rows))
+
+count = len(rows) - 2
+summary = f"🛡️ VirusTotal: {flagged} of {count} files flagged / помечено файлов: {flagged} из {count}"
+block = "\n".join(["<!-- virustotal -->", "<details>", f"<summary>{summary}</summary>", "", *rows, "", "</details>", "<!-- /virustotal -->"])
+sys.stdout.buffer.write((block + "\n").encode("utf-8"))
