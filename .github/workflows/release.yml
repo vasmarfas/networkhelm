@@ -8,13 +8,13 @@ on:
         description: 'Version (e.g. 1.1.0, 1.2.0-rc1; a hyphen makes a prerelease)'
         required: true
       notes_en:
-        description: 'What''s new in English: Google Play, GitHub. \n is a line break, Google Play takes up to 500 characters'
+        description: 'What''s new in English: Google Play, App Store, Mac App Store, GitHub. \n is a line break, Google Play takes up to 500 characters'
         required: true
       notes_ru:
-        description: 'Что нового по-русски: Google Play, RuStore, GitHub. \n — перенос строки, Google Play берёт до 500 знаков'
+        description: 'Что нового по-русски: Google Play, RuStore, App Store, Mac App Store, GitHub. \n — перенос строки, Google Play берёт до 500 знаков'
         required: true
       github_only:
-        description: 'GitHub only: no Google Play and no RuStore, the files go to the GitHub release alone'
+        description: 'GitHub only: nothing goes to the stores, the files go to the GitHub release alone'
         type: boolean
         default: true
       submit_for_review:
@@ -22,7 +22,7 @@ on:
         type: boolean
         default: true
       release_after_review:
-        description: 'Publish on RuStore as soon as review passes (Google Play follows its managed publishing setting)'
+        description: 'Publish as soon as review passes: App Store, Mac App Store, RuStore (Google Play follows its managed publishing setting)'
         type: boolean
         default: true
       play_track:
@@ -38,6 +38,14 @@ on:
         description: 'RuStore'
         type: boolean
         default: true
+      publish_app_store:
+        description: 'App Store (iOS)'
+        type: boolean
+        default: true
+      publish_mac_app_store:
+        description: 'Mac App Store'
+        type: boolean
+        default: true
       push_gateway_image:
         description: 'Push the gateway image to ghcr.io'
         type: boolean
@@ -47,7 +55,7 @@ on:
         type: boolean
         default: false
       version_code:
-        description: 'Android versionCode (empty = from the version, 1.4.12 is 1041299, 1.4.12-rc2 is 1041202)'
+        description: 'Android versionCode and Apple build number (empty = from the version, 1.4.12 is 1041299, 1.4.12-rc2 is 1041202)'
         required: false
         default: ''
 
@@ -164,7 +172,54 @@ jobs:
     with:
       version_name: ${{ needs.meta.outputs.version_name }}
       version_code: ${{ needs.meta.outputs.version_code }}
+      publish_mac_app_store: ${{ inputs.publish_mac_app_store && !inputs.github_only }}
     secrets: inherit
+
+  # the IPA goes nowhere but App Store Connect, so the job runs only for an upload
+  ios:
+    name: iOS
+    needs: meta
+    if: ${{ inputs.publish_app_store && !inputs.github_only }}
+    uses: ./.github/workflows/deploy_ios.yml
+    with:
+      version_name: ${{ needs.meta.outputs.version_name }}
+      version_code: ${{ needs.meta.outputs.version_code }}
+      upload_app_store: true
+    secrets: inherit
+
+  # the uploads only add builds to App Store Connect, the version, its notes and the review request are made here
+  app_store:
+    name: App Store Connect
+    needs: [meta, desktop, ios]
+    if: ${{ !cancelled() && (needs.ios.outputs.uploaded == 'true' || needs.desktop.outputs.mac_app_store_uploaded == 'true') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/release
+
+      - name: Install PyJWT
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet 'pyjwt[crypto]'
+
+      - name: Prepare the versions
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          BUNDLE_ID: com.vasmarfas.networkhelm
+          PLATFORMS: ${{ needs.ios.outputs.uploaded == 'true' && 'IOS' || '' }} ${{ needs.desktop.outputs.mac_app_store_uploaded == 'true' && 'MAC_OS' || '' }}
+          VERSION_NAME: ${{ needs.meta.outputs.version_name }}
+          BUILD_NUMBER: ${{ needs.meta.outputs.version_code }}
+          RELEASE_TYPE: ${{ inputs.release_after_review && 'AFTER_APPROVAL' || 'MANUAL' }}
+          SUBMIT: ${{ inputs.submit_for_review }}
+          RAW_NOTES_EN: ${{ inputs.notes_en }}
+          RAW_NOTES_RU: ${{ inputs.notes_ru }}
+        run: |
+          NOTES_EN=$(printf '%b' "$RAW_NOTES_EN") NOTES_RU=$(printf '%b' "$RAW_NOTES_RU") \
+            "$RUNNER_TEMP/venv/bin/python" tools/release/app_store_review.py
 
   gateway:
     name: Gateway
@@ -186,7 +241,7 @@ jobs:
 
   github_release:
     name: GitHub release
-    needs: [meta, android, desktop, gateway, web]
+    needs: [meta, android, desktop, ios, gateway, web]
     if: ${{ !cancelled() && needs.meta.result == 'success' }}
     runs-on: ubuntu-latest
     steps:
@@ -228,7 +283,7 @@ jobs:
           draft: ${{ inputs.draft || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
           prerelease: ${{ contains(needs.meta.outputs.version_name, '-') }}
           fail_on_unmatched_files: false
-          # the AAB stays in the run artifacts, it is for Google Play
+          # the AAB and the MSIX with its .cer stay in the run artifacts, they are for Google Play and the Microsoft Store
           files: |
             artifacts/*.apk
             artifacts/*.exe
@@ -243,7 +298,7 @@ jobs:
 
   announce:
     name: Announce
-    needs: [meta, android, desktop, gateway, web, github_release]
+    needs: [meta, android, desktop, ios, gateway, web, github_release]
     if: ${{ !cancelled() && needs.github_release.result == 'success' && !inputs.draft && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     uses: ./.github/workflows/announce.yml
     with:
@@ -254,7 +309,7 @@ jobs:
   # the scan only reports and runs once the release is public, so nothing waits for it; a drafted release is not scanned
   virustotal:
     name: VirusTotal
-    needs: [meta, android, desktop, gateway, web, github_release]
+    needs: [meta, android, desktop, ios, gateway, web, github_release]
     if: ${{ !cancelled() && needs.github_release.result == 'success' && !inputs.draft && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
     uses: ./.github/workflows/virustotal.yml
     with:

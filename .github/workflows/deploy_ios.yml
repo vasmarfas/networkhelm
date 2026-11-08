@@ -1,0 +1,251 @@
+name: Deploy iOS
+run-name: Deploy iOS ${{ inputs.version_name }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'App versionName (e.g. 1.0.0)'
+        required: true
+      version_code:
+        description: 'CURRENT_PROJECT_VERSION (empty = from the version, 1.4.12 is 1041299, 1.4.12-rc2 is 1041202)'
+        required: false
+        default: ''
+      upload_app_store:
+        description: 'Upload the IPA to App Store Connect (TestFlight)'
+        type: boolean
+        default: false
+  workflow_call:
+    inputs:
+      version_name:
+        type: string
+        required: false
+        default: ''
+      version_code:
+        type: string
+        required: false
+        default: ''
+      upload_app_store:
+        type: boolean
+        required: false
+        default: false
+    outputs:
+      uploaded:
+        description: 'The IPA reached App Store Connect'
+        value: ${{ jobs.build.outputs.uploaded }}
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-ios-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  BUNDLE_ID: com.vasmarfas.networkhelm
+
+jobs:
+  build:
+    name: Build and upload IPA
+    runs-on: macos-latest
+    outputs:
+      uploaded: ${{ steps.upload.outputs.uploaded }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Resolve version
+        id: version
+        env:
+          INPUT_VERSION: ${{ inputs.version_name }}
+          INPUT_CODE: ${{ inputs.version_code }}
+        run: |
+          set -eu
+          name="$INPUT_VERSION"
+          if [ -z "$name" ]; then
+            case "$GITHUB_REF" in
+              refs/tags/v*) name="${GITHUB_REF#refs/tags/v}" ;;
+              *) echo "::error::the version is not given"; exit 1 ;;
+            esac
+          fi
+          derived=$(printf '%s' "$name" | awk '{
+            split($0, part, "-")
+            split(part[1], v, ".")
+            stage = 99
+            if (index($0, "-")) { stage = 0; if (match($0, /[0-9]+$/)) stage = substr($0, RSTART) }
+            print ((v[1] * 100 + v[2]) * 100 + v[3]) * 100 + stage
+          }')
+          {
+            echo "name=$name"
+            echo "marketing=${name%%-*}"
+            echo "code=${INPUT_CODE:-$derived}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check prerequisites
+        id: guard
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+          IOS_PROVISIONING_PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          set -eu
+          if [ -z "${IOS_P12_BASE64:-}" ] || [ -z "${IOS_PROVISIONING_PROFILE_BASE64:-}" ] ||
+             [ -z "${IOS_PROVISIONING_PROFILE_NAME:-}" ] || [ -z "${APPLE_TEAM_ID:-}" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::IOS_P12_BASE64 / IOS_PROVISIONING_PROFILE_BASE64 / IOS_PROVISIONING_PROFILE_NAME / APPLE_TEAM_ID are not set, skipping the iOS build"
+            echo 'iOS: skipped, signing secrets are not set.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "ready=true" >> "$GITHUB_OUTPUT"
+
+      - name: Install certificate and provisioning profile
+        if: steps.guard.outputs.ready == 'true'
+        id: certificate
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -eu
+          umask 077
+          keychain="$RUNNER_TEMP/app-signing.keychain-db"
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          printf '%s' "$IOS_P12_BASE64" | tr -d '\n\r ' | openssl base64 -d -A > "$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '\n\r ' | openssl base64 -d -A > "$RUNNER_TEMP/profile.mobileprovision"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$IOS_P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          for dir in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles ~/Library/MobileDevice/Provisioning\ Profiles; do
+            mkdir -p "$dir"
+            cp "$RUNNER_TEMP/profile.mobileprovision" "$dir/networkhelm.mobileprovision"
+          done
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          echo "installed=true" >> "$GITHUB_OUTPUT"
+
+      - name: Make gradlew executable
+        if: steps.guard.outputs.ready == 'true'
+        run: chmod +x ./gradlew
+
+      - name: Cache the SSH libraries
+        if: steps.guard.outputs.ready == 'true'
+        uses: actions/cache@v6
+        with:
+          path: build/ios-ssh
+          key: ios-ssh-${{ hashFiles('tools/ios/build-ssh.sh') }}
+
+      - name: Build the SSH libraries
+        if: steps.guard.outputs.ready == 'true'
+        run: sh tools/ios/build-ssh.sh
+
+      - name: Archive
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+          MARKETING_VERSION: ${{ steps.version.outputs.marketing }}
+          BUILD_NUMBER: ${{ steps.version.outputs.code }}
+          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+        run: |
+          set -eu
+          # a profile given on the command line also reaches the targets of the Swift packages, which reject it,
+          # while Local.xcconfig, included by Config.xcconfig, reaches only this project
+          printf 'PROVISIONING_PROFILE_SPECIFIER = %s\n' "$PROFILE_NAME" > app/iosApp/Configuration/Local.xcconfig
+          xcodebuild -project app/iosApp/iosApp.xcodeproj -scheme iosApp \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
+            -configuration Release -destination 'generic/platform=iOS' archive \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            MARKETING_VERSION="$MARKETING_VERSION" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Export IPA
+        if: steps.guard.outputs.ready == 'true'
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+        run: |
+          set -eu
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>uploadSymbols</key><true/>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Upload artifact
+        if: steps.guard.outputs.ready == 'true'
+        uses: actions/upload-artifact@v7
+        with:
+          name: ios-ipa
+          path: ${{ runner.temp }}/export/*.ipa
+          if-no-files-found: error
+
+      - name: Upload to App Store Connect
+        id: upload
+        if: ${{ steps.guard.outputs.ready == 'true' && inputs.upload_app_store }}
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          set -eu
+          if [ -z "${ASC_KEY_ID:-}" ] || [ -z "${ASC_ISSUER_ID:-}" ] || [ -z "${ASC_KEY_P8:-}" ]; then
+            echo "::notice::ASC_KEY_ID / ASC_ISSUER_ID / ASC_KEY_P8 are not set, skipping App Store Connect"
+            echo 'App Store Connect: skipped, secrets are not set.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          umask 077
+          mkdir -p ~/.appstoreconnect/private_keys
+          key=~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
+          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN'; then
+            printf '%s\n' "$ASC_KEY_P8" > "$key"
+          else
+            printf '%s' "$ASC_KEY_P8" | tr -d '\n\r ' | openssl base64 -d -A > "$key"
+          fi
+          for ipa in "$RUNNER_TEMP"/export/*.ipa; do
+            xcrun altool --upload-app -f "$ipa" -t ios --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
+          done
+          rm -f "$key"
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
+      - name: Remove the temporary keychain
+        if: always() && steps.certificate.outputs.installed == 'true'
+        run: |
+          security list-keychains -d user -s login.keychain-db
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          rm -f ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/networkhelm.mobileprovision \
+                ~/Library/MobileDevice/Provisioning\ Profiles/networkhelm.mobileprovision
