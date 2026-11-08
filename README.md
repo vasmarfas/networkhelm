@@ -2,7 +2,7 @@
 
 A program for managing routers. It is modelled on WinBox: a menu tree on the left, tabbed windows on the right, tables that update while you look at them. It runs on Windows, macOS, Linux, Android and in a browser, and it talks to more than MikroTik: OpenWrt, OPNsense, pfSense and VyOS as well. The project is independent; MikroTik and the other router makers have nothing to do with it.
 
-Right now it is a release candidate, 1.0.0-rc2. I tested it mostly on virtual routers (the table below says which ones), so a real device may still surprise it. If something does not open or is awkward to use, please open an [issue](https://github.com/vasmarfas/networkhelm/issues).
+I tested it mostly on virtual routers (the table below says which ones), so a real device may still surprise it. If something does not open or is awkward to use, please open an [issue](https://github.com/vasmarfas/networkhelm/issues).
 
 **Русский:** [README.ru.md](README.ru.md) · **Telegram chat:** [@vasmarfas_chat](https://t.me/vasmarfas_chat)
 

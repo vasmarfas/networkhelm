@@ -92,7 +92,7 @@ The jar, about 31 MB, needs Java 17 or newer and carries the web app inside.
 Every release comes with a ready image for amd64 and arm64 (the `latest` tag follows stable versions only):
 
 ```bash
-docker run -d --name networkhelm-gateway -p 8443:8443 -v networkhelm-gateway:/data -e NETWORKHELM_GATEWAY_PASSWORD=<password> ghcr.io/vasmarfas/networkhelm-gateway:1.0.0-rc2
+docker run -d --name networkhelm-gateway -p 8443:8443 -v networkhelm-gateway:/data -e NETWORKHELM_GATEWAY_PASSWORD=<password> ghcr.io/vasmarfas/networkhelm-gateway:latest
 docker logs networkhelm-gateway
 ```
 
