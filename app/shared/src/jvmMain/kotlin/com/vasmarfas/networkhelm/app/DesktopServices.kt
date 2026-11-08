@@ -33,7 +33,8 @@ fun desktopServices(): Services {
         connectMacTelnet = { mac, user, pass, iface, encoding, scope -> connectMacTelnetOnInterface(mac, user, pass, iface, encoding, scope, schemas) },
         connectTcp8291 = { host, port, user, pass, encoding, scope -> connectNativeHost(host, port, user, pass, encoding, scope, schemas) },
         readWinBoxBook = WinBoxAddressBook::read,
-        releases = ::fetchReleases,
+        // only a Mac App Store build runs in the sandbox, and the store updates it itself
+        releases = if (System.getenv("APP_SANDBOX_CONTAINER_ID") == null) ::fetchReleases else null,
         changelog = ::fetchChangelog,
     )
 }

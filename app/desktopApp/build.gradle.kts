@@ -1,3 +1,4 @@
+import org.gradle.api.artifacts.component.ModuleComponentIdentifier
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.util.concurrent.TimeUnit
 
@@ -105,7 +106,30 @@ tasks.matching { it.name == "prepareAppResources" }.configureEach { mustRunAfter
 tasks.matching { it.name == "createDistributable" || it.name == "createReleaseDistributable" }.configureEach { dependsOn(webAppResources) }
 
 val developerIdIdentity = providers.environmentVariable("APPLE_DEVELOPER_ID_IDENTITY").orNull?.takeIf { it.isNotBlank() }
+// -PmacAppStore leaves the image unsigned: tools/release/mac_app_store.py signs it with Apple Distribution, which Compose cannot name
+val macAppStore = providers.gradleProperty("macAppStore").map { it.isEmpty() || it.toBoolean() }.getOrElse(false)
 val desktopVersion = (rootProject.extra["appVersionName"] as String).substringBefore('-')
+
+// the sandbox quarantines a library unpacked to a temporary file and dlopen hangs on it, so the store build loads them from the app
+val nativeJars = configurations.runtimeClasspath.map { classpath ->
+    classpath.incoming.artifactView {
+        componentFilter { it is ModuleComponentIdentifier && it.group in setOf("net.java.dev.jna", "org.jetbrains.pty4j", "io.github.dokar3") }
+    }.files
+}
+val macAppStoreNatives = tasks.register<Sync>("macAppStoreNatives") {
+    from(nativeJars.map { jars -> jars.map { zipTree(it) } }) {
+        include("com/sun/jna/darwin-${if (arm) "aarch64" else "x86-64"}/libjnidispatch.jnilib", "jni/macos_${if (arm) "aarch64" else "x64"}/libquickjs.dylib")
+        eachFile { path = name }
+        includeEmptyDirs = false
+    }
+    from(nativeJars.map { jars -> jars.map { zipTree(it) } }) {
+        include("resources/com/pty4j/native/darwin/libpty.dylib")
+        eachFile { path = "darwin/$name" }
+        includeEmptyDirs = false
+    }
+    into(layout.buildDirectory.dir("appResources/macos"))
+}
+if (macAppStore) tasks.matching { it.name == "prepareAppResources" }.configureEach { dependsOn(macAppStoreNatives) }
 
 compose.desktop {
     application {
@@ -113,6 +137,14 @@ compose.desktop {
         javaHome = javaToolchains.launcherFor(jetBrainsRuntime).get().metadata.installationPath.asFile.absolutePath
         // --enable-native-access: JDK 25 warns at the first native call of each library, JNA and Skia among them
         jvmArgs("-Xmx1g", "-XX:ParallelGCThreads=4", "-XX:ConcGCThreads=1", "-XX:G1PeriodicGCInterval=15000", "-XX:MaxHeapFreeRatio=30", "-XX:MinHeapFreeRatio=10", "--enable-native-access=ALL-UNNAMED")
+        if (macAppStore) {
+            jvmArgs(
+                "-Djna.boot.library.path=\$APPDIR/resources",
+                "-Djna.nounpack=true",
+                "-Dcom.dokar.quickjs.library.path=\$APPDIR/resources",
+                "-Dpty4j.preferred.native.folder=\$APPDIR/resources",
+            )
+        }
 
         nativeDistributions {
             // JNA of KSafe needs sun.misc.Unsafe; Netty and logback of the gateway refer to JNDI and JFR; the Java Access Bridge of Windows loads jdk.accessibility at the first window
@@ -150,7 +182,10 @@ compose.desktop {
                         <string>NetworkHelm connects to routers on your network and listens for their discovery announcements.</string>
                     """.trimIndent()
                 }
-                if (developerIdIdentity != null) {
+                if (macAppStore) {
+                    appStore = true
+                    appCategory = "public.app-category.utilities"
+                } else if (developerIdIdentity != null) {
                     signing {
                         sign.set(true)
                         identity.set(developerIdIdentity)
