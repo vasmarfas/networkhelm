@@ -13,6 +13,7 @@ import kotlin.time.TimeSource
 
 private val FILE_STORE = listOf(2L, 2L)
 private val OBJECT_MODEL = listOf(72L, 5L)
+private val FILE_MANAGER = listOf(72L)
 
 private const val CREATE = 1
 private const val WRITE = 2
@@ -31,6 +32,7 @@ private const val SUBSCRIBE = 0xFE0012L
 private const val UNSUBSCRIBE = 0xFE0013L
 private const val CREDIT = 0xFE0017L
 
+private const val ELEMENT_ID = 0xFE0001
 private const val OBJECTS = 0xFE0002
 private const val QUERY = 0xFE0016
 private const val QUERY_SCOPE = 0xFE0017
@@ -55,9 +57,21 @@ private const val LISTING_LIMIT_MILLIS = 20_000L
 class NativeFiles(private val connection: NativeConnection) : SftpClient {
     private val lock = Mutex()
 
+    // RouterOS 6 and 7.17 have nothing at [72, 5]: their file manager at [72] is one table of the files
+    // of every directory, each under its whole name
+    override suspend fun list(path: String): List<RemoteFile> = try {
+        subscribed(path)
+    } catch (e: DeviceException) {
+        if (e.category != ErrorCategory.Unsupported) throw e
+        val inside = path.trim('/').let { if (it.isEmpty()) "" else "$it/" }
+        lock.withLock { managed() }
+            .filter { item -> item.text(NAME)?.let { it.startsWith(inside) && '/' !in it.removePrefix(inside) } == true }
+            .mapNotNull { remoteFile(it, inside) }
+    }
+
     // the object model has no end-of-listing marker: the live listing is complete once it falls quiet for
     // several times the longest gap between its portions
-    override suspend fun list(path: String): List<RemoteFile> = exclusive { source ->
+    private suspend fun subscribed(path: String): List<RemoteFile> = exclusive { source ->
         val scope = path.trim('/')
         val inside = if (scope.isEmpty()) "" else "$scope/"
         val query = M2Message.of(
@@ -151,7 +165,14 @@ class NativeFiles(private val connection: NativeConnection) : SftpClient {
     }
 
     override suspend fun remove(path: String) = exclusive { source ->
-        source.request(OBJECT_MODEL, M2Value.U32(REMOVE), OBJECT_REF to M2Value.Message(reference(path.trim('/'))))
+        val name = path.trim('/')
+        try {
+            source.request(OBJECT_MODEL, M2Value.U32(REMOVE), OBJECT_REF to M2Value.Message(reference(name)))
+        } catch (e: DeviceException) {
+            if (e.category != ErrorCategory.Unsupported) throw e
+            val id = managed().firstOrNull { it.text(NAME) == name }?.number(ELEMENT_ID) ?: throw DeviceException(ErrorCategory.MissingItem, "the router has no file $name")
+            source.request(FILE_MANAGER, M2Value.U32(REMOVE), ELEMENT_ID to M2Value.U32(id))
+        }
         Unit
     }
 
@@ -165,6 +186,8 @@ class NativeFiles(private val connection: NativeConnection) : SftpClient {
             source.close()
         }
     }
+
+    private suspend fun managed(): List<M2Message> = NativeObjectModel(connection).records(FILE_MANAGER).orEmpty()
 
     private fun reference(name: String) = M2Message.of(OBJECT_NAME to M2Value.Text(name))
 

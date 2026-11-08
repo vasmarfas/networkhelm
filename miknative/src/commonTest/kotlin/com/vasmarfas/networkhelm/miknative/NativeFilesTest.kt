@@ -19,20 +19,49 @@ private const val SUBSCRIBE = 0xFE0012L
 private const val UNSUBSCRIBE = 0xFE0013L
 private const val CREDIT = 0xFE0017L
 private const val REMOVE = 0xFE0006L
+private const val GET_ALL = 0xFE0004L
+private const val NOT_IMPLEMENTED = 0xFE0002L
 
+// managed is RouterOS 6 and 7.17: [72, 5] is refused, and [72] holds every file under its whole name
 private class FileStoreRouter(
     val files: MutableMap<String, ByteArray>,
     private val batches: List<Int>? = null,
     private val directories: Set<String> = emptySet(),
+    private val managed: Boolean = false,
 ) {
     private val uploads = HashMap<Long, Pair<String, ByteArray>>()
     private val downloads = HashMap<Long, Pair<ByteArray, Int>>()
+    private val numbers = HashMap<String, Long>()
     private var nextSession = 1L
 
     suspend fun FakeRouter.handle(message: M2Message) {
         when (message.numbers(M2Key.To)) {
             listOf(2L, 2L) -> fileStore(message)
-            listOf(72L, 5L) -> objectModel(message)
+            listOf(72L, 5L) -> if (managed) reply(message, M2Key.ErrorCode to M2Value.U32(NOT_IMPLEMENTED)) else objectModel(message)
+            listOf(72L) -> if (managed) fileManager(message)
+        }
+    }
+
+    private suspend fun FakeRouter.fileManager(message: M2Message) {
+        val ids = files.keys.associateWith { numbers.getOrPut(it) { 0xFE000000L + numbers.size } }
+        when (message.number(M2Key.Command)) {
+            GET_ALL -> reply(
+                message,
+                0xFE0002 to M2Value.Messages(
+                    ids.map { (name, id) ->
+                        M2Message.of(
+                            0xFE0001 to M2Value.U32(id),
+                            1 to M2Value.Text(name),
+                            3 to M2Value.U32(if (name in directories) 5 else 0),
+                            0x0E to M2Value.U64(files.getValue(name).size.toLong()),
+                        )
+                    },
+                ),
+            )
+            REMOVE -> {
+                files.remove(ids.entries.first { it.value == message.number(0xFE0001) }.key)
+                reply(message)
+            }
         }
     }
 
@@ -215,11 +244,34 @@ class NativeFilesTest {
     }
 
     @Test
+    fun theFilesOfARouterWithoutTheNewManagerAreListedFromTheOldOne() {
+        val router = FileStoreRouter(hashMapOf("a.txt" to ByteArray(5), "pub" to ByteArray(0), "pub/b.txt" to ByteArray(3)), directories = setOf("pub"), managed = true)
+        files(router) { files, _ ->
+            val root = files.list("/").sortedBy { it.name }
+            assertEquals(listOf("a.txt", "pub"), root.map { it.name })
+            assertEquals(listOf(5L, 0L), root.map { it.size })
+            assertEquals(listOf(false, true), root.map { it.directory })
+            assertEquals(listOf("b.txt" to 3L), files.list("/pub/").map { it.name to it.size })
+        }
+    }
+
+    @Test
+    fun theOldManagerRemovesAFileByItsNumber() {
+        val router = FileStoreRouter(hashMapOf("a.txt" to ByteArray(5), "pub" to ByteArray(0), "pub/b.txt" to ByteArray(3)), directories = setOf("pub"), managed = true)
+        files(router) { files, fake ->
+            files.remove("/pub/b.txt")
+            assertEquals(setOf("a.txt", "pub"), router.files.keys)
+            assertEquals(1, fake.received.count { it.numbers(M2Key.To) == listOf(72L) && it.number(M2Key.Command) == REMOVE })
+            assertEquals(ErrorCategory.MissingItem, assertFailsWith<DeviceException> { files.remove("/pub/b.txt") }.category)
+        }
+    }
+
+    @Test
     fun aRouterThatCannotListSaysSo() = runTest {
         val (client, server) = pipe()
         val fake = FakeRouter(this, server, "admin", "secret") { message ->
-            if (message.number(M2Key.Command) == SUBSCRIBE) {
-                send(M2Message.of(M2Key.To to M2Value.U32s(longArrayOf(0, checkNotNull(message.numbers(M2Key.From))[1])), M2Key.ErrorCode to M2Value.U32(0xFE0002)))
+            if (message.number(M2Key.Command) == SUBSCRIBE || message.number(M2Key.Command) == GET_ALL) {
+                reply(message, M2Key.ErrorCode to M2Value.U32(NOT_IMPLEMENTED))
             }
         }
         val connection = NativeConnection.open(client, "admin", "secret", this)

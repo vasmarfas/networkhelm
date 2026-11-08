@@ -148,6 +148,8 @@ class MacTelnetConsoleLabTest {
         assertContentEquals(binary, files.read("/rd-test-mac-binary.bin"))
         files.write("/rd-test-mac-text.txt", "again".encodeToByteArray())
         assertEquals("again", files.read("/rd-test-mac-text.txt").decodeToString())
+        // the file manager of RouterOS 7.17 shows a file written through the file store up to a second later
+        withTimeout(10.seconds) { while (files.list("/").count { it.name.startsWith("rd-test-mac") } < 2) delay(250) }
         val listed = files.list("/").filter { it.name.startsWith("rd-test-mac") }.associateBy { it.name }
         assertEquals(setOf("rd-test-mac-text.txt", "rd-test-mac-binary.bin"), listed.keys)
         assertEquals(20_000L, listed.getValue("rd-test-mac-binary.bin").size)

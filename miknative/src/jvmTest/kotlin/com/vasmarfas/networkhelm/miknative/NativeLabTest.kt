@@ -162,23 +162,7 @@ class NativeLabTest {
     }
 
     @Test
-    fun routerOs6TransfersFilesButDoesNotListThem() = connection("chr6") { connection, lab ->
-        val files = NativeFiles(connection)
-        val name = "rd-test-8291-six.txt"
-        val bytes = ByteArray(1000) { it.toByte() }
-        files.write("/$name", bytes)
-        try {
-            assertContentEquals(bytes, files.read("/$name"))
-            assertEquals(ErrorCategory.Unsupported, assertFailsWith<DeviceException> { files.list("/") }.category)
-        } finally {
-            val terminal = NativeTerminal.open(connection, lab.getValue("chr6.password"), "xterm-256color", 100, 30)
-            terminal.readUntil("] > ")
-            terminal.write("/file remove $name\r".encodeToByteArray())
-            delay(1000)
-            terminal.close()
-        }
-        assertFailsWith<DeviceException> { files.read("/$name") }
-    }
+    fun routerOs6FilesRoundTrip() = filesTest("chr6", 1000)
 
     @Test
     fun anEmptyFileIsKept() = filesTest("chr", 0)
