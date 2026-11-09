@@ -52,22 +52,20 @@ internal class SecureChannel(private val keys: StreamKeys) {
 
     private fun encryptCbc(aes: Aes128, iv: ByteArray, data: ByteArray): ByteArray {
         val out = ByteArray(data.size)
-        var chain = iv
+        val block = iv.copyOf()
         for (at in data.indices step BLOCK) {
-            chain = aes.encrypt(ByteArray(BLOCK) { (data[at + it].toInt() xor chain[it].toInt()).toByte() })
-            chain.copyInto(out, at)
+            for (i in 0 until BLOCK) block[i] = (block[i].toInt() xor data[at + i].toInt()).toByte()
+            aes.encrypt(block, 0, out, at)
+            out.copyInto(block, 0, at, at + BLOCK)
         }
         return out
     }
 
     private fun decryptCbc(aes: Aes128, iv: ByteArray, data: ByteArray): ByteArray {
         val out = ByteArray(data.size)
-        var chain = iv
         for (at in data.indices step BLOCK) {
-            val block = data.copyOfRange(at, at + BLOCK)
-            val plain = aes.decrypt(block)
-            for (i in 0 until BLOCK) out[at + i] = (plain[i].toInt() xor chain[i].toInt()).toByte()
-            chain = block
+            aes.decrypt(data, at, out, at)
+            for (i in 0 until BLOCK) out[at + i] = (out[at + i].toInt() xor (if (at == 0) iv[i] else data[at - BLOCK + i]).toInt()).toByte()
         }
         return out
     }

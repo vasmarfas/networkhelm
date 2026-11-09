@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.transport
 
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import java.io.BufferedInputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -17,12 +18,15 @@ import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
 
+private const val READ_BUFFER = 64 * 1024
+
 open class SocketStream(private val socket: Socket) : ByteStream {
-    private val input = socket.getInputStream()
+    private val input = BufferedInputStream(socket.getInputStream(), READ_BUFFER)
     private val output = socket.getOutputStream()
 
+    // what has already arrived is taken without a hop to the threads of blocking calls
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int =
-        withContext(Dispatchers.IO) { input.read(buffer, offset, length) }
+        if (input.available() > 0) input.read(buffer, offset, length) else withContext(Dispatchers.IO) { input.read(buffer, offset, length) }
 
     override suspend fun write(bytes: ByteArray) = withContext(Dispatchers.IO) {
         output.write(bytes)

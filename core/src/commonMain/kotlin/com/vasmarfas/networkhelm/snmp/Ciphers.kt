@@ -181,78 +181,58 @@ internal fun desCbc(key: ByteArray, iv: ByteArray, data: ByteArray, encrypt: Boo
 }
 
 class Aes128(key: ByteArray) {
-    private val round = expand(key)
+    private val encryption = expand(key)
+    private val decryption = inverted(encryption)
 
-    fun encrypt(block: ByteArray): ByteArray {
-        val state = block.copyOf()
-        add(state, 0)
-        for (r in 1 until 10) {
-            substitute(state)
-            shift(state)
-            mix(state)
-            add(state, r)
+    fun encrypt(block: ByteArray): ByteArray = ByteArray(16).also { encrypt(block, 0, it, 0) }
+
+    fun decrypt(block: ByteArray): ByteArray = ByteArray(16).also { decrypt(block, 0, it, 0) }
+
+    // a round of the four columns is sixteen lookups in the tables of SubBytes with MixColumns, and nothing is allocated
+    fun encrypt(input: ByteArray, from: Int, output: ByteArray, to: Int) {
+        val keys = encryption
+        var s0 = word(input, from) xor keys[0]
+        var s1 = word(input, from + 4) xor keys[1]
+        var s2 = word(input, from + 8) xor keys[2]
+        var s3 = word(input, from + 12) xor keys[3]
+        for (round in 1 until 10) {
+            val at = 4 * round
+            val t0 = TE0[s0 ushr 24] xor TE1[s1 ushr 16 and 0xFF] xor TE2[s2 ushr 8 and 0xFF] xor TE3[s3 and 0xFF] xor keys[at]
+            val t1 = TE0[s1 ushr 24] xor TE1[s2 ushr 16 and 0xFF] xor TE2[s3 ushr 8 and 0xFF] xor TE3[s0 and 0xFF] xor keys[at + 1]
+            val t2 = TE0[s2 ushr 24] xor TE1[s3 ushr 16 and 0xFF] xor TE2[s0 ushr 8 and 0xFF] xor TE3[s1 and 0xFF] xor keys[at + 2]
+            val t3 = TE0[s3 ushr 24] xor TE1[s0 ushr 16 and 0xFF] xor TE2[s1 ushr 8 and 0xFF] xor TE3[s2 and 0xFF] xor keys[at + 3]
+            s0 = t0
+            s1 = t1
+            s2 = t2
+            s3 = t3
         }
-        substitute(state)
-        shift(state)
-        add(state, 10)
-        return state
+        put(output, to, last(SBOX, s0, s1, s2, s3) xor keys[40])
+        put(output, to + 4, last(SBOX, s1, s2, s3, s0) xor keys[41])
+        put(output, to + 8, last(SBOX, s2, s3, s0, s1) xor keys[42])
+        put(output, to + 12, last(SBOX, s3, s0, s1, s2) xor keys[43])
     }
 
-    fun decrypt(block: ByteArray): ByteArray {
-        val state = block.copyOf()
-        add(state, 10)
-        for (r in 9 downTo 1) {
-            unshift(state)
-            unsubstitute(state)
-            add(state, r)
-            unmix(state)
+    fun decrypt(input: ByteArray, from: Int, output: ByteArray, to: Int) {
+        val keys = decryption
+        var s0 = word(input, from) xor keys[0]
+        var s1 = word(input, from + 4) xor keys[1]
+        var s2 = word(input, from + 8) xor keys[2]
+        var s3 = word(input, from + 12) xor keys[3]
+        for (round in 1 until 10) {
+            val at = 4 * round
+            val t0 = TD0[s0 ushr 24] xor TD1[s3 ushr 16 and 0xFF] xor TD2[s2 ushr 8 and 0xFF] xor TD3[s1 and 0xFF] xor keys[at]
+            val t1 = TD0[s1 ushr 24] xor TD1[s0 ushr 16 and 0xFF] xor TD2[s3 ushr 8 and 0xFF] xor TD3[s2 and 0xFF] xor keys[at + 1]
+            val t2 = TD0[s2 ushr 24] xor TD1[s1 ushr 16 and 0xFF] xor TD2[s0 ushr 8 and 0xFF] xor TD3[s3 and 0xFF] xor keys[at + 2]
+            val t3 = TD0[s3 ushr 24] xor TD1[s2 ushr 16 and 0xFF] xor TD2[s1 ushr 8 and 0xFF] xor TD3[s0 and 0xFF] xor keys[at + 3]
+            s0 = t0
+            s1 = t1
+            s2 = t2
+            s3 = t3
         }
-        unshift(state)
-        unsubstitute(state)
-        add(state, 0)
-        return state
-    }
-
-    private fun add(state: ByteArray, r: Int) {
-        for (i in 0 until 16) state[i] = (state[i].toInt() xor round[r * 16 + i].toInt()).toByte()
-    }
-
-    private fun substitute(state: ByteArray) {
-        for (i in 0 until 16) state[i] = SBOX[state[i].toInt() and 0xFF].toByte()
-    }
-
-    private fun unsubstitute(state: ByteArray) {
-        for (i in 0 until 16) state[i] = INVERSE_SBOX[state[i].toInt() and 0xFF].toByte()
-    }
-
-    private fun shift(state: ByteArray) {
-        val copy = state.copyOf()
-        for (c in 0 until 4) for (r in 1 until 4) state[4 * c + r] = copy[4 * ((c + r) % 4) + r]
-    }
-
-    private fun unshift(state: ByteArray) {
-        val copy = state.copyOf()
-        for (c in 0 until 4) for (r in 1 until 4) state[4 * ((c + r) % 4) + r] = copy[4 * c + r]
-    }
-
-    private fun mix(state: ByteArray) {
-        for (c in 0 until 4) {
-            val a = IntArray(4) { state[4 * c + it].toInt() and 0xFF }
-            val b = IntArray(4) { times2(a[it]) }
-            state[4 * c] = (b[0] xor a[3] xor a[2] xor b[1] xor a[1]).toByte()
-            state[4 * c + 1] = (b[1] xor a[0] xor a[3] xor b[2] xor a[2]).toByte()
-            state[4 * c + 2] = (b[2] xor a[1] xor a[0] xor b[3] xor a[3]).toByte()
-            state[4 * c + 3] = (b[3] xor a[2] xor a[1] xor b[0] xor a[0]).toByte()
-        }
-    }
-
-    private fun unmix(state: ByteArray) {
-        for (c in 0 until 4) {
-            val a = IntArray(4) { state[4 * c + it].toInt() and 0xFF }
-            for (r in 0 until 4) {
-                state[4 * c + r] = (times(a[r], 14) xor times(a[(r + 1) % 4], 11) xor times(a[(r + 2) % 4], 13) xor times(a[(r + 3) % 4], 9)).toByte()
-            }
-        }
+        put(output, to, last(INVERSE_SBOX, s0, s3, s2, s1) xor keys[40])
+        put(output, to + 4, last(INVERSE_SBOX, s1, s0, s3, s2) xor keys[41])
+        put(output, to + 8, last(INVERSE_SBOX, s2, s1, s0, s3) xor keys[42])
+        put(output, to + 12, last(INVERSE_SBOX, s3, s2, s1, s0) xor keys[43])
     }
 
     private companion object {
@@ -268,19 +248,35 @@ class Aes128(key: ByteArray) {
             return product
         }
 
-        fun expand(key: ByteArray): ByteArray {
-            val words = key.copyOf(176)
+        fun last(box: IntArray, a: Int, b: Int, c: Int, d: Int) =
+            (box[a ushr 24] shl 24) or (box[b ushr 16 and 0xFF] shl 16) or (box[c ushr 8 and 0xFF] shl 8) or box[d and 0xFF]
+
+        fun put(bytes: ByteArray, at: Int, value: Int) {
+            for (i in 0 until 4) bytes[at + i] = (value ushr (24 - 8 * i)).toByte()
+        }
+
+        fun expand(key: ByteArray): IntArray {
+            val words = IntArray(44)
+            for (i in 0 until 4) words[i] = word(key, 4 * i)
             var rcon = 1
-            for (i in 16 until 176 step 4) {
-                val t = IntArray(4) { words[i - 4 + it].toInt() and 0xFF }
-                if (i % 16 == 0) {
-                    val first = t[0]
-                    for (j in 0 until 3) t[j] = SBOX[t[j + 1]]
-                    t[3] = SBOX[first]
-                    t[0] = t[0] xor rcon
+            for (i in 4 until 44) {
+                var t = words[i - 1]
+                if (i % 4 == 0) {
+                    t = ((SBOX[t ushr 16 and 0xFF] shl 24) or (SBOX[t ushr 8 and 0xFF] shl 16) or (SBOX[t and 0xFF] shl 8) or SBOX[t ushr 24]) xor (rcon shl 24)
                     rcon = times2(rcon)
                 }
-                for (j in 0 until 4) words[i + j] = (words[i - 16 + j].toInt() xor t[j]).toByte()
+                words[i] = words[i - 4] xor t
+            }
+            return words
+        }
+
+        // the keys of the rounds in reverse, the inner ones through InvMixColumns, so decryption has the shape of encryption
+        fun inverted(encryption: IntArray): IntArray {
+            val words = IntArray(44)
+            for (round in 0..10) encryption.copyInto(words, 4 * round, 4 * (10 - round), 4 * (10 - round) + 4)
+            for (i in 4 until 40) {
+                val w = words[i]
+                words[i] = TD0[SBOX[w ushr 24]] xor TD1[SBOX[w ushr 16 and 0xFF]] xor TD2[SBOX[w ushr 8 and 0xFF]] xor TD3[SBOX[w and 0xFF]]
             }
             return words
         }
@@ -305,6 +301,15 @@ class Aes128(key: ByteArray) {
         )
 
         val INVERSE_SBOX = IntArray(256).also { inverse -> SBOX.forEachIndexed { index, value -> inverse[value] = index } }
+
+        val TE0 = IntArray(256) { (times2(SBOX[it]) shl 24) or (SBOX[it] shl 16) or (SBOX[it] shl 8) or (times2(SBOX[it]) xor SBOX[it]) }
+        val TE1 = IntArray(256) { TE0[it].rotateRight(8) }
+        val TE2 = IntArray(256) { TE0[it].rotateRight(16) }
+        val TE3 = IntArray(256) { TE0[it].rotateRight(24) }
+        val TD0 = IntArray(256) { (times(INVERSE_SBOX[it], 14) shl 24) or (times(INVERSE_SBOX[it], 9) shl 16) or (times(INVERSE_SBOX[it], 13) shl 8) or times(INVERSE_SBOX[it], 11) }
+        val TD1 = IntArray(256) { TD0[it].rotateRight(8) }
+        val TD2 = IntArray(256) { TD0[it].rotateRight(16) }
+        val TD3 = IntArray(256) { TD0[it].rotateRight(24) }
     }
 }
 
