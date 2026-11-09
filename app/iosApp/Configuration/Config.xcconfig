@@ -3,8 +3,8 @@ TEAM_ID=
 PRODUCT_NAME=NetworkHelm
 PRODUCT_BUNDLE_IDENTIFIER=com.vasmarfas.networkhelm
 
-CURRENT_PROJECT_VERSION=1000099
-MARKETING_VERSION=1.0.0
+CURRENT_PROJECT_VERSION=1000199
+MARKETING_VERSION=1.0.1
 
 // TEAM_ID stays empty here: CI passes DEVELOPMENT_TEAM to xcodebuild from a secret,
 // and a local signing team goes into Local.xcconfig, which git does not track
