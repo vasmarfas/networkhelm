@@ -39,6 +39,8 @@ internal fun cellKey(text: String): CellKey {
 }
 
 private fun magnitude(text: String): Double? {
+    // no quantity, interval or date has two dots, and an address of version 4 has three
+    if (text.count { it == '.' } > 1) return null
     quantity.matchEntire(text)?.let { match ->
         val (number, prefix, unit) = match.destructured
         val step = if (unit.startsWith("i")) 1024.0 else 1000.0
@@ -76,7 +78,7 @@ private fun compareRuns(a: String, b: String): Int {
         if (a[i].isDigit() && b[j].isDigit()) {
             val endA = digitsEnd(a, i)
             val endB = digitsEnd(b, j)
-            val result = compareNumbers(a.substring(i, endA), b.substring(j, endB))
+            val result = compareNumbers(a, i, endA, b, j, endB)
             if (result != 0) return result
             i = endA
             j = endB
@@ -96,10 +98,19 @@ private fun digitsEnd(text: String, from: Int): Int {
     return at
 }
 
-private fun compareNumbers(a: String, b: String): Int {
-    val x = a.trimStart('0')
-    val y = b.trimStart('0')
-    return if (x.length != y.length) x.length - y.length else x.compareTo(y)
+// the runs are compared where they stand: leading zeros skipped, the longer number the greater, then digit by digit
+private fun compareNumbers(a: String, fromA: Int, endA: Int, b: String, fromB: Int, endB: Int): Int {
+    var i = fromA
+    var j = fromB
+    while (i < endA && a[i] == '0') i++
+    while (j < endB && b[j] == '0') j++
+    if (endA - i != endB - j) return (endA - i) - (endB - j)
+    while (i < endA) {
+        if (a[i] != b[j]) return a[i].compareTo(b[j])
+        i++
+        j++
+    }
+    return 0
 }
 
 fun <K> select(selected: Set<K>, anchor: K?, clicked: K, order: List<K>, ctrl: Boolean, shift: Boolean): Pair<Set<K>, K?> {

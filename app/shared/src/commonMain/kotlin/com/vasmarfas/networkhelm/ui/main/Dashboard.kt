@@ -16,7 +16,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -27,6 +26,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.MenuPath
@@ -110,13 +110,13 @@ internal fun DashboardView(tab: RouterTab) {
     val uploadName = stringResource(Res.string.dashboard_upload)
     val download = remember(tab, downloadName) { Series(downloadName, palette.accent, Ring(SAMPLES)) }
     val upload = remember(tab, uploadName) { Series(uploadName, palette.success, Ring(SAMPLES)) }
-    val devices by remember(session) { session.rowsAt(DEVICES) }.collectAsState(emptyList())
-    val alerts by remember(session) { session.rowsAt(ALERTS) }.collectAsState(emptyList())
-    val resources by remember(session, sources.resources) { session.rowsAt(sources.resources) }.collectAsState(emptyList())
-    val ports by remember(session, sources.ports) { session.rowsAt(sources.ports) }.collectAsState(emptyList())
-    val radios by remember(session, sources.radios) { session.rowsAt(sources.radios) }.collectAsState(emptyList())
-    val clients by remember(session, sources.clients) { session.rowsAt(sources.clients) }.collectAsState(emptyList())
-    val applications by remember(session, sources.applications) { session.rowsAt(sources.applications) }.collectAsState(emptyList())
+    val devices by remember(session) { session.rowsAt(DEVICES) }.collectAsStateWithLifecycle(emptyList())
+    val alerts by remember(session) { session.rowsAt(ALERTS) }.collectAsStateWithLifecycle(emptyList())
+    val resources by remember(session, sources.resources) { session.rowsAt(sources.resources) }.collectAsStateWithLifecycle(emptyList())
+    val ports by remember(session, sources.ports) { session.rowsAt(sources.ports) }.collectAsStateWithLifecycle(emptyList())
+    val radios by remember(session, sources.radios) { session.rowsAt(sources.radios) }.collectAsStateWithLifecycle(emptyList())
+    val clients by remember(session, sources.clients) { session.rowsAt(sources.clients) }.collectAsStateWithLifecycle(emptyList())
+    val applications by remember(session, sources.applications) { session.rowsAt(sources.applications) }.collectAsStateWithLifecycle(emptyList())
     val current by rememberUpdatedState(if (ports.isEmpty() && radios.isEmpty()) null else throughput(ports + radios))
     LaunchedEffect(download, upload) {
         while (true) {

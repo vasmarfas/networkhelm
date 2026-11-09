@@ -17,15 +17,23 @@ import kotlinx.coroutines.flow.filterNot
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapNotNull
-import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.flow.produceIn
 import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.transform
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.TimeSource
 
-fun Flow<ListEvent>.rows(): Flow<List<Item>> = filterNot { it is ListEvent.Progress }.runningFold(emptyList<Item>()) { rows, event ->
+fun Flow<ListEvent>.rows(): Flow<List<Item>> = filterNot { it is ListEvent.Progress }.runningFold(emptyList(), ::folded)
+
+// the rows of a table as they come: those a long read has given so far, then the whole table
+fun Flow<ListEvent>.rowsSoFar(): Flow<List<Item>> = filterNot { it is ListEvent.Progress && it.added.isEmpty() }.runningFold(emptyList()) { rows, event ->
+    if (event is ListEvent.Progress) (rows.associateBy { it.id } + event.added.associateBy { it.id }).values.toList() else folded(rows, event)
+}
+
+private fun folded(rows: List<Item>, event: ListEvent): List<Item> =
     when (event) {
         is ListEvent.Progress -> rows
         is ListEvent.Snapshot -> event.items
@@ -44,7 +52,6 @@ fun Flow<ListEvent>.rows(): Flow<List<Item>> = filterNot { it is ListEvent.Progr
             }
         }
     }
-}
 
 fun <T> Flow<T>.atMostEvery(period: Duration): Flow<T> = conflate().transform {
     emit(it)
@@ -88,19 +95,21 @@ fun Flow<Item>.rounds(key: (Item) -> String?): Flow<Map<String, Map<String, Stri
     if (round.isNotEmpty()) emit(round.toMap())
 }
 
-fun polled(period: Duration, again: Flow<Unit> = emptyFlow(), read: suspend () -> List<Item>): Flow<ListEvent> = flow {
-    var items = read()
-    emit(ListEvent.Snapshot(items))
-    val timer = flow {
-        while (true) {
-            delay(period)
-            emit(Unit)
-        }
-    }
-    merge(timer, again).conflate().collect {
+// a read takes at most a tenth of the time, so a slow table is asked less often than the period; a change asks at once
+fun polled(period: Duration, again: Flow<Unit> = emptyFlow(), read: suspend () -> List<Item>): Flow<ListEvent> = channelFlow {
+    val asked = again.buffer(Channel.CONFLATED).produceIn(this)
+    var waiting = true
+    var items: List<Item>? = null
+    while (true) {
+        val started = TimeSource.Monotonic.markNow()
         val fresh = read()
-        if (fresh != items) emit(ListEvent.Snapshot(fresh))
+        if (fresh != items) send(ListEvent.Snapshot(fresh))
         items = fresh
+        val wait = maxOf(period, started.elapsedNow() * 9)
+        if (!waiting || withTimeoutOrNull(wait) { asked.receiveCatching() }?.isClosed == true) {
+            waiting = false
+            delay(wait)
+        }
     }
 }
 

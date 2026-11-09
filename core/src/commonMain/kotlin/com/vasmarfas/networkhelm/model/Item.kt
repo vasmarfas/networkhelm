@@ -31,8 +31,8 @@ sealed interface ListEvent {
     @SerialName("removed")
     data class Removed(val id: String) : ListEvent
 
-    // a big table is on its way in portions; its rows come with the snapshot
+    // a big table is on its way; the rows it has given since the last progress come with it, the whole table with the snapshot
     @Serializable
     @SerialName("progress")
-    data class Progress(val read: Int, val total: Int) : ListEvent
+    data class Progress(val read: Int, val total: Int, val added: List<Item> = emptyList()) : ListEvent
 }

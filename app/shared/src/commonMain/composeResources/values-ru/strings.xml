@@ -613,6 +613,12 @@
         <item quantity="many">%1$d строк</item>
         <item quantity="other">%1$d строки</item>
     </plurals>
+    <plurals name="list_loading_all">
+        <item quantity="one">Загрузка %1$d строки…</item>
+        <item quantity="few">Загрузка %1$d строк…</item>
+        <item quantity="many">Загрузка %1$d строк…</item>
+        <item quantity="other">Загрузка %1$d строки…</item>
+    </plurals>
     <plurals name="list_items_of">
         <item quantity="one">%1$d из %2$d строки</item>
         <item quantity="few">%1$d из %2$d строк</item>

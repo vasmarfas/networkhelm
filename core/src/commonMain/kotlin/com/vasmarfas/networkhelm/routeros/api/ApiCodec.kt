@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.routeros.api
 
 internal const val MAX_WORD_LENGTH = 64 * 1024 * 1024
+private const val NAMES_MOST = 4_096
 
 internal fun encodeLength(length: Int): ByteArray {
     require(length >= 0) { "negative word length $length" }
@@ -89,7 +90,8 @@ internal class SentenceReader(private val read: suspend (ByteArray, Int, Int) ->
 
 data class ApiReply(val type: String, val attributes: Map<String, String>, val tag: String?)
 
-internal fun parseReply(words: List<String>): ApiReply {
+// the rows of a big table repeat the same few names, so a connection keeps one copy of each
+internal fun parseReply(words: List<String>, names: MutableMap<String, String> = HashMap()): ApiReply {
     if (words.isEmpty()) throw ApiProtocolException("empty sentence")
     val attributes = LinkedHashMap<String, String>()
     var tag: String? = null
@@ -98,7 +100,8 @@ internal fun parseReply(words: List<String>): ApiReply {
             word.startsWith(".tag=") -> tag = word.substring(5)
             word.startsWith("=") -> {
                 val split = word.indexOf('=', 1)
-                if (split < 0) attributes[word.substring(1)] = "" else attributes[word.substring(1, split)] = word.substring(split + 1)
+                val name = if (split < 0) word.substring(1) else word.substring(1, split)
+                attributes[names[name] ?: name.also { if (names.size < NAMES_MOST) names[it] = it }] = if (split < 0) "" else word.substring(split + 1)
             }
             else -> attributes["message"] = word
         }

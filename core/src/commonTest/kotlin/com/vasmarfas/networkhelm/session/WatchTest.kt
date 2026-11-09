@@ -35,8 +35,29 @@ class WatchTest {
 
     @Test
     fun theProgressOfABigTableIsNotARowsList() = runTest {
-        val rows = flowOf(ListEvent.Progress(2_000, 5_000), ListEvent.Progress(4_000, 5_000), ListEvent.Snapshot(listOf(item("*1")))).rows().toList()
+        val rows = flowOf(ListEvent.Progress(2_000, 5_000), ListEvent.Progress(4_000, 5_000, listOf(item("*9"))), ListEvent.Snapshot(listOf(item("*1")))).rows().toList()
         assertEquals(listOf(emptyList(), listOf(item("*1"))), rows)
+    }
+
+    @Test
+    fun theRowsOfABigTableShowAsTheyComeAndTheWholeTableTakesTheirPlace() = runTest {
+        val rows = flowOf(
+            ListEvent.Progress(0, 4),
+            ListEvent.Progress(2, 4, listOf(item("*1"), item("*2"))),
+            ListEvent.Progress(3, 4, listOf(item("*2", "again"), item("*3"))),
+            ListEvent.Snapshot(listOf(item("*1"), item("*3"), item("*4"))),
+            ListEvent.Removed("*3"),
+        ).rowsSoFar().toList()
+        assertEquals(
+            listOf(
+                emptyList(),
+                listOf(item("*1"), item("*2")),
+                listOf(item("*1"), item("*2", "again"), item("*3")),
+                listOf(item("*1"), item("*3"), item("*4")),
+                listOf(item("*1"), item("*4")),
+            ),
+            rows,
+        )
     }
 
     @Test

@@ -22,6 +22,7 @@ import com.vasmarfas.networkhelm.routeros.schema.label
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.session.TextStore
+import com.vasmarfas.networkhelm.session.polled
 import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.SshSession
 import kotlinx.coroutines.channels.BufferOverflow
@@ -29,12 +30,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.catch
-import kotlinx.coroutines.flow.conflate
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.emptyFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.merge
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
@@ -140,24 +143,12 @@ class OpenWrtSession(
         ((if (live.has(path)) live.follow(path) { polled(path, filter) } else null) ?: polled(path, filter)).catch { throw it.toDeviceException() }
 
     private fun polled(path: MenuPath, filter: Filter?): Flow<ListEvent> = flow {
-        var items = items(path, filter)
-        emit(ListEvent.Snapshot(items))
         val rounds = when {
             !live.has(path) -> 2
             live.watched(path) -> 5
             else -> 1
         }
-        val timer = flow {
-            while (true) {
-                delay(pollInterval * rounds)
-                emit(Unit)
-            }
-        }
-        merge(timer, edits, if (live.has(path)) live.changes(path) else emptyFlow()).conflate().collect {
-            val fresh = items(path, filter)
-            if (fresh != items) emit(ListEvent.Snapshot(fresh))
-            items = fresh
-        }
+        emitAll(polled(pollInterval * rounds, merge(edits, if (live.has(path)) live.changes(path) else emptyFlow())) { items(path, filter) })
     }
 
     override suspend fun get(path: MenuPath, id: String?, properties: List<String>?): Item? = deviceErrors {
@@ -412,10 +403,11 @@ class OpenWrtSession(
             }
         }
 
+        // the count changes with an edit of this session and seldom from elsewhere
         override val actions: Flow<Int> = flow {
             while (true) {
                 emit(deviceErrors { uci.changes().size })
-                delay(pollInterval)
+                withTimeoutOrNull(pollInterval * PENDING_ROUNDS) { edits.first() }
             }
         }
 
@@ -452,6 +444,7 @@ class OpenWrtSession(
         const val TYPE = ".type"
 
         const val WINDOWS = 2
+        const val PENDING_ROUNDS = 10
         val packList = ListSerializer(Pack.serializer())
         val keptJson = Json { ignoreUnknownKeys = true }
     }

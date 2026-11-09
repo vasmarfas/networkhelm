@@ -9,7 +9,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
@@ -22,6 +21,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.app.BarItem
 import com.vasmarfas.networkhelm.app.LocalSettings
@@ -82,13 +82,13 @@ fun ResourceBar(tab: RouterTab) {
     val received = remember(tab) { Series("Rx", palette.success, Ring(60)) }
     val sent = remember(tab) { Series("Tx", palette.accent, Ring(60)) }
     val resourced = items.any { it in FromResource || openWrt && it == BarItem.Clock }
-    val resource by remember(tab, resourced) { if (resourced) resourceOf(tab, openWrt, cpu, memory) else emptyFlow() }.collectAsState(null)
+    val resource by remember(tab, resourced) { if (resourced) resourceOf(tab, openWrt, cpu, memory) else emptyFlow() }.collectAsStateWithLifecycle(null)
     val clocked = !openWrt && BarItem.Clock in items
-    val clock by remember(tab, clocked) { if (clocked) clockOf(tab) else emptyFlow() }.collectAsState(null)
+    val clock by remember(tab, clocked) { if (clocked) clockOf(tab) else emptyFlow() }.collectAsStateWithLifecycle(null)
     val trafficked = BarItem.Traffic in items
     val traffic by remember(tab, trafficked, settings.barInterface) {
         if (trafficked) trafficOf(tab, settings.barInterface.trim(), received, sent) else emptyFlow()
-    }.collectAsState(null)
+    }.collectAsStateWithLifecycle(null)
     DisableSelection {
         BarLine(Modifier.fillMaxWidth().height(Theme.metrics.row + 4.dp).background(palette.raised).padding(horizontal = 10.dp), if (compact) 10.dp else 14.dp) {
             for (item in items) {

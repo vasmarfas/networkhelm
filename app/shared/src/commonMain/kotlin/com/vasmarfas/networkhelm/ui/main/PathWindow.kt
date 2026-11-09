@@ -61,6 +61,9 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import com.composables.icons.lucide.ArrowDown
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Check
@@ -127,6 +130,7 @@ import com.vasmarfas.networkhelm.session.atMostEvery
 import com.vasmarfas.networkhelm.session.onTheSecond
 import com.vasmarfas.networkhelm.session.rounds
 import com.vasmarfas.networkhelm.session.rows
+import com.vasmarfas.networkhelm.session.rowsSoFar
 import com.vasmarfas.networkhelm.ui.chart.bitRate
 import com.vasmarfas.networkhelm.ui.chart.byteCount
 import com.vasmarfas.networkhelm.ui.chart.display
@@ -182,6 +186,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -223,6 +228,7 @@ import networkhelm.app.shared.generated.resources.list_find_previous
 import networkhelm.app.shared.generated.resources.list_items
 import networkhelm.app.shared.generated.resources.list_items_of
 import networkhelm.app.shared.generated.resources.list_live
+import networkhelm.app.shared.generated.resources.list_loading_all
 import networkhelm.app.shared.generated.resources.list_loading_rows
 import networkhelm.app.shared.generated.resources.list_move_down
 import networkhelm.app.shared.generated.resources.list_move_up
@@ -446,12 +452,12 @@ private fun ListView(
     val recall = tab.recall
     val recalled = "$name|$filter"
     val arrived = remember(session, path, refresh) {
-        session.watch(path, filter).onEach { reading = it as? ListEvent.Progress }.rows().drop(1).atMostEvery(150.milliseconds).catch {
+        session.watch(path, filter).onEach { reading = it as? ListEvent.Progress }.rowsSoFar().drop(1).atMostEvery(150.milliseconds).flowOn(Dispatchers.Default).catch {
             reading = null
             (it as? DeviceException)?.let { e -> problem = e.message }
         }
     }.collectAsState(recall?.rows?.get(recalled)).value
-    if (arrived != null && arrived.size <= RECALLED_ROWS) SideEffect { recall?.rows?.set(recalled, arrived) }
+    if (arrived != null && reading == null && arrived.size <= RECALLED_ROWS) SideEffect { recall?.rows?.set(recalled, arrived) }
     val rows = arrived.orEmpty().heldWhile(paused)
     val saved = remember(name) { tables[name] }
     val state = remember(name) {
@@ -490,18 +496,20 @@ private fun ListView(
     var pointed by remember { mutableStateOf<Pair<String, String>?>(null) }
     val join = pack?.join
     val joined = remember(session, join) {
-        if (join == null) flowOf(emptyList()) else session.watch(MenuPath.parse(join)).rows().atMostEvery(150.milliseconds).catch { }
+        if (join == null) flowOf(emptyList()) else session.watch(MenuPath.parse(join)).rows().atMostEvery(150.milliseconds).flowOn(Dispatchers.Default).catch { }
     }.collectAsState(emptyList()).value.heldWhile(paused)
     val monitor = pack?.monitor
+    // the counters and the monitor of a window stop while the app is out of sight
+    val onScreen = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.STARTED)
     val names = if (monitor == null) emptyList() else rows.mapNotNull { it["name"] }
     var monitored by remember(path) { mutableStateOf<Map<String, Map<String, String>>>(emptyMap()) }
-    LaunchedEffect(session, monitor, names, up) {
+    LaunchedEffect(session, monitor, names, up, paused, onScreen) {
         val argument = monitor?.argument
-        if (monitor == null || argument == null || names.isEmpty() || !up) return@LaunchedEffect
+        if (monitor == null || argument == null || names.isEmpty() || !up || paused || !onScreen) return@LaunchedEffect
         val command = MenuPath.parse(monitor.command)
         try {
             session.run(command.parent ?: MenuPath.Root, command.segments.last(), mapOf(argument to names.joinToString(",")))
-                .rounds { it["name"] }.onTheSecond().collect { if (!paused) monitored = it }
+                .rounds { it["name"] }.onTheSecond().collect { monitored = it }
         } catch (e: DeviceException) {
             problem = e.message
         }
@@ -510,10 +518,13 @@ private fun ListView(
     val counters = (visible.map { halfOf[it] ?: it } + pack?.totals.orEmpty()).distinct()
         .filter { it in pack?.readonly.orEmpty() && moving.matches(it) && (monitor == null || it !in monitored.values.firstOrNull().orEmpty()) }
     var live by remember(path) { mutableStateOf<Map<String, Map<String, String>>>(emptyMap()) }
-    LaunchedEffect(session, path, counters, up) {
-        if (counters.isEmpty() || !up) return@LaunchedEffect
+    // the counters print every row each second: a big table gets its values with its next read
+    val big = arrived.orEmpty().size > RECALLED_ROWS
+    LaunchedEffect(session, path, counters, up, paused, big, onScreen) {
+        if (big) live = emptyMap()
+        if (counters.isEmpty() || !up || paused || big || !onScreen) return@LaunchedEffect
         try {
-            session.counters(path, counters, filter).onTheSecond().collect { if (!paused) live = it }
+            session.counters(path, counters, filter).onTheSecond().collect { live = it }
         } catch (e: DeviceException) {
             problem = e.message
         }
@@ -525,6 +536,7 @@ private fun ListView(
     val text = query.text.toString().trim()
     fun merged(): List<Item> {
         val byName = joined.associateBy { it["name"] }
+        val searched = (visible + "comment").map { column -> column to schema.argument(column)?.labels }
         return rows.map { row ->
             val name = row["name"] ?: row[".name"]
             val extra = name?.let { byName[it]?.values }.orEmpty()
@@ -533,17 +545,16 @@ private fun ListView(
         }.filter { row ->
             (quick == null || picked == null || row[quick]?.split(',')?.contains(picked) == true) &&
                 conditions.all { it.matches(row[it.column]) } &&
-                (text.isEmpty() || (visible + "comment").any { column ->
-                    row[column]?.let { value -> value.contains(text, ignoreCase = true) || schema.argument(column)?.labels?.get(value)?.contains(text, ignoreCase = true) == true } == true
+                (text.isEmpty() || searched.any { (column, labels) ->
+                    row[column]?.let { value -> value.contains(text, ignoreCase = true) || labels?.get(value)?.contains(text, ignoreCase = true) == true } == true
                 })
         }
     }
-    val filtered = if (rows.size <= 1000) {
-        remember(rows, joined, live, monitored, picked, conditions, text, visible) { merged() }
-    } else {
-        produceState(rows, rows, joined, live, monitored, picked, conditions, text, visible) { value = withContext(Dispatchers.Default) { merged() } }.value
+    val shown = when {
+        pairs.isEmpty() && joined.isEmpty() && live.isEmpty() && monitored.isEmpty() && picked == null && conditions.isEmpty() && text.isEmpty() -> rows
+        rows.size <= 1000 -> remember(rows, joined, live, monitored, picked, conditions, text, visible) { merged() }
+        else -> produceState(rows, rows, joined, live, monitored, picked, conditions, text, visible) { value = withContext(Dispatchers.Default) { merged() } }.value
     }
-    val shown = if (pairs.isEmpty() && joined.isEmpty() && live.isEmpty() && monitored.isEmpty() && picked == null && conditions.isEmpty() && text.isEmpty()) rows else filtered
 
     fun findStep(direction: Int) {
         if (shown.isEmpty()) return
@@ -610,7 +621,7 @@ private fun ListView(
     val grouping = pack?.category?.takeIf { categories }
     val ordered = pack?.ordered == true || "move" in schema.commands
     val movable = canWrite && ordered && state.sort.isEmpty() && grouping == null && shown.size == rows.size
-    val places = remember(rows) { rows.withIndex().associate { (index, row) -> row.id to "$index" } }
+    val places = if (ordered) remember(rows) { rows.withIndex().associate { (index, row) -> row.id to "$index" } } else emptyMap()
     fun enable(on: Boolean) {
         val switch = switch ?: return
         act { for (id in state.selected) session.set(path, id, mapOf(switch.name to switch.word(if (switch.name == "disabled") !on else on))) }
@@ -700,7 +711,7 @@ private fun ListView(
             val search: @Composable (Modifier) -> Unit = { field ->
                 if (classic) finder(field)
                 if (quick != null) {
-                    val values = listOf(null) + rows.flatMap { it[quick]?.split(',').orEmpty() }.filter { it.isNotEmpty() }.distinct().sortedWith(naturalOrder)
+                    val values = remember(rows, quick) { listOf(null) + rows.flatMap { it[quick]?.split(',').orEmpty() }.filter { it.isNotEmpty() }.distinct().sortedWith(naturalOrder) }
                     Select(picked, values, { it ?: stringResource(Res.string.filter_all) }, { picked = it }, Modifier.padding(horizontal = 4.dp).width(130.dp).testTag("quick"))
                 }
                 if (!classic) finder(field)
@@ -855,7 +866,7 @@ private fun ListView(
                     val offered = if (state.selected.size == 1) (tools.filter { !it.global && filled(it) } + linked.filter { it.argument != null }).distinctBy { it.title to it.path } else emptyList()
                     for (link in offered) MenuLine(link.title, "") { pick { openLink(link) } }
                     if (offered.isNotEmpty()) MenuSeparator()
-                    if (commandsOf(chosenRows()).isNotEmpty()) {
+                    if ("add" in schema.commands && shown.any { it.id in state.selected && it["dynamic"] != "true" }) {
                         MenuLine(stringResource(Res.string.copy_command), "Ctrl+C") { pick(::copy) }
                         MenuLine(stringResource(Res.string.copy_script), "") { pick(::copyScript) }
                         MenuLine(stringResource(Res.string.copy_text), "Ctrl+Shift+C") { pick { copyRows(::rowsAsTabs) } }
@@ -894,6 +905,7 @@ private fun ListView(
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     val count = when {
+                        reading?.read == 0 -> reading?.let { pluralStringResource(Res.plurals.list_loading_all, it.total, it.total) }.orEmpty()
                         reading != null -> reading?.let { stringResource(Res.string.list_loading_rows, it.read, it.total) }.orEmpty()
                         arrived == null -> stringResource(if (problem == null) Res.string.window_loading else Res.string.list_not_loaded)
                         shown.size == rows.size -> pluralStringResource(Res.plurals.list_items, shown.size, shown.size)

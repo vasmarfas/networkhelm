@@ -125,10 +125,11 @@ class ApiConnection(
 
     private suspend fun readLoop() {
         val sentences = SentenceReader(stream::read)
+        val names = HashMap<String, String>()
         var cause: Throwable? = null
         try {
             while (true) {
-                val reply = parseReply(sentences.next()?.map(encoding::decode) ?: break)
+                val reply = parseReply(sentences.next()?.map(encoding::decode) ?: break, names)
                 heard++
                 val target = reply.tag?.let { tag -> stateLock.withLock { pending[tag] } }
                 if (target != null) {
