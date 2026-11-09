@@ -192,7 +192,8 @@ fun Application.gateway(
                 val wire = KtorWire(this) {
                     if (gateway.session(token) !== session) throw CancellationException("the gateway session has ended")
                 }
-                GatewayHost(wire, trust, connectRouterOs, connectOpenWrt, store(session), reach = reach).serve()
+                // the threads of the websocket serve every browser, the work of the routers goes elsewhere
+                withContext(Dispatchers.Default) { GatewayHost(wire, trust, connectRouterOs, connectOpenWrt, store(session), reach = reach).serve() }
             } finally {
                 expiry.cancel()
                 gateway.detach(session, job)

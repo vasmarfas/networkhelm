@@ -57,8 +57,16 @@ class Gateway private constructor(val home: File, val public: Boolean, val asksC
 
     private fun totpOf(account: Account) = account.totp?.takeIf { asksCode }?.let { Totp(fromBase32(it), now) }
 
-    // the console edits gateway.json behind a running gateway
+    private var checked = 0L
+    private var stamp = 0L
+
+    // the console edits gateway.json behind a running gateway; every message asks, so the file is read when it changes and every few seconds
     private fun refresh() {
+        val modified = File(home, "gateway.json").lastModified()
+        val time = now()
+        if (modified == stamp && time - checked < REREAD) return
+        stamp = modified
+        checked = time
         val changed = Gateway.account(home)?.takeIf { it != account } ?: return
         account = changed
         totp = totpOf(changed)
@@ -177,6 +185,7 @@ class Gateway private constructor(val home: File, val public: Boolean, val asksC
         private const val ATTEMPTS = 5
         private const val WINDOW = 10 * 60_000L
         private const val SESSION = 12 * 60 * 60_000L
+        private const val REREAD = 5_000L
         private val json = Json { prettyPrint = true }
 
         fun open(home: File, public: Boolean, code: Boolean, password: String?, announce: (String) -> Unit, now: () -> Long = System::currentTimeMillis, derive: (String, ByteArray) -> Master = Master::of): Gateway {
