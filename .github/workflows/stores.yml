@@ -1,0 +1,173 @@
+name: Stores
+run-name: Stores ${{ inputs.version_name }}
+
+# a version already released on GitHub goes to the stores later; the run starts from its tag, so every store gets the released commit
+on:
+  workflow_dispatch:
+    inputs:
+      version_name:
+        description: 'Released version, e.g. 1.0.1; start the run from its tag v<version> (Use workflow from → Tags)'
+        required: true
+      notes_en:
+        description: 'What''s new in English: Google Play, App Store, Mac App Store. \n is a line break, Google Play takes up to 500 characters'
+        required: true
+      notes_ru:
+        description: 'Что нового по-русски: Google Play, RuStore, App Store, Mac App Store. \n — перенос строки, Google Play берёт до 500 знаков'
+        required: true
+      submit_for_review:
+        description: 'Send to review in every store (unchecked = upload and leave the versions ready in the consoles)'
+        type: boolean
+        default: true
+      release_after_review:
+        description: 'Publish as soon as review passes: App Store, Mac App Store, RuStore (Google Play follows its managed publishing setting)'
+        type: boolean
+        default: true
+      play_track:
+        description: 'Google Play track'
+        type: choice
+        options: [production, beta, alpha, internal]
+        default: production
+      publish_google_play:
+        description: 'Google Play'
+        type: boolean
+        default: true
+      publish_rustore:
+        description: 'RuStore'
+        type: boolean
+        default: true
+      publish_app_store:
+        description: 'App Store (iOS)'
+        type: boolean
+        default: true
+      publish_mac_app_store:
+        description: 'Mac App Store'
+        type: boolean
+        default: true
+      build_microsoft_store:
+        description: 'Microsoft Store: the x64 and arm64 MSIX go to the run artifacts, Partner Center takes them by hand'
+        type: boolean
+        default: true
+      version_code:
+        description: 'Android versionCode and Apple build number (empty = from the version, as in Release)'
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stores-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  meta:
+    name: Store parameters
+    runs-on: ubuntu-latest
+    outputs:
+      version_name: ${{ steps.resolve.outputs.version_name }}
+      version_code: ${{ steps.resolve.outputs.version_code }}
+    steps:
+      - name: Check the tag
+        env:
+          VERSION: ${{ inputs.version_name }}
+        run: |
+          set -eu
+          if [ "$GITHUB_REF" != "refs/tags/v$VERSION" ]; then
+            echo "::error::Start the run from the tag v$VERSION (Use workflow from → Tags), not from $GITHUB_REF"
+            exit 1
+          fi
+
+      - name: Resolve
+        id: resolve
+        env:
+          INPUT_VERSION: ${{ inputs.version_name }}
+          INPUT_CODE: ${{ inputs.version_code }}
+        run: |
+          set -eu
+          derived=$(printf '%s' "$INPUT_VERSION" | awk '{
+            split($0, part, "-")
+            split(part[1], v, ".")
+            stage = 99
+            if (index($0, "-")) { stage = 0; if (match($0, /[0-9]+$/)) stage = substr($0, RSTART) }
+            print ((v[1] * 100 + v[2]) * 100 + v[3]) * 100 + stage
+          }')
+          {
+            echo "version_name=$INPUT_VERSION"
+            echo "version_code=${INPUT_CODE:-$derived}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Check release notes
+        if: inputs.publish_google_play
+        env:
+          NOTES_EN: ${{ inputs.notes_en }}
+          NOTES_RU: ${{ inputs.notes_ru }}
+        run: |
+          set -eu
+          for name in NOTES_EN NOTES_RU; do
+            length=$(printf '%b' "${!name}" | LC_ALL=C.UTF-8 wc -m)
+            if [ "$length" -gt 500 ]; then
+              echo "::error::$name is $length characters, Google Play takes up to 500"
+              exit 1
+            fi
+          done
+
+  android:
+    name: Android
+    needs: meta
+    if: ${{ inputs.publish_google_play || inputs.publish_rustore }}
+    uses: ./.github/workflows/deploy_android.yml
+    with:
+      version_name: ${{ needs.meta.outputs.version_name }}
+      version_code: ${{ needs.meta.outputs.version_code }}
+      notes_en: ${{ inputs.notes_en }}
+      notes_ru: ${{ inputs.notes_ru }}
+      publish_google_play: ${{ inputs.publish_google_play }}
+      play_track: ${{ inputs.play_track }}
+      play_status: completed
+      play_send_for_review: ${{ inputs.submit_for_review }}
+      publish_rustore: ${{ inputs.publish_rustore }}
+      rustore_artifact: apk
+      rustore_submit: ${{ inputs.submit_for_review }}
+      rustore_auto_publish: ${{ inputs.release_after_review }}
+    secrets: inherit
+
+  # Windows only for the MSIX and macOS only for the Mac App Store package; the installers of this run go nowhere
+  desktop:
+    name: Desktop
+    needs: meta
+    if: ${{ inputs.publish_mac_app_store || inputs.build_microsoft_store }}
+    uses: ./.github/workflows/deploy_desktop.yml
+    with:
+      version_name: ${{ needs.meta.outputs.version_name }}
+      version_code: ${{ needs.meta.outputs.version_code }}
+      build_windows: ${{ inputs.build_microsoft_store }}
+      build_linux: false
+      build_macos: ${{ inputs.publish_mac_app_store }}
+      publish_mac_app_store: ${{ inputs.publish_mac_app_store }}
+    secrets: inherit
+
+  ios:
+    name: iOS
+    needs: meta
+    if: ${{ inputs.publish_app_store }}
+    uses: ./.github/workflows/deploy_ios.yml
+    with:
+      version_name: ${{ needs.meta.outputs.version_name }}
+      version_code: ${{ needs.meta.outputs.version_code }}
+      upload_app_store: true
+    secrets: inherit
+
+  app_store:
+    name: App Store Connect
+    needs: [meta, desktop, ios]
+    if: ${{ !cancelled() && (needs.ios.outputs.uploaded == 'true' || needs.desktop.outputs.mac_app_store_uploaded == 'true') }}
+    uses: ./.github/workflows/app_store_review.yml
+    with:
+      version_name: ${{ needs.meta.outputs.version_name }}
+      version_code: ${{ needs.meta.outputs.version_code }}
+      platforms: ${{ needs.ios.outputs.uploaded == 'true' && 'IOS' || '' }} ${{ needs.desktop.outputs.mac_app_store_uploaded == 'true' && 'MAC_OS' || '' }}
+      notes_en: ${{ inputs.notes_en }}
+      notes_ru: ${{ inputs.notes_ru }}
+      release_after_review: ${{ inputs.release_after_review }}
+      submit_for_review: ${{ inputs.submit_for_review }}
+    secrets: inherit

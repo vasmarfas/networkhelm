@@ -1,0 +1,65 @@
+name: App Store Connect
+
+on:
+  workflow_call:
+    inputs:
+      version_name:
+        type: string
+        required: true
+      version_code:
+        type: string
+        required: true
+      platforms:
+        description: 'IOS, MAC_OS or both, separated by a space'
+        type: string
+        required: true
+      notes_en:
+        type: string
+        required: true
+      notes_ru:
+        type: string
+        required: true
+      release_after_review:
+        type: boolean
+        required: false
+        default: true
+      submit_for_review:
+        type: boolean
+        required: false
+        default: true
+
+permissions:
+  contents: read
+
+jobs:
+  # the uploads only add builds to App Store Connect, the version, its notes and the review request are made here
+  review:
+    name: Versions and review
+    runs-on: ubuntu-latest
+    timeout-minutes: 200
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/release
+
+      - name: Install PyJWT
+        run: |
+          python3 -m venv "$RUNNER_TEMP/venv"
+          "$RUNNER_TEMP/venv/bin/pip" install --quiet 'pyjwt[crypto]'
+
+      - name: Prepare the versions
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+          BUNDLE_ID: com.vasmarfas.networkhelm
+          PLATFORMS: ${{ inputs.platforms }}
+          VERSION_NAME: ${{ inputs.version_name }}
+          BUILD_NUMBER: ${{ inputs.version_code }}
+          RELEASE_TYPE: ${{ inputs.release_after_review && 'AFTER_APPROVAL' || 'MANUAL' }}
+          SUBMIT: ${{ inputs.submit_for_review }}
+          RAW_NOTES_EN: ${{ inputs.notes_en }}
+          RAW_NOTES_RU: ${{ inputs.notes_ru }}
+        run: |
+          NOTES_EN=$(printf '%b' "$RAW_NOTES_EN") NOTES_RU=$(printf '%b' "$RAW_NOTES_RU") \
+            "$RUNNER_TEMP/venv/bin/python" tools/release/app_store_review.py
