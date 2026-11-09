@@ -52,12 +52,13 @@ private const val LINES_RETRIES = 3
 private const val PROBES = 6
 private const val QUERY_LEAST_MILLIS = 100L
 private const val LOG_LEAST = 1_000
+private const val MIRROR_TRIES = 3
 
 internal class NativeWindows(
     private val side: NativeSide?,
     private val port: suspend () -> Int?,
     private val every: Duration,
-    time: TimeSource = TimeSource.Monotonic,
+    private val time: TimeSource = TimeSource.Monotonic,
 ) {
     @Volatile
     private var specs: Map<String, PackNative> = emptyMap()
@@ -262,15 +263,30 @@ internal class NativeWindows(
 
     suspend fun count(spec: PackNative): Int = read(spec, null).orEmpty().size
 
+    // a console menu read from its window of the WinBox port as a subscription gets it, page by page, or by getall where the router
+    // does not send it that way; a read the table changed under is made again, and null is a channel that cannot give it now
+    suspend fun mirrored(spec: PackNative, expected: Int, page: suspend (List<Item>) -> Unit): List<Item>? {
+        repeat(MIRROR_TRIES) {
+            try {
+                return counted(spec) { objects -> objects.dump(spec, expected, page) ?: objects.read(spec, null) }
+            } catch (e: DeviceException) {
+                if (e.category != ErrorCategory.MissingItem) return null
+            }
+        }
+        return null
+    }
+
     suspend fun item(spec: PackNative, id: String?): Item? = read(spec, null).orEmpty().firstOrNull { it.id == id }
 
+    // a read takes at most a tenth of the time, as a list of the console does
     fun list(spec: PackNative): Flow<ListEvent> = flow {
         var shown: List<Item>? = null
         while (true) {
+            val started = time.markNow()
             val items = read(spec, null).orEmpty()
             if (items != shown) emit(ListEvent.Snapshot(items))
             shown = items
-            delay(every)
+            delay(maxOf(every, started.elapsedNow() * 9))
         }
     }
 

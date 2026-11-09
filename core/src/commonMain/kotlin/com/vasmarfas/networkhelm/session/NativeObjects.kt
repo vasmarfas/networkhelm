@@ -19,6 +19,9 @@ data class RouterFacts(
 interface NativeObjects {
     suspend fun read(spec: PackNative, limit: Int? = null): List<Item>?
 
+    // the table as the router sends it to a subscription, a page at a time as the pages come; null where the router does not send it that way
+    suspend fun dump(spec: PackNative, expected: Int, page: suspend (List<Item>) -> Unit): List<Item>? = null
+
     suspend fun facts(): RouterFacts? = null
 
     // whether the window of the handler is on the router: its read answers, or is refused in a way that keeps the window

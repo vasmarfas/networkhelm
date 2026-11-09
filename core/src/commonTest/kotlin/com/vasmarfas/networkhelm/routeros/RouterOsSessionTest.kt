@@ -189,6 +189,25 @@ class RouterOsSessionTest {
     }
 
     @Test
+    fun aWatchOfOneElementAsksNothingAboutTheEventsOfOthers() = runTest {
+        val router = FakeRouterStream()
+        val events = Channel<ListEvent>(Channel.UNLIMITED)
+        val path = MenuPath.parse("ip/firewall/address-list")
+        backgroundScope.launch { session(router, backgroundScope).watch(path, Filter.Equals(".id", "*1")).collect { events.send(it) } }
+        val listen = router.expect("/ip/firewall/address-list/listen")
+        val print = router.expect("/ip/firewall/address-list/print", "?.id=*1")
+        router.reply("!re", "=.id=*1", "=list=blocked", ".tag=$print")
+        router.reply("!done", ".tag=$print")
+        assertIs<ListEvent.Snapshot>(events.receive())
+        router.reply("!re", "=.id=*2", "=list=allowed", ".tag=$listen")
+        router.reply("!re", "=.id=*1", "=list=allowed", ".tag=$listen")
+        val check = router.expect("/ip/firewall/address-list/print", "?.id=*1", "?.id=*1")
+        router.reply("!re", "=.id=*1", "=list=allowed", ".tag=$check")
+        router.reply("!done", ".tag=$check")
+        assertEquals(Item("*1", mapOf("list" to "allowed")), assertIs<ListEvent.Upsert>(events.receive()).item)
+    }
+
+    @Test
     fun setWritesValuesThenUnsetsEachNull() = runTest {
         val router = FakeRouterStream()
         val session = session(router, backgroundScope)

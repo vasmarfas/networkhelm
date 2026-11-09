@@ -115,6 +115,8 @@ data class PackNative(
     val query: PackQuery? = null,
     // the router calls the table a log: its lines are read from the first and then those added after the last one
     val log: Boolean = false,
+    // the table stands in for a menu of the console, so a read the router broke off between two pages is no read of it
+    val whole: Boolean = false,
 )
 
 // a query or an action window of the router: the commands that start, read and end it, and the fields of its request; the fields of the result are those of the PackNative
@@ -325,8 +327,13 @@ fun parsePack(text: String): Pack = packJson.decodeFromString(Pack.serializer(),
 
 fun parseMenu(text: String): Menu = packJson.decodeFromString(Menu.serializer(), text)
 
-fun bundledPacks(): Map<String, Pack> = bundledPackSources.mapValues { (_, text) -> parsePack(text) }
+// half a megabyte of JSON, parsed once: a pack and a menu are never changed after they are read
+private val parsedPacks: Map<String, Pack> by lazy { bundledPackSources.mapValues { (_, text) -> parsePack(text) } }
 
-fun bundledMenu(platform: Platform = Platform.RouterOs): Menu = bundledMenuSources.map(::parseMenu).single { it.platform == platform.packName }
+private val parsedMenus: List<Menu> by lazy { bundledMenuSources.map(::parseMenu) }
+
+fun bundledPacks(): Map<String, Pack> = parsedPacks
+
+fun bundledMenu(platform: Platform = Platform.RouterOs): Menu = parsedMenus.single { it.platform == platform.packName }
 
 val Platform.packName: String get() = name.lowercase()

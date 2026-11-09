@@ -9,6 +9,7 @@ import com.vasmarfas.networkhelm.packs.PackNativeField
 import com.vasmarfas.networkhelm.packs.PackNativeRef
 import com.vasmarfas.networkhelm.session.RouterFacts
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
@@ -21,8 +22,10 @@ private const val GET_ALL = 0xFE0004L
 private const val GET_SINGLETON = 0xFE000DL
 private const val DEVICES = 1L
 private const val RESOURCES = 44L
+private const val SUBSCRIBE = 0xFE0012L
+private const val UNSUBSCRIBE = 0xFE0013L
 
-private class ControllerRouter(private val pages: Map<Long, List<List<M2Message>>>, private val failure: Long? = null, private val holders: Map<Long, M2Message> = emptyMap()) {
+private class ControllerRouter(private val pages: Map<Long, List<List<M2Message>>>, private val failure: Long? = null, private val holders: Map<Long, M2Message> = emptyMap(), private val gone: Long? = null) {
     val asked = ArrayList<M2Message>()
 
     suspend fun FakeRouter.handle(message: M2Message) {
@@ -33,9 +36,38 @@ private class ControllerRouter(private val pages: Map<Long, List<List<M2Message>
         val handler = checkNotNull(message.numbers(M2Key.To)).last()
         if (command == GET_SINGLETON) return reply(message, *holders.getValue(handler).fields.map { it.key to it.value }.toTypedArray())
         val cursor = message.number(0xFE0003) ?: 0
+        if (cursor == gone) return reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0004))
         val page = pages.getValue(handler).getOrNull(cursor.toInt()) ?: return reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0004))
         val more = if (cursor + 1 < pages.getValue(handler).size) arrayOf(0xFE0003 to M2Value.U32(cursor + 1)) else emptyArray()
         reply(message, 0xFE0002 to M2Value.Messages(page), *more)
+    }
+}
+
+// a window that gives its first state to a subscription two records a message, the first [dumped] of them and then the removals,
+// and reads by getall from the record the cursor names
+private class SubscribedRouter(
+    private val records: List<M2Message>,
+    private val dumped: Int = records.size,
+    private val gone: List<Long> = emptyList(),
+    private val first: Boolean = true,
+) {
+    val asked = ArrayList<M2Message>()
+
+    suspend fun FakeRouter.handle(message: M2Message) {
+        asked += message
+        when (message.number(M2Key.Command)) {
+            SUBSCRIBE -> if (first) {
+                val target = M2Key.To to M2Value.U32s(longArrayOf(0, checkNotNull(message.numbers(M2Key.From))[1]))
+                val removals = gone.map { M2Message.of(0xFE0001 to M2Value.U8(it.toInt()), 0xFE0013 to M2Value.U8(1)) }
+                (records.take(dumped) + removals).chunked(2).forEach { send(M2Message.of(target, M2Key.Command to M2Value.U32(0xFE000B), 0xFE0002 to M2Value.Messages(it))) }
+            }
+            GET_ALL -> {
+                val from = message.number(0xFE0003)
+                val rest = records.filter { from == null || checkNotNull(it.number(0xFE0001)) >= from }
+                val more = rest.getOrNull(2)?.let { arrayOf(0xFE0003 to M2Value.U32(checkNotNull(it.number(0xFE0001)))) } ?: emptyArray()
+                reply(message, 0xFE0002 to M2Value.Messages(rest.take(2)), *more)
+            }
+        }
     }
 }
 
@@ -256,6 +288,110 @@ class NativeObjectModelTest {
             }
         }
     }
+
+    @Test
+    fun aTableThatStandsInForAMenuIsNotTakenWholeWhenTheRecordOfTheCursorWent() {
+        val router = ControllerRouter(mapOf(DEVICES to listOf(listOf(device(1, "a")), listOf(device(2, "b")))), gone = 1)
+        val spec = PackNative(listOf(167, DEVICES), listOf(PackNativeField("identity", 0x2009, "string")))
+        read(router, spec) { items -> assertEquals(listOf("a"), items.map { it["identity"] }) }
+        runTest {
+            val (client, server) = pipe()
+            val fake = FakeRouter(this, server, "admin", "secret") { with(router) { handle(it) } }
+            val connection = NativeConnection.open(client, "admin", "secret", this)
+            try {
+                assertEquals(ErrorCategory.MissingItem, assertFailsWith<DeviceException> { NativeObjectModel(connection).read(spec.copy(whole = true)) }.category)
+            } finally {
+                connection.close()
+                fake.close()
+            }
+        }
+    }
+
+    private fun dumped(router: SubscribedRouter, expected: Int, block: suspend CoroutineScope.(List<Item>?, List<List<Item>>) -> Unit) = runTest {
+        val (client, server) = pipe()
+        val fake = FakeRouter(this, server, "admin", "secret") { with(router) { handle(it) } }
+        val connection = NativeConnection.open(client, "admin", "secret", this)
+        try {
+            val pages = ArrayList<List<Item>>()
+            val spec = PackNative(listOf(167, DEVICES), listOf(PackNativeField("identity", 0x2009, "string")))
+            val items = withTimeout(30_000) { NativeObjectModel(connection).dump(spec, expected) { pages += it } }
+            block(items, pages)
+        } finally {
+            connection.close()
+            fake.close()
+        }
+    }
+
+    private fun commands(router: SubscribedRouter) = router.asked.map { it.number(M2Key.Command) }
+
+    @Test
+    fun aSubscriptionGivesTheTableInPagesAndAPageOfGetallFromTheLastIdEndsIt() {
+        val router = SubscribedRouter((1L..5L).map { device(it, "d$it") })
+        dumped(router, 5) { items, pages ->
+            assertEquals((1..5).map { "d$it" }, items?.map { it["identity"] })
+            assertEquals(listOf(2, 2, 1), pages.map { it.size })
+            assertEquals(listOf(SUBSCRIBE, UNSUBSCRIBE, GET_ALL), commands(router))
+            assertEquals(5L, router.asked.last().number(0xFE0003))
+        }
+    }
+
+    @Test
+    fun theRecordsARouterLeftOutOfTheSubscriptionAreReadByGetall() {
+        val router = SubscribedRouter((1L..5L).map { device(it, "d$it") }, dumped = 3)
+        dumped(router, 5) { items, pages ->
+            assertEquals((1..5).map { "d$it" }, items?.map { it["identity"] })
+            assertEquals(listOf(2, 1, 2), pages.map { it.size })
+        }
+    }
+
+    @Test
+    fun aRecordRemovedWhileTheSubscriptionGivesTheTableIsNotInIt() {
+        val router = SubscribedRouter((1L..4L).map { device(it, "d$it") }, gone = listOf(2))
+        dumped(router, 5) { items, _ -> assertEquals(listOf("d1", "d3", "d4"), items?.map { it["identity"] }) }
+    }
+
+    @Test
+    fun aRouterThatSendsNoFirstStateLeavesTheTableToGetall() {
+        val router = SubscribedRouter((1L..3L).map { device(it, "d$it") }, first = false)
+        dumped(router, 3) { items, pages ->
+            assertEquals(null, items)
+            assertEquals(emptyList(), pages)
+            withTimeout(5_000) { while (UNSUBSCRIBE !in commands(router)) delay(10) }
+            assertEquals(listOf(SUBSCRIBE, UNSUBSCRIBE), commands(router))
+        }
+    }
+
+    @Test
+    fun aTupleAmongTheShapesOfAValueIsThereWhenItsPartsAre() = read(
+        ControllerRouter(
+            mapOf(
+                RESOURCES to listOf(
+                    listOf(
+                        M2Message.of(0xFE0001 to M2Value.U8(1), 5 to M2Value.U32(0x0909_090A)),
+                        M2Message.of(0xFE0001 to M2Value.U8(2), 6 to M2Value.Text("ns1.example.")),
+                        M2Message.of(0xFE0001 to M2Value.U8(3), 9 to M2Value.U8(10), 10 to M2Value.Text("mail.example.")),
+                        M2Message.of(0xFE0001 to M2Value.U8(4)),
+                    ),
+                ),
+            ),
+        ),
+        PackNative(
+            listOf(167, RESOURCES),
+            listOf(
+                PackNativeField(
+                    "data", 5, "union",
+                    members = listOf(
+                        PackNativeField("data", 5, "ipaddr", letter = "u"),
+                        PackNativeField("data", 6, "string", letter = "s"),
+                        PackNativeField(
+                            "data", NATIVE_NO_KEY, "tuple",
+                            parts = listOf(PackNativeField("data", 9, "number", letter = "u"), PackNativeField("data", 10, "string", letter = "s")),
+                        ),
+                    ),
+                ),
+            ),
+        ),
+    ) { items -> assertEquals(listOf("10.9.9.9", "ns1.example.", "10 mail.example.", null), items.map { it["data"] }) }
 
     @Test
     fun theAnswerThatThereAreNoMoreObjectsEndsTheList() = read(

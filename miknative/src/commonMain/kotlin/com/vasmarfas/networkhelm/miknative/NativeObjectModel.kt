@@ -19,9 +19,12 @@ import com.vasmarfas.networkhelm.session.NativeSide
 import com.vasmarfas.networkhelm.session.RouterFacts
 import com.vasmarfas.networkhelm.session.keepsWindow
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -46,6 +49,15 @@ private const val REMOVE = 0xFE0006L
 private const val MOVE = 0xFE0007L
 private const val BEFORE = 0xFE0005
 private const val PAGES = 2_000
+private const val SUBSCRIBE = 0xFE0012L
+private const val UNSUBSCRIBE = 0xFE0013L
+private const val CREDIT = 0xFE0017L
+private const val GONE = 0xFE0013
+private const val CREDITS = 0xFF0012
+private const val FIRST_STATE = 0xFF0017
+// a router on a slow link closes the channel when it runs 20 000 records ahead of it; 4 000 keep a fast one as busy
+private const val DUMP_CREDITS = 4_000L
+private const val QUIET_GAPS = 5
 private const val MAC_BYTES = 6
 internal const val ADDRESS_V4 = 0xFEFF20
 internal const val ADDRESS_V6 = 0xFEFF21
@@ -62,6 +74,8 @@ private val NAMES_FRESH = 30.seconds
 private val FACT_WAIT = 3.seconds
 private val PROBE_WAIT = 4.seconds
 private val LOG_WAIT = 300.milliseconds
+private val DUMP_FIRST = 2.seconds
+private val DUMP_QUIET = 200.milliseconds
 private val SYSTEM_INFO = listOf(13L, 4L)
 private val QUICK_SET = listOf(120L)
 private const val INFO_COMMAND = 7
@@ -79,9 +93,71 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
     private val kept = HashMap<PackNativeRef, Triple<TimeMark, Map<Long, String>, Set<Long>>>()
 
     override suspend fun read(spec: PackNative, limit: Int?): List<Item>? {
-        val records = alone(spec.handler) { if (spec.single) listOf(single(spec.handler)) else records(spec.handler, limit) } ?: return null
+        val records = alone(spec.handler) { if (spec.single) listOf(single(spec.handler)) else records(spec.handler, limit, spec.whole) } ?: return null
         return items(spec, records)
     }
+
+    // the table as the router hands it to a subscription: page after page without a request for each, in the order of
+    // the ids and with no mark of the end; getall from the last id then reads whatever a pause of the router left out
+    override suspend fun dump(spec: PackNative, expected: Int, page: suspend (List<Item>) -> Unit): List<Item>? {
+        if (spec.single) return null
+        return alone(spec.handler) {
+            val items = LinkedHashMap<Long, Item>()
+            val source = connection.newSource()
+            val subscription = arrayOf(
+                FIRST_STATE to M2Value.Bool(true),
+                M2Key.Command to M2Value.U32(SUBSCRIBE),
+                FLAGS to M2Value.U32(GET_ALL_FLAGS),
+                CREDITS to M2Value.U32(DUMP_CREDITS),
+            )
+            var last: TimeMark? = null
+            try {
+                source.send(spec.handler, *subscription)
+                var credits = DUMP_CREDITS
+                var longest = Duration.ZERO
+                while (items.size < expected) {
+                    val wait = last?.let { maxOf(DUMP_QUIET, longest * QUIET_GAPS) } ?: DUMP_FIRST
+                    val message = withTimeoutOrNull(wait) { source.next() ?: throw DeviceException(ErrorCategory.ConnectionLost, "the channel closed during the read") } ?: break
+                    // a router that does not subscribe this window leaves it to getall
+                    message.refusal()?.let { if (last == null) return@alone null else throw it }
+                    val objects = message.messages(RECORDS).orEmpty()
+                    if (objects.isEmpty()) continue
+                    last?.let { longest = maxOf(longest, it.elapsedNow()) }
+                    last = TimeSource.Monotonic.markNow()
+                    // an event about a record the read already has brings the change of a moment later, the next read sees it
+                    val fresh = ArrayList<M2Message>(objects.size)
+                    for (record in objects) {
+                        val id = record.number(ELEMENT_ID) ?: continue
+                        if (record.number(GONE) == 1L) items.remove(id) else if (id !in items) fresh += record
+                    }
+                    credits -= objects.size
+                    if (credits < DUMP_CREDITS / 2) {
+                        source.send(spec.handler, M2Key.Command to M2Value.U32(CREDIT), CREDITS to M2Value.U32(DUMP_CREDITS - credits))
+                        credits = DUMP_CREDITS
+                    }
+                    if (fresh.isNotEmpty()) page(kept(spec, fresh, items))
+                }
+            } finally {
+                // the router matches a subscription by its content, so the same message with another command ends it
+                try {
+                    withContext(NonCancellable) {
+                        source.send(spec.handler, *subscription.map { if (it.first == M2Key.Command) M2Key.Command to M2Value.U32(UNSUBSCRIBE) else it }.toTypedArray())
+                    }
+                } catch (e: DeviceException) {
+                    if (e.category != ErrorCategory.ConnectionLost) throw e
+                } finally {
+                    source.close()
+                }
+            }
+            val end = items.keys.maxOrNull() ?: return@alone null
+            val tail = records(spec.handler, null, spec.whole, end).orEmpty().filter { (it.number(ELEMENT_ID) ?: end) > end }
+            if (tail.isNotEmpty()) page(kept(spec, tail, items))
+            items.values.toList()
+        }
+    }
+
+    private suspend fun kept(spec: PackNative, records: List<M2Message>, into: MutableMap<Long, Item>): List<Item> =
+        items(spec, records).also { made -> records.forEachIndexed { at, record -> record.number(ELEMENT_ID)?.let { into[it] = made[at] } } }
 
     private suspend fun items(spec: PackNative, records: List<M2Message>): List<Item> {
         val names = spec.fields.flatMap { it.shapes() }.mapNotNull { it.refers }.distinct().associateWith { ref -> named(ref, wanted(records, spec.fields, ref)) }
@@ -136,7 +212,7 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
     }
 
     private fun shaped(record: M2Message, members: List<PackNativeField>): PackNativeField? {
-        val present = members.filter { record.fieldOf(it.key, it.letter) != null }
+        val present = members.filter { record.holds(it) }
         return present.firstOrNull { member -> member.kind != "enm" || present.count { it.key == member.key } == 1 || record.numberOf(member.key)?.let { it in member.names } == true }
     }
 
@@ -397,15 +473,18 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
         }
     }
 
-    internal suspend fun records(handler: List<Long>, limit: Int? = null): List<M2Message>? {
+    // a cursor names the record a page starts with, so a read from one gives that record first
+    internal suspend fun records(handler: List<Long>, limit: Int? = null, whole: Boolean = false, from: Long? = null): List<M2Message>? {
         val source = connection.newSource()
         try {
             val records = ArrayList<M2Message>()
-            var cursor = emptyList<Pair<Int, M2Value>>()
+            var cursor: List<Pair<Int, M2Value>> = from?.let { listOf(CONTINUATION to M2Value.U32(it)) }.orEmpty()
             repeat(PAGES) {
                 val reply = source.exchange(handler, M2Value.U32(GET_ALL), FLAGS to M2Value.U32(GET_ALL_FLAGS), *cursor.toTypedArray())
                 val code = reply.number(M2Key.ErrorCode)?.takeIf { it != 0L }
                 if (code != null && code != NO_MORE) throw reply.refusal() ?: DeviceException(ErrorCategory.General, "the router refused the read (error 0x${code.toString(16)})")
+                // no more objects after a cursor: the record it names went between two pages, and the pages before it are not the whole table
+                if (whole && code == NO_MORE && cursor.isNotEmpty()) throw DeviceException(ErrorCategory.MissingItem, "the table [${handler.joinToString(",")}] changed between two pages of the read")
                 records += reply.messages(RECORDS).orEmpty()
                 if (limit != null && records.size > limit) return null
                 cursor = reply.fields.filter { it.key == CONTINUATION || it.key == CONTINUATION_RAW }.map { it.key to it.value }
@@ -450,6 +529,9 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
 
     private fun M2Message.numberOf(key: Int): Long? = number(key) ?: (this[OBJECT_REF] as? M2Value.Message)?.value?.number(key)
 
+    // a tuple has no key of its own: it is there when one of its parts is
+    private fun M2Message.holds(field: PackNativeField): Boolean = if (field.kind == "tuple") field.parts.any { holds(it) } else fieldOf(field.key, field.letter) != null
+
     private suspend fun named(ref: PackNativeRef, wanted: Set<Long>): Map<Long, String> {
         lock.withLock {
             kept[ref]?.takeIf { (read, names, asked) -> read.elapsedNow() < NAMES_FRESH && (names.keys + asked).containsAll(wanted) }?.let { return it.second }
@@ -465,8 +547,16 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
 
 // two fields of a record may share a key and differ in type; the letter of the id in the description says which one is meant
 private fun M2Message.valueOf(key: Int, letter: String?): M2Value? {
-    val same = fields.filter { it.key == key }
-    return (same.singleOrNull() ?: same.firstOrNull { letter != null && it.value.isOf(letter) } ?: same.firstOrNull())?.value
+    var first: M2Value? = null
+    var typed: M2Value? = null
+    var count = 0
+    for (field in fields) {
+        if (field.key != key) continue
+        count++
+        if (first == null) first = field.value
+        if (typed == null && letter != null && field.value.isOf(letter)) typed = field.value
+    }
+    return if (count == 1) first else typed ?: first
 }
 
 private fun M2Value.isOf(letter: String): Boolean = when (letter) {

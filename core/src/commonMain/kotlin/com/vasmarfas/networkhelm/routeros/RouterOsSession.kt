@@ -26,6 +26,7 @@ import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
 import com.vasmarfas.networkhelm.routeros.api.apiQuery
 import com.vasmarfas.networkhelm.routeros.api.call
+import com.vasmarfas.networkhelm.routeros.console.ConsoleClient
 import com.vasmarfas.networkhelm.routeros.schema.InspectSchema
 import com.vasmarfas.networkhelm.routeros.schema.MemorySchemaCache
 import com.vasmarfas.networkhelm.routeros.schema.PrintSchema
@@ -65,8 +66,10 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transformWhile
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeSource
 
@@ -83,6 +86,12 @@ class RouterOsSession(
 ) : DeviceSession {
 
     private val nativeWindows = NativeWindows(native, ::nativePort, pollInterval)
+
+    // the menus whose window of the WinBox port the console disagreed with, the fields each one was checked on,
+    // and those whose hidden rows the console was seen to hide
+    private val mirrorsRefused = MutableStateFlow(emptySet<String>())
+    private val mirrorsChecked = MutableStateFlow(emptyMap<String, Set<String>>())
+    private val mirrorsHiding = MutableStateFlow(emptySet<String>())
 
     private val inspect = if (capabilities.menuContents) {
         val mode = device.deviceMode.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" }
@@ -278,12 +287,15 @@ class RouterOsSession(
             }
             sent.await()
             val items = LinkedHashMap<String, Item>()
-            api.table(print(path, properties) + query) { read, total -> emit(ListEvent.Progress(read, total)) }.map(::item).forEach { items[it.id] = it }
+            rows(api, path, properties, query) { read, total, added -> emit(ListEvent.Progress(read, total, added.map(::item))) }.map(::item).forEach { items[it.id] = it }
             emit(ListEvent.Snapshot(items.values.toList()))
             try {
+                // a window of one element skips the events of the others without asking the router about each
+                val only = (filter as? Filter.Equals)?.takeIf { it.property == ".id" }?.value
                 for (event in updates) {
                     val id = event[".id"] ?: continue
                     when {
+                        only != null && id != only -> continue
                         event[".dead"] == "true" -> if (items.remove(id) != null) emit(ListEvent.Removed(id))
                         filter == null -> emit(upsert(items, item(event), event))
                         else -> {
@@ -301,13 +313,113 @@ class RouterOsSession(
                 while (true) {
                     delay(wait)
                     val asked = TimeSource.Monotonic.markNow()
-                    val fresh = api.call(print(path, properties) + query).rows.map(::item)
+                    val fresh = rows(api, path, properties, query) { _, _, _ -> }.map(::item)
                     wait = maxOf(least, asked.elapsedNow() * 9)
                     if (fresh != rows) emit(ListEvent.Snapshot(fresh))
                     rows = fresh
                 }
             }
         }
+
+    // a big table of a console is read as WinBox reads it, from its window of the WinBox port, once the console agrees with what the window gives
+    private suspend fun rows(
+        api: RouterOsLink,
+        path: MenuPath,
+        properties: List<String>?,
+        query: List<String>,
+        progress: suspend (Int, Int, List<Map<String, String>>) -> Unit,
+    ): List<Map<String, String>> {
+        val words = print(path, properties) + query
+        val menu = path.toString()
+        val mirror = nativeMirrors[menu]?.takeIf { client is ConsoleClient && properties == null && query.isEmpty() && menu !in mirrorsRefused.value }
+        return mirror?.let { mirrored(api, menu, it, words, progress) } ?: api.table(words) { read, total -> progress(read, total, emptyList()) }
+    }
+
+    // the rows go on as they come once the first ones agree with the console; the whole table is checked again for the fields they lacked
+    private suspend fun mirrored(
+        api: RouterOsLink,
+        menu: String,
+        mirror: NativeMirror,
+        words: List<String>,
+        progress: suspend (Int, Int, List<Map<String, String>>) -> Unit,
+    ): List<Map<String, String>>? {
+        if (!nativeWindows.usable()) return null
+        val total = try {
+            api.call(listOf(words.first(), "=count-only=")).done["ret"]?.toIntOrNull()
+        } catch (e: ApiTrapException) {
+            null
+        }
+        if (total == null || total <= MIRRORED_LEAST) return null
+        progress(0, total, emptyList())
+        val uptime = if (mirror.ages.isEmpty()) null else {
+            try {
+                nativeWindows.item(UPTIME, "#0")?.get("uptime")?.toLongOrNull()
+            } catch (e: DeviceException) {
+                null
+            } ?: return null
+        }
+        val read = ArrayList<Map<String, String>>()
+        val hidden = ArrayList<Map<String, String>>()
+        var passed = 0
+        var trusted = false
+        var told = TimeSource.Monotonic.markNow()
+        val items = nativeWindows.mirrored(mirror.spec, total) page@{ page ->
+            page.map { mirror.row(it, uptime) }.partition(mirror.shown).let { (rows, unseen) ->
+                read += rows
+                hidden += unseen
+            }
+            if (!trusted) {
+                if (read.isEmpty()) return@page
+                checked(api, menu, mirror, words, read, hidden) ?: throw DeviceException(ErrorCategory.Unsupported, "the window of $menu does not agree with the console")
+                trusted = true
+            } else if (told.elapsedNow() < PARTIAL_EVERY) return@page
+            progress(read.size, total, read.subList(passed, read.size).toList())
+            passed = read.size
+            told = TimeSource.Monotonic.markNow()
+        } ?: return null
+        val (rows, unseen) = items.map { mirror.row(it, uptime) }.partition(mirror.shown)
+        val known = checked(api, menu, mirror, words, rows, unseen) ?: return null
+        // a field only rows gone before the console printed them had is checked with the next read, and until then the rows go without it
+        return rows.map { row -> if (known.containsAll(row.keys)) row else row.filterKeys { it in known } }
+    }
+
+    // the console prints a sample of the rows the same, and none of a few of those the menu hides; the fields checked so far,
+    // or null where the console printed nothing or disagreed, and then the menu is left to the console for the session
+    private suspend fun checked(
+        api: RouterOsLink,
+        menu: String,
+        mirror: NativeMirror,
+        words: List<String>,
+        rows: List<Map<String, String>>,
+        hidden: List<Map<String, String>>,
+    ): Set<String>? {
+        suspend fun printed(ids: List<String>) = try {
+            api.call(words + "=from=${ids.joinToString(",")}").rows
+        } catch (e: ApiTrapException) {
+            null
+        }
+        // a row that went between the two reads fails the print, which is asked again in parts and then row by row
+        suspend fun sampled(ids: List<String>): List<Map<String, String>> =
+            if (ids.isEmpty()) emptyList() else printed(ids) ?: ids.chunked(SAMPLE_PART).flatMap { part -> printed(part) ?: part.flatMap { printed(listOf(it)).orEmpty() } }
+        val before = mirrorsChecked.value[menu]
+        val known = if (before != null && rows.all { before.containsAll(it.keys) }) before else {
+            val console = sampled(mirror.sample(rows))
+            if (console.isEmpty()) return null
+            if (!mirror.agrees(rows.associateBy { it.getValue(".id") }, console)) {
+                mirrorsRefused.update { it + menu }
+                return null
+            }
+            (before.orEmpty() + console.flatMapTo(HashSet()) { it.keys }).also { all -> mirrorsChecked.update { it + (menu to all) } }
+        }
+        if (hidden.isNotEmpty() && menu !in mirrorsHiding.value) {
+            if (sampled(mirror.unseen(hidden)).isNotEmpty()) {
+                mirrorsRefused.update { it + menu }
+                return null
+            }
+            mirrorsHiding.update { it + menu }
+        }
+        return known
+    }
 
     private inner class ApiSafeMode(private val scope: CoroutineScope?) : SafeMode {
         private val held = MutableStateFlow(false)
@@ -404,6 +516,12 @@ class RouterOsSession(
 
     private companion object {
         const val UI_PACKS = 15
+
+        // a smaller table the console reads at once in less time than the check of the mirror takes
+        const val MIRRORED_LEAST = 2_000
+        const val SAMPLE_PART = 10
+        // the rows read so far go on to the window at most this often, so a table of 50 000 rows is not rebuilt for each page
+        val PARTIAL_EVERY = 200.milliseconds
 
         // the line of the console of RouterOS 6 ends at 2 500 characters
         const val REMOVED_AT_ONCE = 200

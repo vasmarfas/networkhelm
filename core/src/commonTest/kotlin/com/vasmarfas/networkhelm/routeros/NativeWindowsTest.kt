@@ -443,4 +443,45 @@ class NativeWindowsTest {
         windows.close()
         assertTrue(objects.closed)
     }
+
+    @Test
+    fun aMenuTableThatChangedUnderItsReadIsReadAgainAndOneTheChannelCannotGiveIsNone() = runTest {
+        val changed = failure(ErrorCategory.MissingItem)
+        val again = Script(changed, rows(row("*1", "paired")))
+        assertEquals(listOf(row("*1", "paired")), native(Side(again)).mirrored(spec, 1) {})
+        assertEquals(2, again.reads)
+        val restless = Script(changed)
+        assertEquals(null, native(Side(restless)).mirrored(spec, 1) {})
+        assertEquals(3, restless.reads)
+        val refusing = Script(failure(ErrorCategory.General))
+        assertEquals(null, native(Side(refusing)).mirrored(spec, 1) {})
+        assertEquals(1, refusing.reads)
+    }
+
+    @Test
+    fun aMenuTableComesPageByPageFromTheSubscriptionAndByGetallWhereTheRouterSendsNone() = runTest {
+        val pages = ArrayList<List<Item>>()
+        val dumping = object : NativeObjects {
+            var reads = 0
+
+            override suspend fun read(spec: PackNative, limit: Int?): List<Item>? {
+                reads++
+                return listOf(row("*9", "read"))
+            }
+
+            override suspend fun dump(spec: PackNative, expected: Int, page: suspend (List<Item>) -> Unit): List<Item>? {
+                page(listOf(row("*1", "paired")))
+                page(listOf(row("*2", "lost")))
+                return listOf(row("*1", "paired"), row("*2", "lost"))
+            }
+
+            override fun close() = Unit
+        }
+        assertEquals(listOf(row("*1", "paired"), row("*2", "lost")), native(Side(dumping)).mirrored(spec, 2) { pages += it })
+        assertEquals(listOf(listOf(row("*1", "paired")), listOf(row("*2", "lost"))), pages)
+        assertEquals(0, dumping.reads)
+        val silent = Script(rows(row("*9", "read")))
+        assertEquals(listOf(row("*9", "read")), native(Side(silent)).mirrored(spec, 1) { pages += it })
+        assertEquals(1, silent.reads)
+    }
 }
