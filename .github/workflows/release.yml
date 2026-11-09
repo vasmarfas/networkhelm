@@ -13,6 +13,10 @@ on:
       notes_ru:
         description: 'Что нового по-русски: Google Play, RuStore, App Store, Mac App Store, GitHub. \n — перенос строки, Google Play берёт до 500 знаков'
         required: true
+      notes_github:
+        description: 'GitHub release notes in Markdown, \n is a line break (empty = the two texts above)'
+        required: false
+        default: ''
       github_only:
         description: 'GitHub only: nothing goes to the stores, the files go to the GitHub release alone'
         type: boolean
@@ -128,16 +132,22 @@ jobs:
             fi
           done
 
+      # the stores get the short texts for users, GitHub the full account of the changes when there is one
       - name: Compose GitHub release notes
         env:
           NOTES_EN: ${{ inputs.notes_en }}
           NOTES_RU: ${{ inputs.notes_ru }}
+          NOTES_GITHUB: ${{ inputs.notes_github }}
         run: |
           set -eu
-          {
-            printf '%b\n\n' "$NOTES_EN"
-            printf '%b\n' "$NOTES_RU"
-          } > notes.md
+          if [ -n "$NOTES_GITHUB" ]; then
+            printf '%b\n' "$NOTES_GITHUB" > notes.md
+          else
+            {
+              printf '%b\n\n' "$NOTES_EN"
+              printf '%b\n' "$NOTES_RU"
+            } > notes.md
+          fi
           cat notes.md
 
       - name: Upload release notes
