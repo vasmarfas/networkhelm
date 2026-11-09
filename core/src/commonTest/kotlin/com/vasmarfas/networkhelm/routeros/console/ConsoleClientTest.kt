@@ -659,18 +659,21 @@ class ConsoleClientTest {
         assertEquals(listOf("n"), consoles.single().answers)
     }
 
-    private fun table(size: Int, sent: MutableList<String> = mutableListOf(), refuses: String? = null): suspend (String) -> String = handler@{ command ->
+    // without free memory to tell, the router refuses to print the whole table
+    private fun table(size: Int, sent: MutableList<String> = mutableListOf(), refuses: String? = null, free: Long? = null): suspend (String) -> String = handler@{ command ->
         sent += command
         val pick = PICK.find(command)
+        fun printed(row: (Int) -> String, range: IntRange) = Regex(":serialize").findAll(command).joinToString("\n") { range.joinToString(",", "[", "]", transform = row) }
         when {
-            "count-only" in command -> "$size"
+            "/system/resource" in command -> if (free == null) "!bad command name resource (line 1 column 9)" else printed({ "{\"free-memory\":\"$free\"}" }, 0..0)
             refuses != null && refuses in command -> "!bad parameter $refuses (line 1 column 120)"
-            pick == null -> "!not in portions: $command"
-            else -> {
+            "count-only" in command -> "$size"
+            pick != null -> {
                 val (from, to) = pick.destructured
-                val rows = (from.toInt() until minOf(to.toInt(), size)).joinToString(",") { "{\".id\":\"*$it\"}" }
-                Regex(":serialize").findAll(command).joinToString("\n") { "[$rows]" }
+                printed({ "{\".id\":\"*$it\"}" }, from.toInt() until minOf(to.toInt(), size))
             }
+            free != null -> printed({ "{\".id\":\"*$it\"}" }, 0 until size)
+            else -> "!not in portions: $command"
         }
     }
 
@@ -683,16 +686,82 @@ class ConsoleClientTest {
         val progress = mutableListOf<Pair<Int, Int>>()
         val rows = client.table(addresses) { read, total -> progress += read to total }
         assertEquals((0 until 5_000).map { "*$it" }, rows.map { it[".id"] })
-        assertEquals(listOf(2_000 to 5_000, 4_000 to 5_000, 5_000 to 5_000), progress)
-        assertEquals("/ip/firewall/address-list/print count-only", sent.first())
-        assertTrue(sent.drop(1).all { "[:pick [/ip/firewall/address-list/find] " in it && " from=\$part" in it })
+        assertEquals(listOf(0 to 5_000, 2_000 to 5_000, 4_000 to 5_000, 5_000 to 5_000), progress)
+        assertEquals("/ip/firewall/address-list/print count-only detail show-sensitive stats-detail", sent.first())
+        assertTrue(sent.drop(1).filter { "address-list" in it }.all { "[:pick [/ip/firewall/address-list/find] " in it && " from=\$part" in it })
+    }
+
+    @Test
+    fun aBigTableTheRouterHasTheMemoryForIsReadAtOnceAfterItsFirstPortion() = runTest {
+        val sent = mutableListOf<String>()
+        val progress = mutableListOf<Pair<Int, Int>>()
+        val rows = client(handler = table(5_000, sent, free = 1_000_000_000)).table(addresses) { read, total -> progress += read to total }
+        assertEquals((0 until 5_000).map { "*$it" }, rows.map { it[".id"] })
+        assertEquals(1, sent.count { ":pick" in it })
+        assertTrue("[/ip/firewall/address-list/print as-value detail show-sensitive]" in sent.last())
+        assertEquals(listOf(0 to 5_000), progress)
+    }
+
+    @Test
+    fun aCountOfABigTableIsOneLine() = runTest {
+        val sent = mutableListOf<String>()
+        assertEquals(mapOf("ret" to "100000"), client(handler = table(100_000, sent)).call(addresses + "=count-only=").done)
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun aBigTableReadAtOnceIsReadAtOnceAgainWithoutAPortion() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(handler = table(5_000, sent, free = 1_000_000_000))
+        assertEquals(5_000, client.call(addresses).rows.size)
+        assertEquals(5_000, client.call(addresses).rows.size)
+        assertEquals(1, sent.count { ":pick" in it })
+    }
+
+    @Test
+    fun aBigTableIsReadWithoutThePlainViewOnceItsFirstPortionShowsThatDetailHasEveryColumnOfIt() = runTest {
+        val sent = mutableListOf<String>()
+        assertEquals(5_000, client(handler = table(5_000, sent)).call(addresses).rows.size)
+        val portions = sent.filter { ":pick" in it }
+        assertTrue("/ip/firewall/address-list/print as-value from=\$part" in portions.first())
+        assertTrue(portions.drop(1).none { "/ip/firewall/address-list/print as-value from=\$part" in it })
+    }
+
+    @Test
+    fun aPlainViewWithAColumnDetailLacksStaysInEveryPortion() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client { command ->
+            sent += command
+            val pick = PICK.find(command)
+            when {
+                "count-only" in command -> "5000"
+                pick == null -> "!bad command name resource (line 1 column 9)"
+                else -> {
+                    val (from, to) = pick.destructured
+                    Regex(":serialize").findAll(command).withIndex().joinToString("\n") { (view, _) ->
+                        (from.toInt() until minOf(to.toInt(), 5_000)).joinToString(",", "[", "]") { if (view == 0) "{\".id\":\"*$it\",\"total\":\"1\"}" else "{\".id\":\"*$it\"}" }
+                    }
+                }
+            }
+        }
+        val rows = client.call(addresses).rows
+        assertEquals(5_000, rows.size)
+        assertTrue(rows.all { it["total"] == "1" })
+        assertTrue(sent.filter { ":pick" in it }.all { "/ip/firewall/address-list/print as-value from=\$part" in it })
+    }
+
+    @Test
+    fun aBigTableTheRouterHasNoMemoryForGoesOnInPortions() = runTest {
+        val sent = mutableListOf<String>()
+        assertEquals(5_000, client(handler = table(5_000, sent, free = 1_000_000)).call(addresses).rows.size)
+        assertEquals(3, sent.count { ":pick" in it })
     }
 
     @Test
     fun theCallOfABigTableGoesInPortionsToo() = runTest {
         val sent = mutableListOf<String>()
         assertEquals(5_000, client(handler = table(5_000, sent)).call(addresses).rows.size)
-        assertEquals(4, sent.size)
+        assertEquals(5, sent.size)
     }
 
     @Test
@@ -706,7 +775,7 @@ class ConsoleClientTest {
     fun aQueryIsCountedAndFoundAsTheRowsAreAsked() = runTest {
         val sent = mutableListOf<String>()
         client(handler = table(3_000, sent)).call(addresses + "?list=rd-test")
-        assertEquals("/ip/firewall/address-list/print count-only where list=\"rd-test\"", sent.first())
+        assertEquals("/ip/firewall/address-list/print count-only detail show-sensitive stats-detail where list=\"rd-test\"", sent.first())
         assertTrue("[/ip/firewall/address-list/find where list=\"rd-test\"]" in sent[1])
     }
 
@@ -726,6 +795,26 @@ class ConsoleClientTest {
         testScheduler.advanceUntilIdle()
         assertFalse(sent.any { "identity" in it })
         portion.complete(Unit)
+        assertEquals(2_500, big.await().size)
+        assertEquals(1, other.await().size)
+    }
+
+    @Test
+    fun nothingIsTypedInOtherConsolesWhileATableIsReadAtOnce() = runTest {
+        val sent = mutableListOf<String>()
+        val whole = CompletableDeferred<Unit>()
+        val rows = table(2_500, free = 1_000_000_000)
+        val client = client(size = 2) { command ->
+            if ("address-list/print as-value detail show-sensitive]" in command) whole.await()
+            sent += command
+            if ("identity" in command) "{\"name\":\"CHR\"}" else rows(command)
+        }
+        val big = async { client.call(addresses).rows }
+        testScheduler.advanceUntilIdle()
+        val other = async { client.call(listOf("/system/identity/print", "?name=CHR")).rows }
+        testScheduler.advanceUntilIdle()
+        assertFalse(sent.any { "identity" in it })
+        whole.complete(Unit)
         assertEquals(2_500, big.await().size)
         assertEquals(1, other.await().size)
     }
@@ -777,12 +866,13 @@ class ConsoleClientTest {
     }
 
     @Test
-    fun aViewTheMenuRefusesIsLearntOnOnePortion() = runTest {
+    fun aViewTheMenuRefusesIsLearntOnTheCount() = runTest {
         val sent = mutableListOf<String>()
         val client = client(handler = table(5_000, sent, "show-sensitive"))
         assertEquals(5_000, client.call(addresses).rows.size)
-        assertEquals(1, sent.count { "show-sensitive" in it })
-        assertEquals(5, sent.size)
+        assertEquals(1, sent.count { "show-sensitive" in it && "address-list" in it })
+        assertTrue("count-only" in sent.first())
+        assertEquals(6, sent.size)
     }
 
     @Test
@@ -900,7 +990,7 @@ class ConsoleClientTest {
         val log = listOf("/log/print")
         val progress = mutableListOf<Int>()
         assertEquals(2, client.table(log) { read, _ -> progress += read }.size)
-        assertEquals(emptyList(), progress)
+        assertEquals(listOf(0), progress)
         assertEquals(4, sent.size)
         assertEquals(2, client.call(log).rows.size)
         assertEquals(5, sent.size)
@@ -976,7 +1066,7 @@ class ConsoleClientTest {
         }
         val progress = mutableListOf<Int>()
         assertEquals(3_000, client.table(listOf("/ip/address/print")) { read, _ -> progress += read }.size)
-        assertEquals(listOf(2_000, 3_000), progress)
+        assertEquals(listOf(0, 2_000, 3_000), progress)
         assertTrue(":foreach i in=[:pick [/ip address find] 2000 4000] do={" in sent.last())
     }
 

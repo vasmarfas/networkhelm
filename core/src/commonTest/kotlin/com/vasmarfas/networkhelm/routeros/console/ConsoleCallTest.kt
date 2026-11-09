@@ -52,6 +52,10 @@ class ConsoleCallTest {
         assertEquals(views("", " detail", " stats"), dns("show-sensitive", "stats-detail").line)
         assertEquals(views(" show-sensitive", " stats-detail"), dns("detail").line)
         assertEquals(views(""), dns("detail", "show-sensitive", "stats-detail", "stats").line)
+        assertEquals(views(" detail show-sensitive", " stats-detail"), dns("plain").line)
+        assertTrue(first.plain)
+        assertFalse(dns("plain").plain)
+        assertFalse(dns("detail").plain)
         assertEquals(first.line, call("/ip/dns/print", refused = mapOf("/ip/address" to setOf("detail"))).line)
     }
 
@@ -68,10 +72,14 @@ class ConsoleCallTest {
     }
 
     @Test
-    fun aCountIsPrintedAsItIs() {
+    fun aCountCarriesTheWordsOfTheViewsTheMenuHasNotRefused() {
         val call = call("/ip/address/print", "=count-only=", "?dynamic=true")
-        assertEquals("/ip/address/print count-only where dynamic=\"yes\"", call.line)
+        assertEquals("/ip/address/print count-only detail show-sensitive stats-detail where dynamic=\"yes\"", call.line)
         assertEquals(Reply.Count, call.reply)
+        assertEquals("/ip/address", call.menu)
+        assertEquals(setOf("detail", "show-sensitive", "stats-detail"), call.offered)
+        val learnt = call("/ip/address/print", "=count-only=", refused = mapOf("/ip/address" to setOf("show-sensitive", "stats-detail", "stats")))
+        assertEquals("/ip/address/print count-only detail", learnt.line)
     }
 
     @Test

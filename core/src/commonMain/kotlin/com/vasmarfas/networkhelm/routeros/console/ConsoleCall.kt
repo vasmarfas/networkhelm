@@ -19,6 +19,7 @@ internal class ConsoleCall(
     val proplist: List<String> = emptyList(),
     val quick: Boolean = false,
     val heavy: Boolean = false,
+    val plain: Boolean = false,
 )
 
 internal const val AS_VALUE = "bad parameter as-value"
@@ -29,6 +30,9 @@ private const val STATS = "stats"
 private const val PROPLIST = "proplist"
 internal const val FIND = "find"
 internal const val FROM = "from"
+
+// not a word of the router: the plain view of the menu gave no column that detail lacks, so a big table is read without it
+internal const val PLAIN = "plain"
 private val NAME = Regex("\\.?[A-Za-z0-9][A-Za-z0-9._-]*")
 private val ID = Regex("\\*[0-9A-Fa-f]+")
 private val NUMBER = Regex("-?[0-9]+(\\.[0-9]+)?")
@@ -56,23 +60,22 @@ internal fun consoleCall(words: List<String>, yesNo: Set<String>, refused: Map<S
     val select = where(call.query, encoding = encoding)
     val list = if (proplist.isEmpty()) "" else " proplist=" + proplist.joinToString(",") { name(it) }
     val changes = verb !in READS
+    val key = "/" + path.dropLast(1).joinToString("/")
+    val refusals = refused[key].orEmpty()
     return when {
-        verb == "print" && named.any { it.first == "count-only" } -> ConsoleCall("$menu count-only$select", Reply.Count)
+        // a count refuses the words of the views at once, a portion only after a pass over the whole table
+        verb == "print" && named.any { it.first == "count-only" } -> {
+            val flags = views(refusals).flatten()
+            ConsoleCall("$menu count-only${flags.joinToString("") { " $it" }}$select", Reply.Count, menu = key, offered = flags.toSet())
+        }
         verb == "print" -> {
-            val key = "/" + path.dropLast(1).joinToString("/")
-            val refusals = refused[key].orEmpty()
-            val secrets = if (SENSITIVE in refusals) emptyList() else listOf(SENSITIVE)
-            val views = buildList {
-                add(if (DETAIL in refusals) secrets else emptyList())
-                if (DETAIL !in refusals) add(listOf(DETAIL) + secrets)
-                listOf(STATS_DETAIL, STATS).firstOrNull { it !in refusals }?.let { add(listOf(it)) }
-            }
+            val views = views(refusals)
             val asked = if (PROPLIST in refusals) "" else list
             val part = portion.takeIf { FIND !in refusals && FROM !in refusals }
             val rows = if (part == null) select else " from=\$part"
             val reads = views.joinToString("; ") { flags -> serialized("$menu as-value${flags.joinToString("") { " $it" }}${given()}$asked$rows") }
             val line = if (part == null) reads else ":local part [:pick [$key/find$select] ${part.first} ${part.last + 1}]; :if ([:len \$part] > 0) do={ $reads } else={ :put \"[]\" }"
-            ConsoleCall(line, Reply.Rows, menu = key, offered = views.flatten().toSet() + listOfNotNull(PROPLIST.takeIf { asked.isNotEmpty() }) + if (part == null) emptySet() else setOf(FIND, FROM), proplist = proplist, heavy = part != null)
+            ConsoleCall(line, Reply.Rows, menu = key, offered = views.flatten().toSet() + listOfNotNull(PROPLIST.takeIf { asked.isNotEmpty() }) + if (part == null) emptySet() else setOf(FIND, FROM), proplist = proplist, heavy = part != null, plain = views.first().isEmpty() && DETAIL in views.getOrNull(1).orEmpty())
         }
         verb == "add" -> ConsoleCall(":put [$menu${given()}]", Reply.Id, changes = true)
         verb in CHANGES -> ConsoleCall("$menu$numbers${given()}", Reply.Nothing, changes = true)
@@ -132,6 +135,16 @@ private class Words(words: List<String>, encoding: ApiEncoding) {
     val numbers = arguments.firstOrNull { it.first == ".id" }?.let { " numbers=" + token(it.second, false, encoding) }.orEmpty()
     val proplist = arguments.firstOrNull { it.first == ".proplist" }?.second?.split(',')?.filter { it.isNotEmpty() && it != ".id" }.orEmpty()
     val named = arguments.filter { it.first !in setOf(".id", ".proplist", ".tag") }
+}
+
+private fun views(refusals: Set<String>): List<List<String>> {
+    val secrets = if (SENSITIVE in refusals) emptyList() else listOf(SENSITIVE)
+    return buildList {
+        if (DETAIL in refusals) add(secrets)
+        if (DETAIL !in refusals && PLAIN !in refusals) add(emptyList())
+        if (DETAIL !in refusals) add(listOf(DETAIL) + secrets)
+        listOf(STATS_DETAIL, STATS).firstOrNull { it !in refusals }?.let { add(listOf(it)) }
+    }
 }
 
 private fun serialized(command: String) = ":put [:serialize to=json $ROWS [$command]]"

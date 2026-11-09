@@ -72,12 +72,19 @@ internal fun trap(message: String): ApiTrapException {
 internal fun rows(text: String): List<Map<String, String>> {
     val tables = text.lines().filter { it.isNotBlank() }.map(::table).ifEmpty { listOf(table(text)) }
     if (tables.size == 1) return tables.single()
-    val joined = LinkedHashMap<String, Map<String, String>>()
+    val joined = LinkedHashMap<String, MutableMap<String, String>>()
     for (table in tables) table.forEachIndexed { at, row ->
-        val key = row[".id"] ?: "#$at"
-        joined[key] = joined[key].orEmpty() + row
+        joined.getOrPut(row[".id"] ?: "#$at") { LinkedHashMap() }.putAll(row)
     }
     return joined.values.toList()
+}
+
+// the first table is the plain view, the second detail
+internal fun plainAddsNothing(text: String): Boolean {
+    val tables = text.lines().filter { it.isNotBlank() }.map(::table)
+    val detail = tables.getOrNull(1)?.associateBy { it[".id"] } ?: return false
+    val plain = tables.first().filter { it[".id"] in detail }
+    return plain.isNotEmpty() && plain.all { row -> detail.getValue(row[".id"]).keys.containsAll(row.keys) }
 }
 
 private fun table(text: String): List<Map<String, String>> = when (val json = Json.parseToJsonElement(text.trim())) {

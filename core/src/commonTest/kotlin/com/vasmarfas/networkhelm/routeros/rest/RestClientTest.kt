@@ -75,14 +75,28 @@ class RestClientTest {
         val count = answer(200, """{"ret":"2500"}""")
         val ids = answer(200, rows(0 until 2_500))
         val first = answer(200, rows(0 until 2_000))
+        val memory = answer(200, """[{"free-memory":"100000"}]""")
         val second = answer(200, rows(2_000 until 2_500))
         val progress = mutableListOf<Pair<Int, Int>>()
         assertEquals(2_500, client.table(addresses) { read, total -> progress += read to total }.size)
-        assertEquals(listOf(2_000 to 2_500, 2_500 to 2_500), progress)
+        assertEquals(listOf(0 to 2_500, 2_000 to 2_500, 2_500 to 2_500), progress)
         assertEquals("""{"count-only":"",".query":["list=blocked"]}""".let(Json::parseToJsonElement), body(count))
         assertEquals("""{".proplist":[".id"],".query":["list=blocked"]}""".let(Json::parseToJsonElement), body(ids))
         assertEquals((0 until 2_000).joinToString(",") { "*$it" }, body(first).getValue("from").jsonPrimitive.content)
+        assertTrue(memory.written.toString().startsWith("POST /rest/system/resource/print "))
         assertEquals(setOf("from"), body(second).keys)
+    }
+
+    @Test
+    fun aBigTableTheRouterHasTheMemoryForIsAskedWholeAfterItsFirstPortion() = runTest {
+        answer(200, """{"ret":"2500"}""")
+        answer(200, rows(0 until 2_500))
+        answer(200, rows(0 until 2_000))
+        answer(200, """[{"free-memory":"1000000000"}]""")
+        val all = answer(200, rows(0 until 2_500))
+        assertEquals(2_500, client.call(addresses).rows.size)
+        assertEquals(setOf(".query"), body(all).keys)
+        assertTrue(streams.isEmpty())
     }
 
     @Test
@@ -92,6 +106,7 @@ class RestClientTest {
         answer(404, """{"error":404,"message":"Not Found"}""")
         val fresh = answer(200, rows(1 until 2_500))
         val first = answer(200, rows(1 until 2_001))
+        answer(200, """[{"free-memory":"100000"}]""")
         answer(200, rows(2_001 until 2_500))
         assertEquals(2_499, client.call(addresses).rows.size)
         assertEquals(setOf(".proplist", ".query"), body(fresh).keys)

@@ -123,22 +123,23 @@ class ConsoleClient internal constructor(
     override suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> = read(words, progress).rows
 
     private suspend fun read(words: List<String>, progress: suspend (Int, Int) -> Unit): ApiResult {
-        val menu = translate(words).menu?.takeIf(::portionable)
-        return tables.read(words, menu, progress, { whole(it) }) { part -> whole(words, part).rows.takeIf { portionable(menu.orEmpty()) } }
+        val call = translate(words)
+        val menu = call.menu?.takeIf { call.reply != Reply.Count && portionable(it) }
+        return tables.read(words, menu, progress, { whole(it) }, { whole(words, heavy = true).rows }) { part -> whole(words, part).rows.takeIf { portionable(menu.orEmpty()) } }
     }
 
     private fun portionable(menu: String) = refused.value[menu].orEmpty().none { it == FIND || it == FROM }
 
-    private suspend fun whole(words: List<String>, portion: IntRange? = null): ApiResult {
+    private suspend fun whole(words: List<String>, portion: IntRange? = null, heavy: Boolean = false): ApiResult {
         var call = translate(words, portion)
-        var answer = run(call)
-        if (CRASHED in answer.text && !call.changes) answer = run(call)
+        var answer = run(call, heavy)
+        if (CRASHED in answer.text && !call.changes) answer = run(call, heavy)
         if (!answer.ok) {
             val name = BOOLEAN.find(answer.text)?.groupValues?.get(1)
             if (name != null && words.any { it == "=$name=true" || it == "=$name=false" }) {
                 yesNo.update { it + name }
                 call = translate(words, portion)
-                answer = run(call)
+                answer = run(call, heavy)
             }
         }
         while (!answer.ok) {
@@ -153,7 +154,7 @@ class ConsoleClient internal constructor(
                 last.startsWith(AS_VALUE) -> call.fallback ?: break
                 else -> break
             }
-            answer = run(call)
+            answer = run(call, heavy)
         }
         if (!answer.ok) throw trap(answer.text.ifBlank { "the console gave no answer" }.let { if (call.probe) probed(it) else it })
         return result(call, answer.text)
@@ -247,7 +248,7 @@ class ConsoleClient internal constructor(
 
     private suspend fun undoable(): Int = call(listOf("/system/history/print", "=count-only=", "?floating-undo=true")).done["ret"]?.toIntOrNull() ?: 0
 
-    private suspend fun run(call: ConsoleCall): Answer {
+    private suspend fun run(call: ConsoleCall, heavy: Boolean = false): Answer {
         val limit = if (dialect == Dialect.Classic) CLASSIC_LINE_LIMIT else LINE_LIMIT
         if (call.line.length > limit) throw DeviceException(ErrorCategory.ArgumentValue, "the line for the console is ${call.line.length} characters long, longer than the $limit that this router takes")
         if (encoding == ApiEncoding.Windows1251) {
@@ -269,15 +270,15 @@ class ConsoleClient internal constructor(
             }
         }
         return try {
-            attempt(call)
+            attempt(call, heavy)
         } catch (e: ApiConnectionClosedException) {
             // a read goes to another console, a change does not: the router may have run it
             if (call.changes || !call.quick && e !is SilentConsoleException) throw e
-            attempt(call)
+            attempt(call, heavy)
         }
     }
 
-    private suspend fun attempt(call: ConsoleCall): Answer = if (call.heavy) alone { asked(call) } else asked(call)
+    private suspend fun attempt(call: ConsoleCall, heavy: Boolean): Answer = if (call.heavy || heavy) alone { asked(call) } else asked(call)
 
     // the consoles of a router are one process: a line typed in another one during a long line only stops there for ten seconds with the question of Restart console
     private suspend fun <T> alone(block: suspend () -> T): T = heavyLine.withLock {
@@ -332,7 +333,11 @@ class ConsoleClient internal constructor(
     private fun dropped(error: DeviceException): ApiConnectionClosedException = lost(ApiConnectionClosedException(error.message.orEmpty(), error))
 
     private fun result(call: ConsoleCall, text: String): ApiResult = when (call.reply) {
-        Reply.Rows -> ApiResult(asked(call, parse(text)), emptyMap())
+        Reply.Rows -> {
+            val menu = call.menu
+            if (call.heavy && call.plain && menu != null && plainAddsNothing(text)) refused.update { it + (menu to it[menu].orEmpty() + PLAIN) }
+            ApiResult(asked(call, parse(text)), emptyMap())
+        }
         Reply.Records -> {
             val printed = records(text)
             yesNo.update { it + printed.flags }
