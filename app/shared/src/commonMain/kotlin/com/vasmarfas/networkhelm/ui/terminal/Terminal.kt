@@ -75,6 +75,7 @@ import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.form_ok
+import networkhelm.app.shared.generated.resources.link_closed
 import networkhelm.app.shared.generated.resources.list_cancel
 import networkhelm.app.shared.generated.resources.list_remove
 import networkhelm.app.shared.generated.resources.snippets_add
@@ -106,8 +107,10 @@ internal expect val terminalScrollback: Boolean
 @Composable
 fun TerminalView(ssh: SshSession, startup: String? = null, terminal: @Composable (ShellChannel, Modifier) -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
+    var cut by remember { mutableStateOf(false) }
     val shell by produceState<Result<ShellChannel>?>(null, ssh, attempt) {
         value = null
+        cut = false
         val opened = try {
             ssh.shell("xterm-256color", 120, 40).also { channel -> startup?.let { channel.write("$it\r".encodeToByteArray()) } }
         } catch (e: CancellationException) {
@@ -116,7 +119,7 @@ fun TerminalView(ssh: SshSession, startup: String? = null, terminal: @Composable
             value = Result.failure(e)
             return@produceState
         }
-        value = Result.success(opened)
+        value = Result.success(GuardedShell(opened) { cut = true })
         awaitDispose { opened.close() }
     }
     val result = shell
@@ -129,6 +132,7 @@ fun TerminalView(ssh: SshSession, startup: String? = null, terminal: @Composable
             val e = result.exceptionOrNull()
             Failure(stringResource(Res.string.terminal_failed, e?.let(::sshFailure)?.let { stringResource(it) } ?: e?.message.orEmpty()), reopen)
         }
+        cut -> Failure(stringResource(Res.string.link_closed), reopen)
         snippets == null -> key(result.getOrThrow()) { terminal(result.getOrThrow(), Modifier.fillMaxSize()) }
         else -> Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
@@ -292,5 +296,27 @@ private fun Failure(text: String, onRetry: () -> Unit) {
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Text(text, color = Theme.palette.muted)
         Button(stringResource(Res.string.terminal_reopen), onRetry, Modifier.testTag("terminal-reopen"))
+    }
+}
+
+// the terminals read and type in effects that catch nothing, so a console cut off under them would end the app; the window says so instead
+private class GuardedShell(private val shell: ShellChannel, private val onCut: () -> Unit) : ShellChannel by shell {
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = try {
+        shell.read(buffer, offset, length)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        onCut()
+        -1
+    }
+
+    override suspend fun write(bytes: ByteArray) {
+        try {
+            shell.write(bytes)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            onCut()
+        }
     }
 }

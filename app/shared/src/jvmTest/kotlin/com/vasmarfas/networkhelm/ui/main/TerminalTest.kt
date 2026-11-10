@@ -1,6 +1,13 @@
 package com.vasmarfas.networkhelm.ui.main
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
@@ -28,12 +35,17 @@ import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.transport.ByteStream
+import com.vasmarfas.networkhelm.transport.openTcp
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.terminal.LocalTerminal
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.runBlocking
+import java.net.InetAddress
+import java.net.ServerSocket
 import java.util.Locale
+import java.util.concurrent.CompletableFuture
+import java.util.concurrent.CopyOnWriteArrayList
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -63,6 +75,38 @@ class TerminalTest {
         override suspend fun sftp(): SftpClient = error("no sftp")
         override suspend fun forward(host: String, port: Int): ByteStream = error("no forward")
         override fun close() = Unit
+    }
+
+    private class SocketSsh(private val port: Int) : SshSession {
+        override suspend fun exec(command: String): ExecResult = error("no exec")
+        override suspend fun process(command: String): ByteStream = error("no process")
+        override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel {
+            val stream = openTcp("127.0.0.1", port)
+            return object : ShellChannel {
+                override suspend fun read(buffer: ByteArray, offset: Int, length: Int) = stream.read(buffer, offset, length)
+                override suspend fun write(bytes: ByteArray) = stream.write(bytes)
+                override fun resize(columns: Int, rows: Int) = Unit
+                override fun close() = stream.close()
+            }
+        }
+        override suspend fun sftp(): SftpClient = error("no sftp")
+        override suspend fun forward(host: String, port: Int): ByteStream = error("no forward")
+        override fun close() = Unit
+    }
+
+    // reads as the terminal of Android does, catching nothing
+    @Composable
+    private fun Reading(shell: ShellChannel, modifier: Modifier) {
+        var shown by remember(shell) { mutableStateOf("") }
+        LaunchedEffect(shell) {
+            val buffer = ByteArray(8192)
+            while (true) {
+                val read = shell.read(buffer, 0, buffer.size)
+                if (read < 0) break
+                shown += buffer.decodeToString(0, read)
+            }
+        }
+        Text(shown, modifier)
     }
 
     private fun tab(ssh: SshSession?, schemas: Map<String, MenuSchema> = emptyMap()): RouterTab {
@@ -95,6 +139,39 @@ class TerminalTest {
         tab.workspace.close(tab.workspace.windows.last())
         waitUntil(timeoutMillis = 5_000) { ssh.consoles.last().second.closed }
         assertFalse(ssh.consoles.first().second.closed, "the other console goes on")
+    }
+
+    @Test
+    fun aConsoleWhoseSocketDropsSaysSoInItsWindowAndDoesNotEndTheApp() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val escaped = CopyOnWriteArrayList<Throwable>()
+        val handler = Thread.getDefaultUncaughtExceptionHandler()
+        Thread.setDefaultUncaughtExceptionHandler { _, e -> escaped += e }
+        try {
+            ServerSocket(0, 50, InetAddress.getLoopbackAddress()).use { server ->
+                val tab = tab(SocketSsh(server.localPort))
+                setContent {
+                    NetworkHelmTheme(dark = true) {
+                        CompositionLocalProvider(LocalTerminal provides { shell, modifier -> Reading(shell, modifier) }) { MainScreen(tab, onDisconnect = {}) }
+                    }
+                }
+                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("New Terminal")).fetchSemanticsNodes().isNotEmpty() }
+                val first = CompletableFuture.supplyAsync { server.accept() }
+                onNodeWithText("New Terminal").performClick()
+                waitUntil(timeoutMillis = 5_000) { first.isDone }
+                first.get().getOutputStream().write("[rd-test@MikroTik] > ".encodeToByteArray())
+                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("MikroTik", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+                first.get().apply { setSoLinger(true, 0) }.close()
+                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection to the router is closed")).fetchSemanticsNodes().isNotEmpty() }
+                val second = CompletableFuture.supplyAsync { server.accept() }
+                onNodeWithTag("terminal-reopen").performClick()
+                waitUntil(timeoutMillis = 5_000) { second.isDone }
+                second.get().close()
+            }
+        } finally {
+            Thread.setDefaultUncaughtExceptionHandler(handler)
+        }
+        assertEquals(emptyList(), escaped.toList())
     }
 
     @Test
