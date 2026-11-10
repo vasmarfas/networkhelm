@@ -28,6 +28,8 @@ import androidx.compose.ui.unit.sp
 import com.composeunstyled.LocalContentColor
 import com.composeunstyled.LocalTextStyle
 import com.composeunstyled.theme.rememberColoredIndication
+import com.materialkolor.hct.Hct
+import com.materialkolor.scheme.SchemeTonalSpot
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.Serializable
@@ -38,6 +40,14 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import org.jetbrains.compose.resources.Font
 import networkhelm.app.shared.generated.resources.Res
+import networkhelm.app.shared.generated.resources.accent_blue
+import networkhelm.app.shared.generated.resources.accent_green
+import networkhelm.app.shared.generated.resources.accent_olive
+import networkhelm.app.shared.generated.resources.accent_orange
+import networkhelm.app.shared.generated.resources.accent_plum
+import networkhelm.app.shared.generated.resources.accent_red
+import networkhelm.app.shared.generated.resources.accent_teal
+import networkhelm.app.shared.generated.resources.accent_violet
 import networkhelm.app.shared.generated.resources.inter_medium
 import networkhelm.app.shared.generated.resources.inter_regular
 import networkhelm.app.shared.generated.resources.inter_semibold
@@ -182,51 +192,51 @@ val LegacyDarkPalette = Palette(
     shadow = Color(0xFF29292D),
 )
 
-val MaterialPalette = Palette(
-    workspace = Color(0xFFF3EDF7),
-    surface = Color(0xFFFEF7FF),
-    raised = Color(0xFFF7F2FA),
-    line = Color(0xFFCAC4D0),
-    text = Color(0xFF1D1B20),
-    muted = Color(0xFF49454F),
-    faint = Color(0xFF79747E),
-    accent = Color(0xFF6750A4),
-    onAccent = Color(0xFFFFFFFF),
-    selection = Color(0xFFE8DEF8),
-    badge = Color(0xFFE6E0E9),
-    danger = Color(0xFFB3261E),
-    success = Color(0xFF386A20),
-    warning = Color(0xFF7D5700),
-    title = Color(0xFFECE6F0),
-    grid = Color(0xFFE6E0E9),
-    inactiveTitle = Color(0xFFF7F2FA),
-    container = Color(0xFFF3EDF7),
-    inverse = Color(0xFF322F35),
-    onInverse = Color(0xFFF5EFF7),
+// the roles of a Material 3 scheme built around one accent; the scheme has no success and warning, so those stay fixed
+fun materialPalette(accent: Color, dark: Boolean): Palette {
+    val scheme = SchemeTonalSpot(Hct.fromInt(accent.toArgb()), dark, 0.0)
+    return Palette(
+        workspace = Color(scheme.surfaceContainer),
+        surface = Color(scheme.surface),
+        raised = Color(scheme.surfaceContainerLow),
+        line = Color(scheme.outlineVariant),
+        text = Color(scheme.onSurface),
+        muted = Color(scheme.onSurfaceVariant),
+        faint = Color(scheme.outline),
+        accent = Color(scheme.primary),
+        onAccent = Color(scheme.onPrimary),
+        selection = Color(scheme.secondaryContainer),
+        badge = Color(scheme.surfaceContainerHighest),
+        danger = Color(scheme.error),
+        success = if (dark) Color(0xFF9CD67D) else Color(0xFF386A20),
+        warning = if (dark) Color(0xFFF8BD49) else Color(0xFF7D5700),
+        title = Color(scheme.primaryContainer),
+        grid = Color(scheme.surfaceContainerHighest),
+        inactiveTitle = Color(scheme.surfaceContainerHigh),
+        container = Color(scheme.surfaceContainer),
+        inverse = Color(scheme.inverseSurface),
+        onInverse = Color(scheme.inverseOnSurface),
+    )
+}
+
+// the navy of the application icon
+val DefaultAccent = Color(0xFF14202B)
+
+// around the circle of hues from the default, 30 to 60 degrees apart, so that no two swatches look alike
+val AccentPresets = listOf(
+    DefaultAccent to Res.string.accent_blue,
+    Color(0xFF006A6A) to Res.string.accent_teal,
+    Color(0xFF386A20) to Res.string.accent_green,
+    Color(0xFF6D5E00) to Res.string.accent_olive,
+    Color(0xFF8B5000) to Res.string.accent_orange,
+    Color(0xFFB3261E) to Res.string.accent_red,
+    Color(0xFF7B4E7F) to Res.string.accent_plum,
+    Color(0xFF6750A4) to Res.string.accent_violet,
 )
 
-val MaterialDarkPalette = Palette(
-    workspace = Color(0xFF211F26),
-    surface = Color(0xFF141218),
-    raised = Color(0xFF1D1B20),
-    line = Color(0xFF49454F),
-    text = Color(0xFFE6E0E9),
-    muted = Color(0xFFCAC4D0),
-    faint = Color(0xFF938F99),
-    accent = Color(0xFFD0BCFF),
-    onAccent = Color(0xFF381E72),
-    selection = Color(0xFF4A4458),
-    badge = Color(0xFF36343B),
-    danger = Color(0xFFF2B8B5),
-    success = Color(0xFF9CD67D),
-    warning = Color(0xFFF8BD49),
-    title = Color(0xFF2B2930),
-    grid = Color(0xFF36343B),
-    inactiveTitle = Color(0xFF1D1B20),
-    container = Color(0xFF211F26),
-    inverse = Color(0xFFE6E0E9),
-    onInverse = Color(0xFF322F35),
-)
+val MaterialPalette = materialPalette(DefaultAccent, dark = false)
+
+val MaterialDarkPalette = materialPalette(DefaultAccent, dark = true)
 
 @Immutable
 @Serializable
@@ -257,7 +267,7 @@ private const val LITERAL = "calt 0"
 internal expect val textRasterization: PlatformTextStyle?
 
 // a browser canvas has no system fonts, and its fallback fetches fonts from the network
-internal expect val systemFonts: Boolean
+internal expect val systemSans: FontFamily?
 
 private fun typography(sans: FontFamily, mono: FontFamily, size: Float = 13f) = Typography(
     body = TextStyle(fontFamily = sans, fontSize = size.sp, lineHeight = (size + 5).sp, fontFeatureSettings = LITERAL, platformStyle = textRasterization),
@@ -278,7 +288,7 @@ private fun typography(sans: FontFamily, mono: FontFamily, size: Float = 13f) = 
 private fun materialTypography(sans: FontFamily, mono: FontFamily, size: Float) = Typography(
     body = TextStyle(fontFamily = sans, fontSize = size.sp, lineHeight = (size + 6).sp, fontFeatureSettings = LITERAL, platformStyle = textRasterization),
     strong = TextStyle(fontFamily = sans, fontSize = size.sp, lineHeight = (size + 6).sp, fontWeight = FontWeight.Medium, fontFeatureSettings = LITERAL, platformStyle = textRasterization),
-    small = TextStyle(fontFamily = sans, fontSize = (size - 2).sp, lineHeight = (size + 2).sp, fontFeatureSettings = LITERAL, platformStyle = textRasterization),
+    small = TextStyle(fontFamily = sans, fontSize = (size - 1).sp, lineHeight = (size + 3).sp, fontFeatureSettings = LITERAL, platformStyle = textRasterization),
     section = TextStyle(
         fontFamily = sans,
         fontSize = (size - 2).sp,
@@ -331,12 +341,20 @@ val Material = ThemeFile(
     "Material",
     light = MaterialPalette,
     dark = MaterialDarkPalette,
-    metrics = Metrics(row = 36.dp, menuItem = 36.dp, control = 40.dp, title = 40.dp, toolbar = 40.dp, icon = 20.dp, gap = 8.dp, padding = 12.dp, radius = 12.dp),
-    fontSize = 14f,
+    metrics = Metrics(row = 26.dp, menuItem = 28.dp, control = 32.dp, title = 32.dp, toolbar = 32.dp, icon = 18.dp, gap = 6.dp, padding = 10.dp, radius = 8.dp),
+    fontSize = 13f,
     material = true,
 )
 
 val BundledThemes = listOf(Modern, Legacy, Material)
+
+// the bundled Material theme takes its colours from the accent of the settings; a theme saved from it keeps the colours it had
+fun ThemeFile.accented(accent: Color): ThemeFile =
+    if (this != Material || accent == DefaultAccent) this else copy(light = materialPalette(accent, dark = false), dark = materialPalette(accent, dark = true))
+
+// the colour the system builds its own palette from, on Android 12 and later
+@Composable
+internal expect fun systemAccent(): Color?
 
 fun Color.hex(): String {
     val argb = toArgb().toUInt().toString(16).padStart(8, '0').uppercase()
@@ -411,8 +429,9 @@ fun ThemeFile.drawnIcons(): Map<String, ThemeIcon> =
 @Composable
 fun NetworkHelmTheme(theme: ThemeFile = Modern, dark: Boolean = isSystemInDarkTheme(), scale: Float = 1f, content: @Composable () -> Unit) {
     val palette = theme.palette(dark)
-    val sans = if (theme.font == ThemeFont.System && systemFonts) {
-        FontFamily.SansSerif
+    val system = systemSans
+    val sans = if (theme.font == ThemeFont.System && system != null) {
+        system
     } else {
         FontFamily(
             Font(Res.font.inter_regular, FontWeight.Normal),

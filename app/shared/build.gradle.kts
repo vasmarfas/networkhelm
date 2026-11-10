@@ -139,6 +139,7 @@ kotlin {
             implementation(libs.composeunstyled)
             implementation(libs.composeunstyled.coloredIndication)
             implementation(libs.icons.lucide)
+            implementation(libs.materialColorUtilities)
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.lifecycle.viewmodelCompose)
             implementation(libs.androidx.lifecycle.runtimeCompose)

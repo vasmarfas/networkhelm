@@ -15,6 +15,8 @@ The text of the license is in [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt)
 | kotlinx.atomicfu | JetBrains s.r.o. |
 | kotlinx-io (core and bytestring) | JetBrains s.r.o., Square, Inc. |
 | KSafe (`eu.anifantakis:ksafe`), the password store | Ioannis Anifantakis |
+| Material Color Utilities, the Kotlin port inside MaterialKolor (`com.materialkolor:material-color-utilities`), the colours of the Material theme | Copyright 2021-2025 Google LLC |
+| Poko annotations (`dev.drewhamilton.poko:poko-annotations`), pulled in by MaterialKolor | Drew Hamilton |
 | AndroidX DataStore, pulled in by KSafe | The Android Open Source Project |
 | Okio, pulled in by DataStore | Square, Inc. |
 | Compose Multiplatform — animation, runtime, foundation, material, material3, ui, ui-backhandler, components-resources, ui-tooling-preview, collection and annotation, including their AndroidX counterparts | The Android Open Source Project, JetBrains s.r.o. |
@@ -198,6 +200,7 @@ Used unmodified. Its source is at https://github.com/JetBrains/pty4j; the text o
 | Compose Unstyled (`com.composables:composeunstyled`, `composeunstyled-colored-indication`, application UI) | Copyright (c) 2026 Composable Horizons |
 | Ripple indication (`com.composables:ripple-indication`), pulled in by Compose Unstyled on Android | Composable Horizons |
 | Compose Icons, the Kotlin packaging of Lucide (`com.composables:icons-lucide-cmp`) | Copyright (c) 2025 Composable Horizons |
+| MaterialKolor (`com.materialkolor:material-color-utilities`), the colours of the Material theme | Copyright (c) 2026 Jordon de Hoog |
 | Feather icons inside Lucide | Copyright (c) 2013-present Cole Bemis |
 | tikoci/centrs (https://github.com/tikoci/centrs): the description of the MAC-Telnet frames and the packet header in `miknative/`; no code of it is used | Copyright (c) 2026 TIKOCI GitHub Organization |
 | subixonfire/winbox-terminal-protocol (https://github.com/subixonfire/winbox-terminal-protocol): the description of the frames, the message format and the console messages of the protocol on port 8291 in `miknative/`; the order of the hashes and the encodings of the EC-SRP5 login were read from its client; no code of it is used | Copyright (c) 2026 subixonfire |

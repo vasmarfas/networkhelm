@@ -19,7 +19,6 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.hasTextExactly
 import androidx.compose.ui.test.onLast
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
@@ -36,7 +35,10 @@ import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.vasmarfas.networkhelm.app.Access
+import com.vasmarfas.networkhelm.app.AppSettings
 import com.vasmarfas.networkhelm.app.DeviceKind
+import com.vasmarfas.networkhelm.app.LocalAppSettings
+import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.app.MemorySecrets
 import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.app.SavedRouter
@@ -182,10 +184,10 @@ class ConnectScreenTest {
                 NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
             }
         }
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         waitForIdle()
         assertTrue(onAllNodes(hasText("Imported", substring = true)).fetchSemanticsNodes().isEmpty(), "a cancelled dialog reports nothing")
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Imported: 1, skipped: 1")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf(SavedRouter("192.0.2.21", "rd-test", group = "Лаборатория", comment = "CHR")), saved.routers.value)
         assertEquals("p;w", runBlocking { secrets.get(passwordKey("192.0.2.21", "rd-test")) })
@@ -211,7 +213,7 @@ class ConnectScreenTest {
                 NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
             }
         }
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Imported: 2, skipped: 0")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(setOf("Офис", "Склад"), saved.routers.value.map { it.group }.toSet())
     }
@@ -232,7 +234,7 @@ class ConnectScreenTest {
                 NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
             }
         }
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Imported: 1, skipped: 0")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf(SavedRouter("192.0.2.24", "rd-test", Access.Api, "Лаборатория", "new", ApiEncoding.Windows1251, via = "192.0.2.1")), saved.routers.value)
     }
@@ -249,7 +251,7 @@ class ConnectScreenTest {
                 NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
             }
         }
-        if (compact) onNodeWithContentDescription("Import").performScrollTo().performClick() else onNodeWithText("Import").performClick()
+        onNodeWithTag("import").apply { if (compact) performScrollTo() }.performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("winbox-import")).fetchSemanticsNodes().isNotEmpty() }
     }
 
@@ -389,7 +391,7 @@ class ConnectScreenTest {
                 NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
             }
         }
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("not an address book of WinBox", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(saved.routers.value.isEmpty())
     }
@@ -450,6 +452,46 @@ class ConnectScreenTest {
         onNodeWithText("192.0.2.45").performMouseInput { doubleClick() }
         waitUntil(timeoutMillis = 5_000) { login != null }
         assertEquals("rd-test-stored", login?.password)
+    }
+
+    @Test
+    fun theListsStandBesideAWideFormAndUnderItKeepTheirPlaceAsTheFormGrows() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val saved = SavedRouters(storage)
+        val settings = AppSettings(storage)
+        runBlocking {
+            saved.save(SavedRouter("192.0.2.47", "rd-test", Access.ApiSsl))
+            saved.save(SavedRouter("192.0.2.48", "rd-test", Access.Api))
+        }
+        var reached: String? = null
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        setContent {
+            CompositionLocalProvider(LocalSettings provides settings.current, LocalAppSettings provides settings) {
+                NetworkHelmTheme { ConnectScreen(services, saved, rememberCoroutineScope()) { _, address, _ -> reached = address } }
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.48")).fetchSemanticsNodes().isNotEmpty() }
+        fun field() = onNodeWithTag("address").fetchSemanticsNode().boundsInRoot
+        // the filled address field holds the same text, the row of the list does not take input
+        val cell = hasText("192.0.2.48") and !hasSetTextAction()
+        fun row() = onNode(cell).fetchSemanticsNode().boundsInRoot
+        assertTrue(row().left > field().right, "beside the form: ${row()} and ${field()}")
+
+        onNodeWithTag("lists-place").performClick()
+        waitUntil(timeoutMillis = 5_000) { settings.current.listsBelow }
+        waitForIdle()
+        assertTrue(row().top > field().bottom, "under the form: ${row()} and ${field()}")
+
+        // the plain API adds the encoding and a warning to the form, which scrolls in its own part
+        val before = row()
+        onNode(cell).performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("encoding")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(before.top, row().top)
+
+        onNode(cell).performMouseInput { doubleClick() }
+        waitUntil(timeoutMillis = 5_000) { reached != null }
+        assertEquals("192.0.2.48", reached)
     }
 
     @Test
@@ -631,7 +673,7 @@ class ConnectScreenTest {
                 NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
             }
         }
-        onNodeWithText("Export").performClick()
+        onNodeWithTag("export").performClick()
         onNodeWithTag("master").performTextInput("rd-test-master")
         onNodeWithTag("master-repeat").performTextInput("rd-test-master")
         picture("connect-book-export")
@@ -644,11 +686,11 @@ class ConnectScreenTest {
             saved.remove(saved.routers.value.single())
             secrets.delete(key)
         }
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         onNodeWithTag("master").performTextInput("wrong")
         onNodeWithText("OK").performClick()
         waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("The master password does not open this file")).fetchSemanticsNodes().isNotEmpty() }
-        onNodeWithText("Import").performClick()
+        onNodeWithTag("import").performClick()
         onNodeWithTag("master").performTextInput("rd-test-master")
         onNodeWithText("OK").performClick()
         waitUntil(timeoutMillis = 10_000) { saved.routers.value.isNotEmpty() }

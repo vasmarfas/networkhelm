@@ -10,14 +10,15 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.wrapContentHeight
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.InputTransformation
@@ -30,13 +31,13 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
@@ -49,6 +50,8 @@ import com.composables.icons.lucide.FolderOpen
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Key
 import com.composables.icons.lucide.Lucide
+import com.composables.icons.lucide.PanelBottom
+import com.composables.icons.lucide.PanelRight
 import com.composables.icons.lucide.Settings
 import com.composables.icons.lucide.Upload
 import com.composables.icons.lucide.Wrench
@@ -56,6 +59,8 @@ import com.composables.icons.lucide.X
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.app.Access
 import com.vasmarfas.networkhelm.app.DeviceKind
+import com.vasmarfas.networkhelm.app.LocalAppSettings
+import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.app.SavedRouter
 import com.vasmarfas.networkhelm.app.SavedRouters
 import com.vasmarfas.networkhelm.app.Services
@@ -85,9 +90,11 @@ import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.LocalSubmit
 import com.vasmarfas.networkhelm.ui.kit.SecretField
 import com.vasmarfas.networkhelm.ui.kit.Select
+import com.vasmarfas.networkhelm.ui.kit.SplitState
 import com.vasmarfas.networkhelm.ui.kit.TabStrip
 import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
+import com.vasmarfas.networkhelm.ui.kit.VerticalSplit
 import com.vasmarfas.networkhelm.ui.kit.dialogPanel
 import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.scrim
@@ -100,7 +107,10 @@ import eu.anifantakis.lib.ksafe.KSafeProtectionLevel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -127,6 +137,8 @@ import networkhelm.app.shared.generated.resources.connect_import_hint
 import networkhelm.app.shared.generated.resources.connect_imported
 import networkhelm.app.shared.generated.resources.connect_interface
 import networkhelm.app.shared.generated.resources.connect_keenetic_token
+import networkhelm.app.shared.generated.resources.connect_lists_below
+import networkhelm.app.shared.generated.resources.connect_lists_beside
 import networkhelm.app.shared.generated.resources.connect_neighbors
 import networkhelm.app.shared.generated.resources.connect_neighbors_unavailable
 import networkhelm.app.shared.generated.resources.connect_platform
@@ -264,8 +276,10 @@ import networkhelm.app.shared.generated.resources.trust_new_tls
 import networkhelm.app.shared.generated.resources.trust_previous
 import networkhelm.app.shared.generated.resources.trust_reject
 
-private val FORM_GUESS = 470.dp
-private val LISTS_LEAST = 180.dp
+private val FORM_WIDTH = 480.dp
+
+// beside the form the lists keep room for the address, the comment and the user of a router
+private val SIDE_BY_SIDE = 960.dp
 
 @Composable
 fun ConnectScreen(
@@ -287,36 +301,44 @@ fun ConnectScreen(
     val palette = Theme.palette
     val compact = LocalCompact.current
     val density = LocalDensity.current
-    var above by remember { mutableStateOf(FORM_GUESS) }
-    val scrolled = rememberScrollState()
+    val store = LocalAppSettings.current
+    val settings = LocalSettings.current
+    val split = remember { SplitState().apply { first = settings.connectSplit?.dp } }
+    // the bar between the form and the lists is kept in the settings once it rests
+    LaunchedEffect(split) {
+        snapshotFlow { split.first }.drop(1).collectLatest { height ->
+            delay(400)
+            store?.change { it.copy(connectSplit = height?.value) }
+        }
+    }
     BoxWithConstraints(Modifier.fillMaxSize().background(palette.workspace).fileDrop { files -> ui.launch { state.openFiles(files, onConnected) } }, contentAlignment = Alignment.TopCenter) {
         val margin = if (compact) 8.dp else 16.dp
-        val window = maxHeight
-        Column(
-            (if (compact) Modifier.fillMaxSize() else Modifier.widthIn(max = 760.dp).fillMaxSize()).verticalScroll(scrolled).padding(margin),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Column(Modifier.onSizeChanged { above = with(density) { it.height.toDp() } }, verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Header(onAbout, onSettings, onTools)
-                CompositionLocalProvider(LocalSubmit provides { if (state.connecting == null) state.connect(onConnected) }) {
-                    Form(
-                        state,
-                        saved.routers.collectAsState().value.map { it.address }.distinct(),
-                        onConnect = { state.connect(onConnected) },
-                        onSave = { ui.launch { state.save() } },
-                        onOpenFile = { ui.launch { state.openFiles(exchange.pick(), onConnected) } },
-                        onKey = {
-                            ui.launch {
-                                exchange.pick().firstOrNull()?.let { file ->
-                                    state.key = file.name to file.read()
-                                    state.passphrase.clearText()
-                                }
+        val wide = !compact && maxWidth >= SIDE_BY_SIDE
+        val beside = wide && !settings.listsBelow
+        val shape = RoundedCornerShape(Theme.metrics.radius)
+        val card = Modifier.background(palette.surface, shape).border(1.dp, palette.line, shape)
+        val form: @Composable (Modifier, Boolean) -> Unit = { modifier, fill ->
+            CompositionLocalProvider(LocalSubmit provides { if (state.connecting == null) state.connect(onConnected) }) {
+                Form(
+                    state,
+                    saved.routers.collectAsState().value.map { it.address }.distinct(),
+                    onConnect = { state.connect(onConnected) },
+                    onSave = { ui.launch { state.save() } },
+                    onOpenFile = { ui.launch { state.openFiles(exchange.pick(), onConnected) } },
+                    onKey = {
+                        ui.launch {
+                            exchange.pick().firstOrNull()?.let { file ->
+                                state.key = file.name to file.read()
+                                state.passphrase.clearText()
                             }
-                        },
-                    )
-                }
+                        }
+                    },
+                    modifier = modifier,
+                    fill = fill,
+                )
             }
-            // the lists take what the window has left below the form, and the page scrolls when that is less than they need
+        }
+        val lists: @Composable (Modifier) -> Unit = { modifier ->
             Lists(
                 services,
                 saved,
@@ -325,8 +347,52 @@ fun ConnectScreen(
                 onRemove = { router -> ui.launch { state.remove(router) } },
                 onImport = { ui.launch { state.import(exchange.pick()) } },
                 onExport = { state.sealing = Sealing.Export },
-                Modifier.fillMaxWidth().height(if (compact) 420.dp else (window - margin * 2 - 10.dp - above).coerceAtLeast(LISTS_LEAST)),
+                beside = beside,
+                onPlace = if (wide) ({ ui.launch { store?.change { it.copy(listsBelow = !settings.listsBelow) } } }) else null,
+                modifier = modifier.then(card),
             )
+        }
+        when {
+            beside -> Row(Modifier.fillMaxSize().padding(margin), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                val scrolled = rememberScrollState()
+                Column(Modifier.width(FORM_WIDTH).fillMaxHeight().then(card)) {
+                    Header(onAbout, onSettings, onTools, Modifier.padding(start = 12.dp, end = 6.dp, top = 8.dp, bottom = 8.dp), icons = true)
+                    Box(Modifier.fillMaxWidth().height(1.dp).background(palette.line))
+                    Box(Modifier.weight(1f)) {
+                        form(Modifier.verticalScroll(scrolled).padding(12.dp), true)
+                        VerticalScrollbar(scrolled, Modifier.align(Alignment.CenterEnd))
+                    }
+                }
+                lists(Modifier.weight(1f).fillMaxHeight())
+            }
+            // on a phone the page scrolls as a whole, and a tap opens a saved router at once
+            compact -> {
+                val scrolled = rememberScrollState()
+                Column(Modifier.fillMaxSize().verticalScroll(scrolled).padding(margin), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Header(onAbout, onSettings, onTools)
+                    form(card.padding(12.dp), true)
+                    lists(Modifier.fillMaxWidth().height(420.dp))
+                }
+                VerticalScrollbar(scrolled, Modifier.align(Alignment.CenterEnd))
+            }
+            // the form and the lists scroll apart, and the part of the form keeps the height of its first look,
+            // so a form that grows as a router fills it never moves a row from under the pointer
+            else -> Column(Modifier.widthIn(max = 760.dp).fillMaxSize().padding(margin), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Header(onAbout, onSettings, onTools)
+                VerticalSplit(split, Modifier.weight(1f), least = 120.dp, first = {
+                    val scrolled = rememberScrollState()
+                    Box(Modifier.fillMaxSize()) {
+                        form(
+                            Modifier.fillMaxWidth().verticalScroll(scrolled).wrapContentHeight(Alignment.Top)
+                                .onSizeChanged { if (split.natural == 0.dp) split.natural = with(density) { it.height.toDp() } }.then(card).padding(12.dp),
+                            false,
+                        )
+                        VerticalScrollbar(scrolled, Modifier.align(Alignment.CenterEnd))
+                    }
+                }) {
+                    lists(Modifier.fillMaxSize())
+                }
+            }
         }
         state.sealing?.let { sealing ->
             MasterPassword(sealing is Sealing.Export, onCancel = { state.sealing = null }) { password ->
@@ -338,7 +404,6 @@ fun ConnectScreen(
                 }
             }
         }
-        VerticalScrollbar(scrolled, Modifier.align(Alignment.CenterEnd))
         state.winBox?.let { book -> WinBoxImportDialog(book, onCancel = { state.winBox = null }, onImport = { ui.launch { state.importWinBox(book) } }) }
         state.renewing?.let { PasswordRenewal(it) }
         questions.question?.let { TrustDialog(it) }
@@ -414,25 +479,20 @@ private fun Form(
     onSave: () -> Unit,
     onOpenFile: () -> Unit,
     onKey: () -> Unit,
+    modifier: Modifier,
+    fill: Boolean,
 ) {
     val palette = Theme.palette
-    val shape = RoundedCornerShape(Theme.metrics.radius)
     val compact = LocalCompact.current
-    val field = if (compact) Modifier.fillMaxWidth() else Modifier.width(300.dp)
-    // the form never gets shorter while the window is open, or the list below would move under a double click
-    val density = LocalDensity.current
-    var tallest by remember { mutableIntStateOf(0) }
-    Column(
-        Modifier.fillMaxWidth().onSizeChanged { tallest = maxOf(tallest, it.height) }.heightIn(min = with(density) { tallest.toDp() })
-            .background(palette.surface, shape).border(1.dp, palette.line, shape).padding(12.dp),
-        verticalArrangement = Arrangement.spacedBy(6.dp),
-    ) {
+    // filled, the fields reach the right edge of the panel; otherwise they keep one width in a wider column
+    val field = if (fill) Modifier.fillMaxWidth() else Modifier.width(300.dp)
+    Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
         Labeled(stringResource(Res.string.connect_address)) {
             TextField(state.address, field.testTag("address"), placeholder = stringResource(Res.string.connect_address_hint))
         }
         Labeled(stringResource(Res.string.connect_platform)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Select(state.kind, DeviceKind.entries, { kindLabel(it) }, { state.pick(it) }, (if (compact) Modifier.weight(1f) else field).testTag("platform"), dimmed = { kind -> kind.protocols.all { it.defaultPort in state.shut } })
+                Select(state.kind, DeviceKind.entries, { kindLabel(it) }, { state.pick(it) }, (if (fill) Modifier.weight(1f) else field).testTag("platform"), dimmed = { kind -> kind.protocols.all { it.defaultPort in state.shut } })
                 if (state.detected != null && state.detected == state.kind) {
                     Text(stringResource(Res.string.connect_platform_found), Modifier.testTag("platform-found"), color = palette.muted, style = Theme.type.small)
                 }
@@ -477,8 +537,10 @@ private fun Form(
             FlowRow(itemVerticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 val box = field.testTag("password")
                 if (community) TextField(state.password, box) else SecretField(state.password, box, onGo = onConnect)
-                Checkbox(state.remember, { state.remember = it })
-                Text(stringResource(if (community) Res.string.connect_remember_community else Res.string.connect_remember), Modifier.clickable { state.remember = !state.remember }.hand(), color = palette.muted)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Checkbox(state.remember, { state.remember = it })
+                    Text(stringResource(if (community) Res.string.connect_remember_community else Res.string.connect_remember), Modifier.clickable { state.remember = !state.remember }.hand(), color = palette.muted)
+                }
             }
         }
         val ownSsh = state.protocol != Access.Tcp8291 && state.protocol != Access.MacTelnet
@@ -492,7 +554,7 @@ private fun Form(
         }
         if ((state.kind == DeviceKind.RouterOs && ownSsh) || state.kind == DeviceKind.OpenWrt || state.protocol == Access.Ssh) Labeled(stringResource(Res.string.connect_ssh_key)) {
             Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text(state.key?.first ?: stringResource(Res.string.connect_ssh_key_none), (if (compact) Modifier.weight(1f) else Modifier.width(220.dp)).testTag("ssh-key"), color = palette.muted, singleLine = true)
+                Text(state.key?.first ?: stringResource(Res.string.connect_ssh_key_none), (if (fill) Modifier.weight(1f) else Modifier.width(220.dp)).testTag("ssh-key"), color = palette.muted, singleLine = true)
                 ToolbarButton(stringResource(Res.string.connect_ssh_key_choose), Lucide.Key, onKey)
                 if (state.key != null) ToolbarButton(stringResource(Res.string.connect_remove), Lucide.X, { state.key = null })
                 if (state.agentAvailable) {
@@ -532,7 +594,7 @@ private fun Form(
                 Labeled(stringResource(Res.string.connect_snmp3_privacy)) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Select(state.snmpPriv, PrivProtocol.entries, { privLabel(it) }, { state.snmpPriv = it }, Modifier.width(110.dp).testTag("snmp-priv"))
-                        SecretField(state.privacy, (if (compact) Modifier.weight(1f) else Modifier.width(182.dp)).testTag("snmp-privacy"))
+                        SecretField(state.privacy, (if (fill) Modifier.weight(1f) else Modifier.width(182.dp)).testTag("snmp-privacy"))
                     }
                 }
             }
@@ -561,28 +623,29 @@ private fun Form(
             Button(stringResource(Res.string.connect_save), onSave, enabled = connecting == null)
             ToolbarButton(stringResource(Res.string.connect_open_file), Lucide.FolderOpen, onOpenFile, Modifier.testTag("open-file"), iconOnly = compact)
         }
-        if (compact) {
+        val indent = if (compact) 0.dp else LabelWidth + 10.dp
+        if (fill) {
             FlowRow(
-                Modifier.padding(top = 4.dp),
+                Modifier.padding(start = indent, top = 4.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(6.dp),
                 itemVerticalAlignment = Alignment.CenterVertically,
             ) { buttons() }
+            Box(Modifier.padding(start = indent)) { Status(state) }
         } else {
-            Row(Modifier.padding(start = LabelWidth + 10.dp, top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(Modifier.padding(start = indent, top = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 buttons()
                 Status(state)
             }
         }
-        if (compact) Status(state)
         val openHint = stringResource(Res.string.connect_open_file_hint)
-        Text(if (compact) "${stringResource(Res.string.connect_open_file)}. $openHint" else openHint, Modifier.padding(start = if (compact) 0.dp else LabelWidth + 10.dp), color = palette.muted, style = Theme.type.small)
+        Text(if (compact) "${stringResource(Res.string.connect_open_file)}. $openHint" else openHint, Modifier.padding(start = indent), color = palette.muted, style = Theme.type.small)
     }
 }
 
 @Composable
-private fun Header(onAbout: () -> Unit, onSettings: () -> Unit, onTools: () -> Unit) {
-    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+private fun Header(onAbout: () -> Unit, onSettings: () -> Unit, onTools: () -> Unit, modifier: Modifier = Modifier, icons: Boolean = false) {
+    Row(modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         Image(appIcon(), null, Modifier.size(36.dp))
         Column(Modifier.weight(1f)) {
             Text("NetworkHelm", style = Theme.type.strong, maxLines = 1)
@@ -591,7 +654,7 @@ private fun Header(onAbout: () -> Unit, onSettings: () -> Unit, onTools: () -> U
         val tools = stringResource(Res.string.tools_title)
         val about = stringResource(Res.string.main_about)
         val settings = stringResource(Res.string.settings_title)
-        if (LocalCompact.current) {
+        if (icons || LocalCompact.current) {
             IconButton(Lucide.Wrench, tools, onTools, Modifier.testTag("tools"))
             IconButton(Lucide.Info, about, onAbout, Modifier.testTag("about"))
             IconButton(Lucide.Settings, settings, onSettings, Modifier.testTag("settings"))
@@ -612,6 +675,8 @@ private fun Lists(
     onRemove: (SavedRouter) -> Unit,
     onImport: () -> Unit,
     onExport: () -> Unit,
+    beside: Boolean,
+    onPlace: (() -> Unit)?,
     modifier: Modifier,
 ) {
     var tab by remember { mutableStateOf(0) }
@@ -619,33 +684,46 @@ private fun Lists(
     val compact = LocalCompact.current
     val routers by saved.routers.collectAsState()
     Column(modifier) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            val tabs = listOf(stringResource(Res.string.connect_saved), stringResource(Res.string.connect_neighbors)) +
-                listOfNotNull(stringResource(Res.string.connect_scan).takeIf { services.scan != null })
-            TabStrip(tabs, tab, { tab = it })
-            Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
-                val imported = state.imported
-                val note = when {
-                    tab != 0 -> null
-                    imported != null -> stringResource(Res.string.connect_imported, imported.first, imported.second)
-                    routers.isEmpty() -> stringResource(Res.string.connect_import_hint)
-                    else -> null
+        BoxWithConstraints {
+            // a narrow list beside the form has no room for the words of its buttons next to the tabs
+            val narrow = compact || maxWidth < 560.dp
+            Row(Modifier.padding(start = 4.dp, end = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                val tabs = listOf(stringResource(Res.string.connect_saved), stringResource(Res.string.connect_neighbors)) +
+                    listOfNotNull(stringResource(Res.string.connect_scan).takeIf { services.scan != null })
+                TabStrip(tabs, tab, { tab = it })
+                Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
+                    val imported = state.imported
+                    val note = when {
+                        tab != 0 -> null
+                        imported != null -> stringResource(Res.string.connect_imported, imported.first, imported.second)
+                        routers.isEmpty() -> stringResource(Res.string.connect_import_hint)
+                        else -> null
+                    }
+                    if (note != null) Text(note, color = palette.muted, style = Theme.type.small, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
-                if (note != null) Text(note, color = palette.muted, style = Theme.type.small, maxLines = 2, overflow = TextOverflow.Ellipsis)
-            }
-            if (tab == 0) {
-                val import = stringResource(Res.string.connect_import)
-                val export = stringResource(Res.string.connect_export)
-                if (compact) {
-                    IconButton(Lucide.Upload, import, onImport)
-                    if (canSeal) IconButton(Lucide.Download, export, onExport)
-                } else {
-                    ToolbarButton(import, Lucide.Upload, onImport)
-                    if (canSeal) ToolbarButton(export, Lucide.Download, onExport)
+                if (tab == 0) {
+                    val import = stringResource(Res.string.connect_import)
+                    val export = stringResource(Res.string.connect_export)
+                    if (narrow) {
+                        IconButton(Lucide.Upload, import, onImport, Modifier.testTag("import"))
+                        if (canSeal) IconButton(Lucide.Download, export, onExport, Modifier.testTag("export"))
+                    } else {
+                        ToolbarButton(import, Lucide.Upload, onImport, Modifier.testTag("import"))
+                        if (canSeal) ToolbarButton(export, Lucide.Download, onExport, Modifier.testTag("export"))
+                    }
+                }
+                if (onPlace != null) {
+                    IconButton(
+                        if (beside) Lucide.PanelBottom else Lucide.PanelRight,
+                        stringResource(if (beside) Res.string.connect_lists_below else Res.string.connect_lists_beside),
+                        onPlace,
+                        Modifier.testTag("lists-place"),
+                    )
                 }
             }
         }
-        Box(Modifier.fillMaxSize().border(1.dp, palette.line)) {
+        Box(Modifier.fillMaxWidth().height(1.dp).background(palette.line))
+        Box(Modifier.fillMaxSize()) {
             val scan = services.scan
             when {
                 tab == 0 -> SavedTable(saved, state, onConnect, onRemove)
@@ -660,7 +738,8 @@ private fun Lists(
 private fun SavedTable(saved: SavedRouters, state: ConnectState, onConnect: () -> Unit, onRemove: (SavedRouter) -> Unit) {
     val routers by saved.routers.collectAsState()
     var selected by remember { mutableStateOf<SavedRouter?>(null) }
-    val protocols = Access.entries.associateWith { "${kindLabel(it.kind)}, ${protocolLabel(it)}" }
+    val kinds = DeviceKind.entries.associateWith { kindLabel(it) }
+    val protocols = Access.entries.associateWith { protocolLabel(it) }
     val ui = rememberCoroutineScope()
     val compact = LocalCompact.current
     val removable = selected?.takeIf { it in routers }
@@ -670,9 +749,10 @@ private fun SavedTable(saved: SavedRouters, state: ConnectState, onConnect: () -
             rows = routers,
             columns = listOf(
                 TableColumn("address", stringResource(Res.string.connect_address), 200.dp) { it.address },
+                TableColumn("comment", stringResource(Res.string.connect_comment), 200.dp) { it.comment },
                 TableColumn("user", stringResource(Res.string.connect_user), 120.dp) { it.user },
-                TableColumn("protocol", stringResource(Res.string.connect_protocol), 260.dp) { protocols.getValue(it.protocol) },
-                TableColumn("comment", stringResource(Res.string.connect_comment), 240.dp) { it.comment },
+                TableColumn("platform", stringResource(Res.string.connect_platform), 150.dp) { kinds.getValue(it.protocol.kind) },
+                TableColumn("protocol", stringResource(Res.string.connect_protocol), 200.dp) { protocols.getValue(it.protocol) },
             ),
             key = { it.address to it.user },
             onSelection = { keys ->

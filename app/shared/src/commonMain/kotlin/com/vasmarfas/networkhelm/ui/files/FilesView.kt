@@ -188,7 +188,7 @@ internal fun FilesView(
     tab: WindowTab,
     schema: MenuSchema,
     tables: TableLayouts,
-    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>) -> Unit,
+    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>, Map<String, String>) -> Unit,
     onOpenWindow: (MenuEntry) -> Unit,
 ) {
     val palette = Theme.palette
@@ -600,7 +600,7 @@ internal fun FilesView(
                             FileMenuLine(stringResource(Res.string.files_new_folder), "Ctrl+Shift+N") { act { beginNew(NewKind.Folder) } }
                             FileMenuLine(stringResource(Res.string.files_new_file), "Ctrl+N") { act { beginNew(NewKind.File) } }
                         }
-                        if (single != null && routerOs && single.entry.id != null) FileMenuLine(stringResource(Res.string.files_properties), "") { act { onOpenItem(tab.title, path, single.entry.id, null, emptyMap(), emptyList()) } }
+                        if (single != null && routerOs && single.entry.id != null) FileMenuLine(stringResource(Res.string.files_properties), "") { act { onOpenItem(tab.title, path, single.entry.id, null, emptyMap(), emptyList(), emptyMap()) } }
                         if (single != null && single.entry.name.endsWith(".rsc") && routerOs && canWrite) FileMenuLine(stringResource(Res.string.file_import), "") { act { open(single) } }
                         for (action in actions.filter(::available)) FileMenuLine(action.title, "") { act { run(action) } }
                     },

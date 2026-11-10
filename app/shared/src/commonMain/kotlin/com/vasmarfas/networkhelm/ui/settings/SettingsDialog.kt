@@ -1,5 +1,8 @@
 package com.vasmarfas.networkhelm.ui.settings
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +13,8 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -22,13 +27,21 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
+import com.composables.icons.lucide.Check
 import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronUp
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.X
 import com.composeunstyled.Text
+import com.composeunstyled.UnstyledIcon
 import com.vasmarfas.networkhelm.app.AppSettings
 import com.vasmarfas.networkhelm.app.BarItem
 import com.vasmarfas.networkhelm.app.BrowserAccess
@@ -36,6 +49,7 @@ import com.vasmarfas.networkhelm.app.Languages
 import com.vasmarfas.networkhelm.app.canSetLanguage
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
 import com.vasmarfas.networkhelm.ui.kit.Button
+import com.vasmarfas.networkhelm.ui.kit.Hint
 import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.Labeled
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
@@ -44,11 +58,18 @@ import com.vasmarfas.networkhelm.ui.kit.Select
 import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.Toggle
 import com.vasmarfas.networkhelm.ui.kit.dialogPanel
+import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.scrim
+import com.vasmarfas.networkhelm.ui.table.CommentMode
 import com.vasmarfas.networkhelm.ui.terminal.terminalScrollback
+import com.vasmarfas.networkhelm.ui.theme.AccentPresets
 import com.vasmarfas.networkhelm.ui.theme.BundledThemes
+import com.vasmarfas.networkhelm.ui.theme.Material
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.ThemeFile
+import com.vasmarfas.networkhelm.ui.theme.materialPalette
+import com.vasmarfas.networkhelm.ui.theme.on
+import com.vasmarfas.networkhelm.ui.theme.systemAccent
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -60,6 +81,10 @@ import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.access_open_at
+import networkhelm.app.shared.generated.resources.list_comments_above
+import networkhelm.app.shared.generated.resources.list_comments_column
+import networkhelm.app.shared.generated.resources.list_comments_hidden
+import networkhelm.app.shared.generated.resources.settings_accent
 import networkhelm.app.shared.generated.resources.settings_bar_clock
 import networkhelm.app.shared.generated.resources.settings_bar_cpu
 import networkhelm.app.shared.generated.resources.settings_bar_disk
@@ -75,6 +100,7 @@ import networkhelm.app.shared.generated.resources.settings_browser_access
 import networkhelm.app.shared.generated.resources.settings_check_updates
 import networkhelm.app.shared.generated.resources.settings_check_updates_hint
 import networkhelm.app.shared.generated.resources.settings_close
+import networkhelm.app.shared.generated.resources.settings_comments
 import networkhelm.app.shared.generated.resources.settings_confirm_removal
 import networkhelm.app.shared.generated.resources.settings_delete
 import networkhelm.app.shared.generated.resources.settings_edit
@@ -97,6 +123,8 @@ import networkhelm.app.shared.generated.resources.settings_rows
 import networkhelm.app.shared.generated.resources.settings_rows_theme
 import networkhelm.app.shared.generated.resources.settings_scale
 import networkhelm.app.shared.generated.resources.settings_separators
+import networkhelm.app.shared.generated.resources.settings_system_colours
+import networkhelm.app.shared.generated.resources.settings_system_colours_hint
 import networkhelm.app.shared.generated.resources.settings_terminal
 import networkhelm.app.shared.generated.resources.settings_theme
 import networkhelm.app.shared.generated.resources.settings_title
@@ -126,6 +154,7 @@ fun SettingsDialog(
     var problem by remember { mutableStateOf<String?>(null) }
     val current = settings.current
     val theme = settings.theme
+    val drawn = settings.drawnTheme()
     fun act(action: suspend () -> Unit) = scope.launch {
         problem = null
         try {
@@ -164,12 +193,27 @@ fun SettingsDialog(
                         Select(if (theme.followsSystem) current.dark else current.dark ?: false, looks, { look(it) }, { dark -> act { settings.change { it.copy(dark = dark) } } }, Modifier.width(240.dp).testTag("look"))
                     }
                 }
+                if (theme == Material) {
+                    val system = systemAccent()
+                    Labeled(stringResource(Res.string.settings_accent)) {
+                        Accents(current.accent, theme.isDark(current.dark, isSystemInDarkTheme()), enabled = system == null || !current.systemColours) { accent ->
+                            act { settings.change { it.copy(accent = accent) } }
+                        }
+                    }
+                    if (system != null) {
+                        Labeled("") {
+                            Toggle(current.systemColours, stringResource(Res.string.settings_system_colours), stringResource(Res.string.settings_system_colours_hint), "system-colours") { on ->
+                                act { settings.change { it.copy(systemColours = on) } }
+                            }
+                        }
+                    }
+                }
                 Labeled(stringResource(Res.string.settings_scale)) {
                     Select(current.scale, Scales, { "${(it * 100).roundToInt()} %" }, { scale -> act { settings.change { it.copy(scale = scale) } } }, Modifier.width(240.dp))
                 }
                 Labeled("") {
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Button(stringResource(Res.string.settings_edit), { editing = theme })
+                        Button(stringResource(Res.string.settings_edit), { editing = drawn })
                         Button(stringResource(Res.string.settings_import), {
                             act {
                                 for (file in exchange.pick()) {
@@ -185,7 +229,7 @@ fun SettingsDialog(
                             }
                         }, Modifier.testTag("import-theme"))
                         Button(stringResource(Res.string.settings_export), {
-                            act { exchange.save("${theme.name}.json", AppSettings.json.encodeToString(ThemeFile.serializer(), theme).encodeToByteArray()) }
+                            act { exchange.save("${theme.name}.json", AppSettings.json.encodeToString(ThemeFile.serializer(), drawn).encodeToByteArray()) }
                         }, Modifier.testTag("export-theme"))
                         if (theme !in BundledThemes) Button(stringResource(Res.string.settings_delete), { act { settings.remove(theme) } })
                     }
@@ -195,6 +239,14 @@ fun SettingsDialog(
                     Select(current.rowSpacing, RowSpacings, { if (it == 0) theme else "${if (it > 0) "+" else "−"}${abs(it)} dp" }, { spacing ->
                         act { settings.change { it.copy(rowSpacing = spacing) } }
                     }, Modifier.width(240.dp).testTag("rows"))
+                }
+                Labeled(stringResource(Res.string.settings_comments)) {
+                    val modes = mapOf(
+                        CommentMode.Above to stringResource(Res.string.list_comments_above),
+                        CommentMode.InColumn to stringResource(Res.string.list_comments_column),
+                        CommentMode.Hidden to stringResource(Res.string.list_comments_hidden),
+                    )
+                    Select(current.comments, CommentMode.entries, { modes.getValue(it) }, { mode -> act { settings.change { it.copy(comments = mode) } } }, Modifier.width(240.dp).testTag("comments"))
                 }
                 if (terminalScrollback) {
                     Labeled(stringResource(Res.string.settings_terminal)) {
@@ -286,6 +338,37 @@ private fun barLabel(item: BarItem) = stringResource(
 private fun <T> List<T>.swapped(index: Int, other: Int) = toMutableList().also {
     it[index] = this[other]
     it[other] = this[index]
+}
+
+// each swatch shows the accent as the chosen look draws it, not the colour the palette is built from
+@Composable
+private fun Accents(chosen: Color, dark: Boolean, enabled: Boolean, onPick: (Color) -> Unit) {
+    val palette = Theme.palette
+    val size = if (LocalCompact.current) 40.dp else 24.dp
+    val drawn = remember(dark) { AccentPresets.map { (accent, _) -> materialPalette(accent, dark).accent } }
+    FlowRow(Modifier.alpha(if (enabled) 1f else 0.4f), horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        AccentPresets.forEachIndexed { index, (accent, name) ->
+            val title = stringResource(name)
+            val picked = accent == chosen
+            Hint(title) {
+                Box(
+                    Modifier
+                        .size(size)
+                        .clip(CircleShape)
+                        .border(2.dp, if (picked) palette.text else Color.Transparent, CircleShape)
+                        .selectable(selected = picked, enabled = enabled, interactionSource = null, indication = null, role = Role.RadioButton, onClick = { onPick(accent) })
+                        .semantics { contentDescription = title }
+                        .hand(enabled)
+                        .testTag("accent-$index"),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Box(Modifier.size(size - 8.dp).clip(CircleShape).background(drawn[index]), contentAlignment = Alignment.Center) {
+                        if (picked) UnstyledIcon(Lucide.Check, null, Modifier.size(14.dp), tint = palette.on(drawn[index]))
+                    }
+                }
+            }
+        }
+    }
 }
 
 @Composable

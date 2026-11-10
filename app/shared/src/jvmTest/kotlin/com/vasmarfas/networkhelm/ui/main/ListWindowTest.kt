@@ -430,6 +430,29 @@ class ListWindowTest {
     }
 
     @Test
+    fun theColumnsMenuMovesAShownColumnRightAndLeft() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val tables = TableLayouts(storage)
+        val tab = RouterTab(FakeRouter(mapOf("ip/firewall/filter" to rules)), "192.0.2.1", bundledPacks().values, storage, tables)
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty() }
+        fun arrow(tag: String) {
+            // the button stays in the corner of the header however wide the columns are
+            if (onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isEmpty()) onNodeWithTag("columns").performClick()
+            waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag(tag)).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithTag(tag).performClick()
+        }
+
+        arrow("right-action")
+        waitUntil(timeoutMillis = 5_000) { tables["ip/firewall/filter"]?.columns?.take(2) == listOf("chain", "action") }
+        assertTrue(tables["ip/firewall/filter"]?.sort.isNullOrEmpty(), "an arrow does not sort by the column")
+        arrow("left-action")
+        waitUntil(timeoutMillis = 5_000) { tables["ip/firewall/filter"]?.columns?.take(2) == listOf("action", "chain") }
+    }
+
+    @Test
     fun commentsStandAboveTheRowsInAColumnOrAway() = runDesktopComposeUiTest(1000, 620) {
         Locale.setDefault(Locale.ENGLISH)
         val path = MenuPath.parse("ip/firewall/filter")
@@ -465,6 +488,40 @@ class ListWindowTest {
         val again = TableLayouts(storage)
         runBlocking { withTimeoutOrNull(300) { again.keep() } }
         assertEquals(CommentMode.Hidden, again[path.toString()]?.comments)
+    }
+
+    @Test
+    fun aTableShowsCommentsAsTheSettingsSayUntilItGetsAModeOfItsOwn() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val path = MenuPath.parse("ip/firewall/filter")
+        val schema = MenuSchema(path, NodeKind.List, emptyList(), listOf("add", "print", "remove", "set"), listOf(Argument("comment", ValueType.Text()), Argument("disabled", ValueType.YesNo)))
+        val storage = MemoryStorage()
+        val tables = TableLayouts(storage)
+        val tab = RouterTab(FakeRouter(mapOf(path.toString() to rules), schemas = mapOf(path.toString() to schema)), "192.0.2.1", bundledPacks().values, storage, tables)
+        var settings by mutableStateOf(Settings(comments = CommentMode.InColumn))
+        setContent { CompositionLocalProvider(LocalSettings provides settings) { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } } }
+        tab.open(MenuEntry("Firewall", path.toString()))
+        val column = hasText("Comment") and hasAnyAncestor(hasTestTag("table"))
+        fun choose(mode: String) {
+            onNodeWithTag("comments").performClick()
+            waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText(mode)).fetchSemanticsNodes().isNotEmpty() }
+            onNodeWithText(mode).performClick()
+        }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isNotEmpty() }
+        settings = Settings(comments = CommentMode.Hidden)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isEmpty() && onAllNodes(hasText("web")).fetchSemanticsNodes().isEmpty() }
+
+        choose("In a column")
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isNotEmpty() }
+        settings = Settings(comments = CommentMode.Above)
+        waitForIdle()
+        assertTrue(onAllNodes(column).fetchSemanticsNodes().isNotEmpty(), "the mode of the table stands")
+        assertEquals(CommentMode.InColumn, tables[path.toString()]?.comments)
+
+        choose("Above rows")
+        waitUntil(timeoutMillis = 5_000) { tables[path.toString()]?.comments == null }
+        settings = Settings(comments = CommentMode.Hidden)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("web")).fetchSemanticsNodes().isEmpty() }
     }
 
     @Test

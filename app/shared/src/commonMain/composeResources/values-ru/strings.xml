@@ -140,6 +140,8 @@
     <string name="winbox_unusable">Без адреса, пропущено: %1$d</string>
     <string name="error_secrets">Хранилище паролей не ответило: %1$s</string>
     <string name="connect_export">Экспорт</string>
+    <string name="connect_lists_below">Списки под формой</string>
+    <string name="connect_lists_beside">Списки справа от формы</string>
     <string name="book_password">Мастер-пароль</string>
     <string name="book_repeat">Ещё раз</string>
     <string name="book_export_question">В файл уйдут сохранённые роутеры и их пароли, закрытые мастер-паролем. Без него файл не открыть.</string>
@@ -258,6 +260,8 @@
     <string name="list_find_previous">Предыдущее совпадение</string>
     <string name="list_do_not_ask">Больше не спрашивать</string>
     <string name="list_columns">Колонки</string>
+    <string name="list_column_left">Левее</string>
+    <string name="list_column_right">Правее</string>
     <string name="list_live">Обновляется</string>
     <string name="list_loading_rows">Загрузка… %1$d из %2$d</string>
     <string name="list_not_loaded">Не загружено</string>
@@ -465,6 +469,17 @@
     <string name="settings_look_system">Как в системе</string>
     <string name="settings_look_light">Светлый</string>
     <string name="settings_look_dark">Тёмный</string>
+    <string name="settings_accent">Цвет</string>
+    <string name="settings_system_colours">Цвета системы</string>
+    <string name="settings_system_colours_hint">Палитра, которую Android берёт из обоев</string>
+    <string name="accent_blue">Синий</string>
+    <string name="accent_teal">Бирюзовый</string>
+    <string name="accent_green">Зелёный</string>
+    <string name="accent_olive">Оливковый</string>
+    <string name="accent_orange">Оранжевый</string>
+    <string name="accent_red">Красный</string>
+    <string name="accent_plum">Сливовый</string>
+    <string name="accent_violet">Фиолетовый</string>
     <string name="settings_language">Язык</string>
     <string name="settings_language_system">Его выбирает система: на iPhone и iPad — в Настройках → NetworkHelm → Язык, в браузере — по языку браузера.</string>
     <string name="settings_scale">Масштаб</string>
@@ -474,6 +489,7 @@
     <string name="settings_delete">Удалить тему</string>
     <string name="settings_rows">Строки таблиц</string>
     <string name="settings_rows_theme">Как в теме</string>
+    <string name="settings_comments">Комментарии в таблицах</string>
     <string name="settings_separators">Линии между колонками таблиц</string>
     <string name="settings_confirm_removal">Спрашивать перед удалением с роутера</string>
     <string name="settings_resource_bar">Полоса ресурсов роутера внизу окна</string>

@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -352,10 +351,6 @@ fun <T, K : Any> DataTable(
                                     DisableSelection { Header(column, width(column), state, separators, { state.widths[column.key] = it }, onMoveColumn?.let { { shift -> dropColumn(index, shift) } }) }
                                 }
                             }
-                            if (picker != null) {
-                                Spacer(Modifier.weight(1f))
-                                picker()
-                            }
                         }
                     }
                     LazyColumn(
@@ -526,6 +521,18 @@ fun <T, K : Any> DataTable(
                 }
             }
             ListScrollBar(list, Modifier.align(Alignment.CenterEnd).padding(top = if (detail) 0.dp else metrics.row))
+            // the button of the columns stays at the end of the header while the columns scroll under it
+            if (picker != null && !detail) {
+                val classic = Theme.classic
+                Box(
+                    Modifier.align(Alignment.TopEnd).height(metrics.row).background(palette.raised).drawWithContent {
+                        drawContent()
+                        drawLine(palette.line, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1f)
+                        if (!classic) drawLine(palette.line, Offset(0f, 0.5f), Offset(size.width, 0.5f), 1f)
+                    },
+                    contentAlignment = Alignment.Center,
+                ) { picker() }
+            }
         }
         if (!detail) HorizontalScrollBar(sideways, viewport)
     }
@@ -617,7 +624,7 @@ private fun <T> Header(column: TableColumn<T>, width: Dp, state: TableState<*>, 
                 // after the pointer handlers, so that only the drawing follows the pointer and the drag keeps its own frame
                 .offset { IntOffset(dragged.roundToInt(), 0) }
                 .background(if (dragged != 0f) palette.selection else palette.raised)
-                .padding(horizontal = 6.dp, vertical = if (classic) 0.dp else if (Theme.material) 8.dp else 3.dp),
+                .padding(horizontal = 6.dp, vertical = if (classic) 0.dp else 3.dp),
             color = palette.muted,
             singleLine = true,
             overflow = TextOverflow.Ellipsis,

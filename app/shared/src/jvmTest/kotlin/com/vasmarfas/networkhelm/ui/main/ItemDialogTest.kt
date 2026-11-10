@@ -28,16 +28,22 @@ import androidx.compose.ui.unit.dp
 import com.vasmarfas.networkhelm.FakeRouter
 import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.model.Argument
+import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.bundledPacks
+import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.Legacy
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import java.io.File
 import java.util.Locale
 import javax.imageio.ImageIO
@@ -80,7 +86,7 @@ class ItemDialogTest {
 
     private fun SkikoComposeUiTest.field(name: String) = onNode(hasSetTextAction() and hasAnyAncestor(hasTestTag("field-$name")))
 
-    private fun SkikoComposeUiTest.firewall(router: FakeRouter): RouterTab {
+    private fun SkikoComposeUiTest.firewall(router: DeviceSession): RouterTab {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
         val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
@@ -88,6 +94,19 @@ class ItemDialogTest {
         tab.open(MenuEntry("Firewall", path.toString()))
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("accept")).fetchSemanticsNodes().isNotEmpty() }
         return tab
+    }
+
+    @Test
+    fun aRuleOpensWithWhatTheListReadBeforeTheRouterAnswersItsWindow() = runDesktopComposeUiTest(1200, 800) {
+        val router = FakeRouter(mapOf(path.toString() to listOf(rule)), schemas = mapOf(path.toString() to schema))
+        val silent = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> =
+                if (filter == null) router.watch(path, null, properties) else flow { awaitCancellation() }
+        }
+        firewall(silent)
+        onNodeWithText("accept").performMouseInput { doubleClick() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Firewall Rule <!192.0.2.0/24->8080>")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("8080") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

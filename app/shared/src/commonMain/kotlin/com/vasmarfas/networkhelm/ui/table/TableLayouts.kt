@@ -21,7 +21,8 @@ class TableLayout(
     val sort: List<SavedSort> = emptyList(),
     val detail: Boolean = false,
     val categories: Boolean = false,
-    val comments: CommentMode = CommentMode.Above,
+    // a table without a mode of its own shows comments as the settings say
+    val comments: CommentMode? = null,
     val log: LogLayout? = null,
     val expanded: List<String> = emptyList(),
 )

@@ -111,7 +111,7 @@ fun <T> Segments(value: T, choices: List<T>, label: @Composable (T) -> String, o
                     .background((if (!chosen) palette.surface else if (material) palette.selection else palette.accent).eased())
                     .selectable(selected = chosen, interactionSource = null, indication = LocalIndication.current, role = Role.RadioButton, onClick = { onSelect(choice) })
                     .hand()
-                    .padding(horizontal = if (material) 16.dp else 10.dp),
+                    .padding(horizontal = if (material) 12.dp else 10.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 DisableSelection {
@@ -263,7 +263,7 @@ fun <T> Select(
             UnstyledButton(
                 onClick = { expanded = true },
                 indication = LocalIndication.current,
-                contentPadding = PaddingValues(start = if (material) 12.dp else 8.dp, end = if (material) 8.dp else 6.dp),
+                contentPadding = PaddingValues(start = if (material) 10.dp else 8.dp, end = if (material) 8.dp else 6.dp),
                 modifier = Modifier.height(Theme.metrics.control).clip(shape).background(palette.surface).border(1.dp, if (material) palette.faint else palette.line, shape).hand(),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -420,7 +420,7 @@ fun TabStrip(
                                 if (!active) drawLine(palette.line, Offset(0f, size.height - px / 2), Offset(size.width, size.height - px / 2), px)
                             } else if (material) {
                                 val thick = 3.dp.toPx()
-                                val inset = if (boxed) 0f else 16.dp.toPx()
+                                val inset = if (boxed) 0f else 12.dp.toPx()
                                 val width = (size.width - inset * 2) * mark
                                 drawRoundRect(palette.accent, Offset((size.width - width) / 2, if (boxed) 0f else size.height - thick), Size(width, thick), CornerRadius(thick))
                             } else if (active) {
@@ -428,7 +428,7 @@ fun TabStrip(
                                 drawRect(palette.accent, Offset(0f, top), Size(size.width, 2.dp.toPx()))
                             }
                         }
-                        .padding(horizontal = if (classic) 6.dp else if (material) 16.dp else 12.dp),
+                        .padding(horizontal = if (classic) 6.dp else 12.dp),
                     contentAlignment = Alignment.Center,
                 ) {
                     val color = if (active && material && !boxed) palette.accent else if (active || classic || boxed) palette.text else palette.muted

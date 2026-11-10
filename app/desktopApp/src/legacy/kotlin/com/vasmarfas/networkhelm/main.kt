@@ -13,8 +13,10 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.vasmarfas.networkhelm.app.WorkspaceBackground
 import com.vasmarfas.networkhelm.app.desktopServices
 import com.vasmarfas.networkhelm.app.quit
+import com.vasmarfas.networkhelm.app.rememberFrameState
 import com.vasmarfas.networkhelm.app.reportStartupFailure
 import com.vasmarfas.networkhelm.ui.about.appIcon
 import com.vasmarfas.networkhelm.ui.kit.HintHost
@@ -44,9 +46,11 @@ private fun startApplication() = application {
     val tab = shell.routers.getOrNull(shell.selected)
     Window(
         onCloseRequest = { quit() },
+        state = rememberFrameState(shell.services.storage),
         title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
         icon = appIcon(),
     ) {
+        ShellTheme(shell, relocalize = false) { WorkspaceBackground() }
         CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
             MenuLook(shell) { App(shell) }
         }
@@ -60,6 +64,7 @@ private fun startApplication() = application {
                 icon = appIcon(),
             ) {
                 ShellTheme(shell) {
+                    WorkspaceBackground()
                     MenuLook(shell) {
                         HintHost {
                             PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {

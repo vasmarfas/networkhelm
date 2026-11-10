@@ -14,8 +14,11 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.vasmarfas.networkhelm.app.ResizeEdges
+import com.vasmarfas.networkhelm.app.WorkspaceBackground
 import com.vasmarfas.networkhelm.app.desktopServices
 import com.vasmarfas.networkhelm.app.quit
+import com.vasmarfas.networkhelm.app.rememberFrameState
 import com.vasmarfas.networkhelm.app.reportStartupFailure
 import com.vasmarfas.networkhelm.ui.about.appIcon
 import com.vasmarfas.networkhelm.ui.kit.HintHost
@@ -52,9 +55,11 @@ private fun startApplication() = application {
             val tab = shell.routers.getOrNull(shell.selected)
             DecoratedWindow(
                 onCloseRequest = { quit() },
+                state = rememberFrameState(shell.services.storage),
                 title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
                 icon = appIcon(),
             ) {
+                WorkspaceBackground()
                 TitleBar(Modifier.newFullscreenControls()) {
                     ShellTheme(shell) { TitleBarContent(shell, Modifier.align(Alignment.Start), Modifier.clientRegion("routers")) }
                     shell.services.browserAccess?.let { access ->
@@ -62,7 +67,7 @@ private fun startApplication() = application {
                     }
                 }
                 CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
-                    MenuLook(shell) { App(shell, tabsInTitle = true) }
+                    ResizeEdges { MenuLook(shell) { App(shell, tabsInTitle = true) } }
                 }
             }
             for (window in shell.detached) {
@@ -78,10 +83,13 @@ private fun startApplication() = application {
                             ShellTheme(shell) { TitleBarName(name, Modifier.align(Alignment.CenterHorizontally)) }
                         }
                         ShellTheme(shell) {
+                            WorkspaceBackground()
                             MenuLook(shell) {
-                                HintHost {
-                                    PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {
-                                        shell.detached.remove(window)
+                                ResizeEdges {
+                                    HintHost {
+                                        PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {
+                                            shell.detached.remove(window)
+                                        }
                                     }
                                 }
                             }

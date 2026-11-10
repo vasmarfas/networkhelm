@@ -59,7 +59,7 @@ fun App(services: Services) {
 @Composable
 fun ShellTheme(shell: Shell, relocalize: Boolean = true, content: @Composable () -> Unit) {
     val settings = shell.settings.current
-    val theme = shell.settings.theme.let { it.copy(metrics = it.metrics.copy(row = it.metrics.row + settings.rowSpacing.dp)) }
+    val theme = shell.settings.drawnTheme().let { it.copy(metrics = it.metrics.copy(row = it.metrics.row + settings.rowSpacing.dp)) }
     key(settings.language.takeIf { relocalize }) {
         CompositionLocalProvider(LocalSettings provides settings, LocalAppSettings provides shell.settings, LocalSnippets provides shell.snippets, LocalChangelog provides shell.services.changelog) {
             NetworkHelmTheme(theme, theme.isDark(settings.dark, isSystemInDarkTheme()), settings.scale, content)

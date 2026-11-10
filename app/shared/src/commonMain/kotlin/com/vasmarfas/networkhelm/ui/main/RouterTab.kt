@@ -97,6 +97,7 @@ class ItemSpec(
     val name: String? = null,
     val prefill: Map<String, String> = emptyMap(),
     val order: List<String> = emptyList(),
+    val listed: Map<String, String> = emptyMap(),
 ) {
     var id by mutableStateOf(id)
 }
@@ -365,7 +366,7 @@ class RouterTab(
         return workspace.open(title, DpOffset(120.dp, 60.dp), size).id
     }
 
-    fun openItem(title: String, path: MenuPath, id: String?, name: String? = null, prefill: Map<String, String> = emptyMap(), order: List<String> = emptyList()) {
+    fun openItem(title: String, path: MenuPath, id: String?, name: String? = null, prefill: Map<String, String> = emptyMap(), order: List<String> = emptyList(), listed: Map<String, String> = emptyMap()) {
         val open = workspace.windows.firstOrNull { window ->
             items[window.id]?.let { it.path == path && (id != null && it.id == id || name != null && it.name == name) } == true
         }
@@ -376,7 +377,7 @@ class RouterTab(
         val tab = windowTab(title, path.toString())
         val shift = (workspace.windows.size % 8) * 24
         val window = workspace.open(title, DpOffset((80 + shift).dp, (40 + shift).dp), DpSize(720.dp, 540.dp))
-        items[window.id] = ItemSpec(title, path, id, tab.shown, tab.form, tab.labels, name, prefill, order)
+        items[window.id] = ItemSpec(title, path, id, tab.shown, tab.form, tab.labels, name, prefill, order, listed)
     }
 
     suspend fun expand(spec: WindowSpec) {

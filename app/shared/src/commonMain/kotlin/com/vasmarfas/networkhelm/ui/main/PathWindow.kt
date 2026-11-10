@@ -211,6 +211,8 @@ import networkhelm.app.shared.generated.resources.form_configuration
 import networkhelm.app.shared.generated.resources.form_ok
 import networkhelm.app.shared.generated.resources.list_cancel
 import networkhelm.app.shared.generated.resources.list_categories
+import networkhelm.app.shared.generated.resources.list_column_left
+import networkhelm.app.shared.generated.resources.list_column_right
 import networkhelm.app.shared.generated.resources.list_columns
 import networkhelm.app.shared.generated.resources.list_comment
 import networkhelm.app.shared.generated.resources.list_comments
@@ -256,7 +258,7 @@ fun PathWindow(
     session: DeviceSession,
     spec: WindowSpec,
     tables: TableLayouts,
-    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>) -> Unit,
+    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>, Map<String, String>) -> Unit,
     onOpenWindow: (MenuEntry) -> Unit,
     tabsInTitle: Boolean = false,
     onFit: (Dp) -> Unit = {},
@@ -296,7 +298,7 @@ private fun PathView(
     session: DeviceSession,
     tab: WindowTab,
     tables: TableLayouts,
-    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>) -> Unit,
+    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>, Map<String, String>) -> Unit,
     onOpenWindow: (MenuEntry) -> Unit,
     onClose: () -> Unit,
     onSettings: () -> Unit,
@@ -425,7 +427,7 @@ private fun ListView(
     tab: WindowTab,
     schema: MenuSchema,
     tables: TableLayouts,
-    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>) -> Unit,
+    onOpenItem: (String, MenuPath, String?, String?, Map<String, String>, List<String>, Map<String, String>) -> Unit,
     onOpenWindow: (MenuEntry) -> Unit,
 ) {
     val palette = Theme.palette
@@ -477,10 +479,13 @@ private fun ListView(
     val classic = Theme.classic
     var detail by remember(name) { mutableStateOf(saved?.detail ?: compact) }
     var categories by remember(name) { mutableStateOf(saved?.categories == true) }
-    var comments by remember(name) { mutableStateOf(saved?.comments ?: CommentMode.Above) }
+    // a mode picked in the table holds there; picking the one the settings give lets the table follow them again
+    val everywhere = LocalSettings.current.comments
+    var ownComments by remember(name) { mutableStateOf(saved?.comments) }
+    val comments = ownComments ?: everywhere
     LaunchedEffect(name) {
         snapshotFlow {
-            TableLayout(chosen.orEmpty(), state.widths.mapValues { it.value.value }, state.sort.map { SavedSort(it.column, it.ascending) }, detail, categories, comments)
+            TableLayout(chosen.orEmpty(), state.widths.mapValues { it.value.value }, state.sort.map { SavedSort(it.column, it.ascending) }, detail, categories, ownComments)
         }.drop(1).collect { tables[name] = it }
     }
     val query = remember { TextFieldState() }
@@ -676,7 +681,7 @@ private fun ListView(
             ctrl && event.key == Key.C && state.selected.isNotEmpty() -> copy()
             ctrl && event.key == Key.V && canAdd && session.device.platform == Platform.RouterOs -> paste()
             event.key == Key.Delete && canRemove && removable -> remove(state.selected.toList())
-            (event.key == Key.Insert || ctrl && event.key == Key.N) && canAdd -> onOpenItem(tab.title, path, null, null, fixed, first.toList())
+            (event.key == Key.Insert || ctrl && event.key == Key.N) && canAdd -> onOpenItem(tab.title, path, null, null, fixed, first.toList(), emptyMap())
             ctrl && event.key == Key.M && canComment && state.selected.isNotEmpty() -> comment()
             ctrl && event.key == Key.E && canSwitch -> enable(!event.isShiftPressed)
             ctrl && event.key == Key.F -> find.requestFocus()
@@ -760,10 +765,10 @@ private fun ListView(
                 Modifier.fillMaxWidth().background(palette.raised).then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (canAdd) ToolbarButton(stringResource(Res.string.list_new), icons["button/new"]?.vector, { onOpenItem(tab.title, path, null, null, fixed, first.toList()) }, iconOnly = classic || compact, tint = palette.tintOf(icons["button/new"]))
+                if (canAdd) ToolbarButton(stringResource(Res.string.list_new), icons["button/new"]?.vector, { onOpenItem(tab.title, path, null, null, fixed, first.toList(), emptyMap()) }, iconOnly = classic || compact, tint = palette.tintOf(icons["button/new"]))
                 if (kinds.isNotEmpty()) {
                     ActionsMenu(stringResource(Res.string.list_new), icons["button/new"]?.vector, kinds, { true }, { label(it.substringAfterLast('/')) }, iconOnly = classic || compact, tint = palette.tintOf(icons["button/new"])) { kind ->
-                        onOpenItem(label(kind.substringAfterLast('/')), MenuPath.parse(kind), null, null, emptyMap(), emptyList())
+                        onOpenItem(label(kind.substringAfterLast('/')), MenuPath.parse(kind), null, null, emptyMap(), emptyList(), emptyMap())
                     }
                 }
                 if (classic) removeButton()
@@ -816,7 +821,7 @@ private fun ListView(
                         CommentMode.InColumn to stringResource(Res.string.list_comments_column),
                         CommentMode.Hidden to stringResource(Res.string.list_comments_hidden),
                     )
-                    ActionsMenu(stringResource(Res.string.list_comments), Lucide.MessageSquare, CommentMode.entries, { true }, { modes.getValue(it) }, Modifier.testTag("comments"), active = comments != CommentMode.Above, iconOnly = true, selected = { it == comments }) { comments = it }
+                    ActionsMenu(stringResource(Res.string.list_comments), Lucide.MessageSquare, CommentMode.entries, { true }, { modes.getValue(it) }, Modifier.testTag("comments"), active = comments != CommentMode.Above, iconOnly = true, selected = { it == comments }) { mode -> ownComments = mode.takeIf { it != everywhere } }
                 }
                 if (!compact) search(Modifier.width(200.dp))
             }
@@ -829,9 +834,9 @@ private fun ListView(
                 val owner = pack?.owner
                 val target = pack?.open?.let { open -> row[open.by]?.let(open.paths::get) }
                 when {
-                    owner != null -> row[owner.by]?.let { onOpenItem(owner.title, MenuPath.parse(owner.path), it, null, emptyMap(), emptyList()) }
-                    target != null -> onOpenItem(tab.title, MenuPath.parse(target), null, row["name"], emptyMap(), emptyList())
-                    else -> onOpenItem(tab.title, path, row.id, null, emptyMap(), emptyList())
+                    owner != null -> row[owner.by]?.let { onOpenItem(owner.title, MenuPath.parse(owner.path), it, null, emptyMap(), emptyList(), emptyMap()) }
+                    target != null -> onOpenItem(tab.title, MenuPath.parse(target), null, row["name"], emptyMap(), emptyList(), emptyMap())
+                    else -> onOpenItem(tab.title, path, row.id, null, emptyMap(), emptyList(), rows.firstOrNull { it.id == row.id }?.values.orEmpty())
                 }
             }
             DataTable(
@@ -1064,11 +1069,20 @@ private fun ColumnPicker(available: List<String>, visible: List<String>, named: 
         onExpandedChange = { open = it },
         panel = {
             MenuPanel {
-                for (column in available) {
-                    DropdownItem(onClick = { onChange(if (column in visible) visible - column else visible + column) }) {
-                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Box(Modifier.size(14.dp)) { if (column in visible) UnstyledIcon(Lucide.Check, null, Modifier.size(14.dp), tint = palette.accent) }
-                            Text(named(column))
+                // the shown columns come first, in the order of the table, and move with the arrows as their headers do when dragged
+                for (column in visible + available.filter { it !in visible }) {
+                    val at = visible.indexOf(column)
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        DropdownItem(onClick = { onChange(if (at >= 0) visible - column else visible + column) }, Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(Modifier.size(14.dp)) { if (at >= 0) UnstyledIcon(Lucide.Check, null, Modifier.size(14.dp), tint = palette.accent) }
+                                Text(named(column))
+                            }
+                        }
+                        if (at >= 0) {
+                            Shift(Lucide.ChevronUp, stringResource(Res.string.list_column_left), at > 0, "left-$column") { onChange(visible.moved(at, at - 1)) }
+                            Shift(Lucide.ChevronDown, stringResource(Res.string.list_column_right), at < visible.lastIndex, "right-$column") { onChange(visible.moved(at, at + 1)) }
+                            Spacer(Modifier.width(6.dp))
                         }
                     }
                 }
@@ -1079,6 +1093,19 @@ private fun ColumnPicker(available: List<String>, visible: List<String>, named: 
         },
     )
 }
+
+@Composable
+private fun Shift(icon: ImageVector, description: String, enabled: Boolean, tag: String, onClick: () -> Unit) {
+    val palette = Theme.palette
+    UnstyledIcon(
+        icon,
+        description,
+        Modifier.size(18.dp).clickable(enabled = enabled, onClick = onClick).then(if (enabled) Modifier.hand() else Modifier).testTag(tag),
+        tint = if (enabled) palette.muted else palette.faint,
+    )
+}
+
+private fun List<String>.moved(from: Int, to: Int): List<String> = toMutableList().apply { add(to, removeAt(from)) }
 
 @Composable
 internal fun Confirm(

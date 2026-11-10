@@ -181,7 +181,10 @@ fun ItemForm(
 ) {
     val palette = Theme.palette
     val scope = rememberCoroutineScope()
-    val form = remember(spec) { FormState().apply { spec.prefill.forEach { (name, value) -> edit(name, value) } } }
+    // a row opened from a list shows what the list read until the router answers the window
+    val form = remember(spec) {
+        FormState(if (spec.listed.isEmpty()) emptyMap() else derived(spec.shown, spec.listed)).apply { spec.prefill.forEach { (name, value) -> edit(name, value) } }
+    }
     var schema by remember { mutableStateOf<MenuSchema?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -235,7 +238,7 @@ fun ItemForm(
     // RouterOS describes the fields of a menu in alphabetical order and prints them in its own
     val ordered = spec.form == null && session.device.platform == Platform.RouterOs
     val fresh = remember(spec) { spec.id == null && spec.name == null }
-    var printed by remember(spec) { mutableStateOf<List<String>?>(null) }
+    var printed by remember(spec) { mutableStateOf(spec.listed.keys.toList().takeIf { it.isNotEmpty() }) }
     LaunchedEffect(session, spec.path, id, kind == NodeKind.Settings) {
         val updates = when {
             kind == NodeKind.Settings -> session.watchSettings(spec.path).map { listOf(it) }
@@ -243,7 +246,7 @@ fun ItemForm(
             lookup != null -> session.watch(spec.path, Filter.Equals("name", lookup)).rows().drop(1)
             else -> return@LaunchedEffect
         }
-        var seen = false
+        var seen = spec.listed.isNotEmpty()
         try {
             updates.onTheSecond().collect { rows ->
                 val item = rows.firstOrNull()

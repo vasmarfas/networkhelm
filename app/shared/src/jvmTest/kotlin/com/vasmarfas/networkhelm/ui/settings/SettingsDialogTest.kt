@@ -6,6 +6,7 @@ import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assertTextContains
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onFirst
@@ -32,9 +33,12 @@ import com.vasmarfas.networkhelm.transport.MemoryTrustStore
 import com.vasmarfas.networkhelm.ui.files.FileExchange
 import com.vasmarfas.networkhelm.ui.files.LocalFile
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
+import com.vasmarfas.networkhelm.ui.table.CommentMode
 import com.vasmarfas.networkhelm.ui.theme.LegacyPalette
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.ui.theme.ThemeFile
+import com.vasmarfas.networkhelm.ui.theme.hex
+import com.vasmarfas.networkhelm.ui.theme.materialPalette
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
 import java.awt.image.BufferedImage
@@ -93,6 +97,10 @@ class SettingsDialogTest {
         onNodeWithTag("terminal-lines").performScrollTo().performClick()
         onNodeWithText("50000 lines").performClick()
         waitUntil(timeoutMillis = 5_000) { settings.current.terminalLines == 50000 }
+
+        onNodeWithTag("comments").performScrollTo().performClick()
+        onNodeWithText("In a column").performClick()
+        waitUntil(timeoutMillis = 5_000) { settings.current.comments == CommentMode.InColumn }
     }
 
     @Test
@@ -216,6 +224,35 @@ class SettingsDialogTest {
         assertEquals(1, systems(), "Legacy has no look of the system, only the language has")
         onAllNodes(hasText("Dark")).onLast().performClick()
         waitUntil(timeoutMillis = 5_000) { settings.current.dark == true }
+    }
+
+    @Test
+    fun materialTakesTheAccentOfASwatchAndExportsItsColours() = runDesktopComposeUiTest(900, 800) {
+        Locale.setDefault(Locale.ENGLISH)
+        val settings = AppSettings(MemoryStorage())
+        var saved: String? = null
+        val exchange = object : FileExchange {
+            override suspend fun pick() = emptyList<LocalFile>()
+
+            override suspend fun save(name: String, bytes: ByteArray): Boolean {
+                saved = bytes.decodeToString()
+                return true
+            }
+        }
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) { NetworkHelmTheme { SettingsDialog(settings) {} } }
+        }
+        assertTrue(onAllNodes(hasTestTag("accent-0")).fetchSemanticsNodes().isEmpty(), "Modern has no swatches")
+        onNodeWithTag("theme").performClick()
+        onNodeWithText("Material").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("accent-0")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasTestTag("system-colours")).fetchSemanticsNodes().isEmpty(), "the desktop has no colours of the system")
+        val teal = Color(0xFF006A6A)
+        onNodeWithTag("accent-1").performClick()
+        waitUntil(timeoutMillis = 5_000) { settings.current.accent == teal }
+        onNodeWithTag("export-theme").performClick()
+        waitUntil(timeoutMillis = 5_000) { saved != null }
+        assertTrue("\"accent\": \"${materialPalette(teal, dark = false).accent.hex()}\"" in saved.orEmpty(), saved)
     }
 
     @Test

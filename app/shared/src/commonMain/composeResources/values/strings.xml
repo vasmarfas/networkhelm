@@ -140,6 +140,8 @@
     <string name="winbox_unusable">Without an address, left out: %1$d</string>
     <string name="error_secrets">The password store did not answer: %1$s</string>
     <string name="connect_export">Export</string>
+    <string name="connect_lists_below">Lists under the form</string>
+    <string name="connect_lists_beside">Lists beside the form</string>
     <string name="book_password">Master password</string>
     <string name="book_repeat">Repeat</string>
     <string name="book_export_question">The file keeps the saved routers and their passwords, sealed with a master password. Without the password the file does not open.</string>
@@ -258,6 +260,8 @@
     <string name="list_find_previous">Previous match</string>
     <string name="list_do_not_ask">Do not ask again</string>
     <string name="list_columns">Columns</string>
+    <string name="list_column_left">Move left</string>
+    <string name="list_column_right">Move right</string>
     <string name="list_live">Live</string>
     <string name="list_loading_rows">Loading… %1$d of %2$d</string>
     <string name="list_not_loaded">Not loaded</string>
@@ -465,6 +469,17 @@
     <string name="settings_look_system">As the system</string>
     <string name="settings_look_light">Light</string>
     <string name="settings_look_dark">Dark</string>
+    <string name="settings_accent">Colour</string>
+    <string name="settings_system_colours">System colours</string>
+    <string name="settings_system_colours_hint">The palette Android takes from the wallpaper</string>
+    <string name="accent_blue">Blue</string>
+    <string name="accent_teal">Teal</string>
+    <string name="accent_green">Green</string>
+    <string name="accent_olive">Olive</string>
+    <string name="accent_orange">Orange</string>
+    <string name="accent_red">Red</string>
+    <string name="accent_plum">Plum</string>
+    <string name="accent_violet">Violet</string>
     <string name="settings_language">Language</string>
     <string name="settings_language_system">The system picks it: on an iPhone or iPad in Settings → NetworkHelm → Language, in a browser by the language of the browser.</string>
     <string name="settings_scale">Scale</string>
@@ -474,6 +489,7 @@
     <string name="settings_delete">Delete theme</string>
     <string name="settings_rows">Table rows</string>
     <string name="settings_rows_theme">As in the theme</string>
+    <string name="settings_comments">Comments in tables</string>
     <string name="settings_separators">Lines between the columns of tables</string>
     <string name="settings_confirm_removal">Ask before removing from the router</string>
     <string name="settings_resource_bar">Bar of the router's resources at the foot of the window</string>

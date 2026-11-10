@@ -33,7 +33,7 @@
                 "expires-after", "status"
             ],
             "readonly": [
-                "active-address", "active-mac-address", "active-client-id", "active-server", "host-name", "expires-after",
+                "active-address", "active-mac-address", "active-client-id", "active-server", "host-name", "class-id", "expires-after",
                 "status", "last-seen", "blocked", "radius", "dynamic", "active-agent-circuit-id", "active-agent-remote-id"
             ],
             "quick": "server",
@@ -109,7 +109,7 @@
                     "title": "Active",
                     "readonly": true,
                     "fields": [
-                        "active-address", "active-mac-address", "active-client-id", "host-name", "active-agent-circuit-id",
+                        "active-address", "active-mac-address", "active-client-id", "host-name", "class-id", "active-agent-circuit-id",
                         "active-agent-remote-id", "active-server", "-",
                         "expires-after", "last-seen", "blocked", "radius"
                     ]
@@ -119,6 +119,7 @@
     },
     "labels": {
         "add-arp": "Add ARP For Leases",
+        "class-id": "Active Class ID",
         "support-broadband-tr101": "Support Broadband TR-101",
         "use-framed-as-classless": "Use Framed As Classless"
     }

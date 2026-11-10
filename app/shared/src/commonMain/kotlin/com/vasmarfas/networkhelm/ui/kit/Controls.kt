@@ -169,7 +169,7 @@ fun ToolbarButton(
             onClick = onClick,
             enabled = enabled,
             indication = LocalIndication.current,
-            contentPadding = PaddingValues(horizontal = if (material) 10.dp else 6.dp),
+            contentPadding = PaddingValues(horizontal = if (material) 8.dp else 6.dp),
             modifier = modifier
                 .height(Theme.metrics.toolbar)
                 .then(if (LocalCompact.current) Modifier.widthIn(min = 40.dp) else Modifier)
@@ -206,7 +206,7 @@ fun IconButton(
             enabled = enabled,
             indication = LocalIndication.current,
             modifier = modifier
-                .then(if (material) Modifier.size(Theme.metrics.row) else Modifier.size(if (LocalCompact.current) 40.dp else 28.dp, Theme.metrics.row))
+                .then(if (material) Modifier.size(Theme.metrics.control) else Modifier.size(if (LocalCompact.current) 40.dp else 28.dp, Theme.metrics.row))
                 .clip(if (material) RoundedCornerShape(50) else RoundedCornerShape(Theme.metrics.radius))
                 .background(if (active) palette.selection else if (classic) palette.raised else palette.surface.copy(alpha = 0f))
                 .then(if (classic) Modifier.bevel(palette) else Modifier)
@@ -225,7 +225,7 @@ fun Hint(text: String, enabled: Boolean = true, live: (@Composable () -> String)
     val palette = Theme.palette
     val shape = RoundedCornerShape(Theme.metrics.radius)
     val face = if (Theme.material) {
-        Modifier.padding(4.dp).shadow(3.dp, shape).background(palette.panel).padding(horizontal = 10.dp, vertical = 6.dp)
+        Modifier.padding(4.dp).shadow(3.dp, shape).background(palette.panel).padding(horizontal = 8.dp, vertical = 4.dp)
     } else {
         Modifier.clip(shape).background(palette.surface).border(1.dp, palette.line, shape).padding(horizontal = 6.dp, vertical = 3.dp)
     }
@@ -258,7 +258,7 @@ fun Button(label: String, onClick: () -> Unit, modifier: Modifier = Modifier, en
         indication = LocalIndication.current,
         contentPadding = PaddingValues(
             horizontal = when {
-                material -> if (compact) 16.dp else 24.dp
+                material -> 16.dp
                 compact -> 8.dp
                 else -> 14.dp
             },
@@ -330,7 +330,7 @@ fun TextField(
                 .clip(shape)
                 .background(if (readOnly) palette.raised else palette.surface)
                 .border(if (material && ring) 2.dp else 1.dp, if (error) palette.danger else if (ring) palette.accent else if (material) palette.faint else palette.line, shape)
-                .padding(horizontal = if (material) 12.dp else 6.dp),
+                .padding(horizontal = if (material) 10.dp else 6.dp),
         ) {
             TextInput(
                 Modifier.fillMaxHeight().wrapContentHeight(),
@@ -378,7 +378,7 @@ fun Modifier.dialogPanel(padding: Dp, scroll: ScrollState? = null): Modifier {
     val inner = when {
         !material -> padding
         LocalCompact.current -> 16.dp
-        else -> 24.dp
+        else -> 20.dp
     }
     return face.pointerInput(Unit) { detectTapGestures { } }.then(if (scroll != null) Modifier.verticalScroll(scroll) else Modifier).padding(inner)
 }
@@ -409,7 +409,7 @@ fun SecretField(state: TextFieldState, modifier: Modifier = Modifier, enabled: B
                 .clip(shape)
                 .background(palette.surface)
                 .border(if (material && focused) 2.dp else 1.dp, if (focused) palette.accent else if (material) palette.faint else palette.line, shape)
-                .padding(start = if (material) 12.dp else 6.dp, end = if (material) 8.dp else 2.dp),
+                .padding(start = if (material) 10.dp else 6.dp, end = if (material) 8.dp else 2.dp),
             decorator = { input ->
                 Row(Modifier.fillMaxHeight(), verticalAlignment = Alignment.CenterVertically) {
                     Box(Modifier.weight(1f)) { input() }
