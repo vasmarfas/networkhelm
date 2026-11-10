@@ -85,6 +85,12 @@ class UiOverlayTest {
     }
 
     @Test
+    fun theTableOfABundledPackIsReadAgainAsOftenAsTheWindowOfTheRouterSays() {
+        val said = pack(listOf("A"), PackPath(refresh = 5000))
+        assertEquals(5000L, routerFirst(listOf(pack(listOf("A"), PackPath())), listOf(said)).single().paths.getValue("ip/gadget").refresh)
+    }
+
+    @Test
     fun theWindowTakesTheTabsOfTheRouterWithTheVersionsOfTheBundledOnesAndKeepsTheOthersLast() {
         val tabs = merged.window.tabs
         assertEquals(listOf("Gadgets" to "ip/gadget", "Options" to "ip/gadget/option"), tabs.map { it.title to it.path })

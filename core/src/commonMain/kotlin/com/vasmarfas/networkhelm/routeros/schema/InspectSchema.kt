@@ -86,7 +86,7 @@ class InspectSchema(
             shape.command -> MenuSchema(path, NodeKind.Command, emptyList(), emptyList(), emptyList())
             "print" !in shape.commands -> MenuSchema(path, NodeKind.Directory, shape.submenus, shape.commands, emptyList())
             else -> {
-                val print = arguments(path.segments + "print")
+                val print = arguments(path.segments + "print").also { link.printTakes(path, it) }
                 MenuSchema(path, if ("count-only" in print) NodeKind.List else NodeKind.Settings, shape.submenus, shape.commands, emptyList(), "follow-only" in print)
             }
         }
@@ -102,6 +102,7 @@ class InspectSchema(
                 val (print, add, set) = listOf("print", "add", "set")
                     .map { command -> async { if (command in commands) arguments(path.segments + command) else emptyList() } }
                     .awaitAll()
+                link.printTakes(path, print)
                 val optional = if ("unset" in commands) {
                     cached("completion", path.segments + "unset" + "value-name").filter { it["show"] == "true" }.mapNotNull { it["completion"] }.toSet()
                 } else {
@@ -129,6 +130,14 @@ class InspectSchema(
 
     suspend fun forgetNames() {
         lock.withLock { live.clear() }
+    }
+
+    // what was learned about a menu of this build besides its schema, under a key of its own
+    suspend fun recalled(key: String): List<Map<String, String>>? = lock.withLock { answers()[key] }
+
+    suspend fun remember(key: String, rows: List<Map<String, String>>) {
+        lock.withLock { answers()[key] = rows }
+        changed()
     }
 
     suspend fun properties(path: MenuPath): List<String> {

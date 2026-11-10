@@ -13,9 +13,11 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
+import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 private const val GET_ALL = 0xFE0004L
@@ -44,12 +46,15 @@ private class ControllerRouter(private val pages: Map<Long, List<List<M2Message>
 }
 
 // a window that gives its first state to a subscription two records a message, the first [dumped] of them and then the removals,
-// and reads by getall from the record the cursor names
+// the [early] removals before them, and reads by getall from the record the cursor names; a [counted] one says the number of rows,
+// marks the end of the first state and sends the removals after it
 private class SubscribedRouter(
     private val records: List<M2Message>,
     private val dumped: Int = records.size,
     private val gone: List<Long> = emptyList(),
     private val first: Boolean = true,
+    private val early: List<Long> = emptyList(),
+    private val counted: Boolean = false,
 ) {
     val asked = ArrayList<M2Message>()
 
@@ -58,8 +63,17 @@ private class SubscribedRouter(
         when (message.number(M2Key.Command)) {
             SUBSCRIBE -> if (first) {
                 val target = M2Key.To to M2Value.U32s(longArrayOf(0, checkNotNull(message.numbers(M2Key.From))[1]))
-                val removals = gone.map { M2Message.of(0xFE0001 to M2Value.U8(it.toInt()), 0xFE0013 to M2Value.U8(1)) }
-                (records.take(dumped) + removals).chunked(2).forEach { send(M2Message.of(target, M2Key.Command to M2Value.U32(0xFE000B), 0xFE0002 to M2Value.Messages(it))) }
+                fun removals(ids: List<Long>) = ids.map { M2Message.of(0xFE0001 to M2Value.U8(it.toInt()), 0xFE0013 to M2Value.U8(1)) }
+                fun event(vararg fields: Pair<Int, M2Value>) = M2Message.of(target, M2Key.Command to M2Value.U32(0xFE000B), *fields)
+                if (counted) {
+                    records.chunked(2).forEachIndexed { at, part ->
+                        send(event(0xFE0002 to M2Value.Messages(part), *(if (at == 0) arrayOf(0xFE0019 to M2Value.U32(records.size.toLong())) else emptyArray())))
+                    }
+                    send(event(0xFF000B to M2Value.U32(0xFFFFFFFF)))
+                    if (gone.isNotEmpty()) send(event(0xFE0002 to M2Value.Messages(removals(gone)), 0xFE0019 to M2Value.U32((records.size - gone.size).toLong())))
+                } else {
+                    (removals(early) + records.take(dumped) + removals(gone)).chunked(2).forEach { send(event(0xFE0002 to M2Value.Messages(it))) }
+                }
             }
             GET_ALL -> {
                 val from = message.number(0xFE0003)
@@ -98,7 +112,68 @@ private class PatchyRouter(private val holders: Set<List<Long>>, private val sil
     }
 }
 
+// serves the files of the web interface in parts of at most [part] bytes, marking the part that ends a file only when [marks]
+private class FileRouter(private val files: Map<String, ByteArray>, private val part: Int, private val marks: Boolean) {
+    val closed = ArrayList<Long>()
+    private val open = HashMap<Long, Pair<ByteArray, Int>>()
+    private var next = 1L
+
+    suspend fun FakeRouter.handle(message: M2Message) {
+        if (checkNotNull(message.numbers(M2Key.To)).toList().takeLast(2) != listOf(2L, 2L)) return
+        when (message.number(M2Key.Command)) {
+            7L -> {
+                val data = files[message.text(1)] ?: return reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0006))
+                val handle = next++
+                open[handle] = data to 0
+                reply(message, 0xFE0001 to M2Value.U32(handle), 2 to M2Value.U32(data.size.toLong()))
+            }
+            4L -> {
+                val handle = checkNotNull(message.number(0xFE0001))
+                val (data, at) = open[handle] ?: return reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0004))
+                val count = minOf(part, checkNotNull(message.number(2)).toInt(), data.size - at)
+                open[handle] = data to at + count
+                val end = if (marks && at + count == data.size) arrayOf(4 to M2Value.Bool(true)) else emptyArray()
+                reply(message, 3 to M2Value.Raw(data.copyOfRange(at, at + count)), *end)
+            }
+            5L -> {
+                val handle = checkNotNull(message.number(0xFE0001))
+                closed += handle
+                open.remove(handle)
+                reply(message)
+            }
+        }
+    }
+}
+
 class NativeObjectModelTest {
+
+    private val description = ByteArray(150_000) { (it % 251).toByte() }
+
+    private fun files(marks: Boolean, block: suspend CoroutineScope.(NativeObjectModel, FileRouter) -> Unit) = runTest {
+        val router = FileRouter(mapOf("roteros-aa.jg.gz" to description), 61_440, marks)
+        val (client, server) = pipe()
+        val fake = FakeRouter(this, server, "admin", "secret") { with(router) { handle(it) } }
+        val connection = NativeConnection.open(client, "admin", "secret", this)
+        try {
+            withTimeout(30_000) { block(NativeObjectModel(connection), router) }
+        } finally {
+            connection.close()
+            fake.close()
+        }
+    }
+
+    @Test
+    fun aFileOfTheWebInterfaceIsReadInPartsToTheMarkOfItsEnd() = files(marks = true) { model, router ->
+        assertContentEquals(description, model.resource("roteros-aa.jg.gz"))
+        assertNull(model.resource("roteros.jg"))
+        assertEquals(emptyList(), router.closed)
+    }
+
+    @Test
+    fun aFileReadToItsSizeWithoutTheMarkOfItsEndIsClosed() = files(marks = false) { model, router ->
+        assertContentEquals(description, model.resource("roteros-aa.jg.gz"))
+        assertEquals(listOf(1L), router.closed)
+    }
 
     private fun asked(router: SystemRouter, block: suspend CoroutineScope.(RouterFacts?) -> Unit) = runTest {
         val (client, server) = pipe()
@@ -348,6 +423,22 @@ class NativeObjectModelTest {
     fun aRecordRemovedWhileTheSubscriptionGivesTheTableIsNotInIt() {
         val router = SubscribedRouter((1L..4L).map { device(it, "d$it") }, gone = listOf(2))
         dumped(router, 5) { items, _ -> assertEquals(listOf("d1", "d3", "d4"), items?.map { it["identity"] }) }
+    }
+
+    @Test
+    fun theRowsThatWentDuringTheReadComeAsRemovalsAfterTheEndOfTheFirstState() {
+        val router = SubscribedRouter((1L..4L).map { device(it, "d$it") }, gone = listOf(2), counted = true)
+        dumped(router, 4) { items, _ ->
+            assertEquals(listOf("d1", "d3", "d4"), items?.map { it["identity"] })
+            withTimeout(5_000) { while (UNSUBSCRIBE !in commands(router)) delay(10) }
+            assertEquals(listOf(SUBSCRIBE, UNSUBSCRIBE), commands(router))
+        }
+    }
+
+    @Test
+    fun aRecordRemovedBeforeItsPageOfTheFirstStateCameIsNotInIt() {
+        val router = SubscribedRouter((1L..4L).map { device(it, "d$it") }, early = listOf(3))
+        dumped(router, 4) { items, _ -> assertEquals(listOf("d1", "d2", "d4"), items?.map { it["identity"] }) }
     }
 
     @Test

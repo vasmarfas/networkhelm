@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.routeros.api
 
 import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.session.SafeMode
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
@@ -13,6 +14,9 @@ interface RouterOsLink {
     suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> = call(words).rows
 
     fun command(words: List<String>, sent: CompletableDeferred<Unit>? = null): Flow<ApiReply>
+
+    // the words print of a menu takes, from the description of the menu; a link that learns them from refusals asks fewer times
+    fun printTakes(menu: MenuPath, words: Collection<String>) = Unit
 }
 
 interface RouterOsClient : RouterOsLink {

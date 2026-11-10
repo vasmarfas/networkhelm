@@ -4,6 +4,10 @@ import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.packs.CHANGELOG_FIELD
 import com.vasmarfas.networkhelm.packs.GROUP_LINE
+import com.vasmarfas.networkhelm.packs.MIRROR_AGE
+import com.vasmarfas.networkhelm.packs.MIRROR_SINCE
+import com.vasmarfas.networkhelm.packs.MIRROR_STAMP
+import com.vasmarfas.networkhelm.packs.MIRROR_TIME
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.NATIVE_PATHS
 import com.vasmarfas.networkhelm.packs.Pack
@@ -29,15 +33,26 @@ import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
 
 private val packList = ListSerializer(Pack.serializer())
+private val mirrorMap = MapSerializer(String.serializer(), PackNative.serializer())
 private val keptJson = Json { ignoreUnknownKeys = true }
 
 fun encodeUiPacks(packs: List<Pack>): String = keptJson.encodeToString(packList, packs)
 
 fun decodeUiPacks(text: String): List<Pack>? = try {
     keptJson.decodeFromString(packList, text)
+} catch (e: SerializationException) {
+    null
+}
+
+fun encodeUiMirrors(mirrors: Map<String, PackNative>): String = keptJson.encodeToString(mirrorMap, mirrors)
+
+fun decodeUiMirrors(text: String): Map<String, PackNative>? = try {
+    keptJson.decodeFromString(mirrorMap, text)
 } catch (e: SerializationException) {
     null
 }
@@ -253,13 +268,175 @@ private suspend fun uiWindow(entry: UiNode, window: UiNode, form: UiForm, path: 
             bytes = native?.of(byteSizes).orEmpty(),
             kibi = native?.of(kibiSizes).orEmpty(),
             groups = native?.of(groupedNumbers).orEmpty(),
+            refresh = window.number("autorefresh"),
             native = native?.spec,
+            mirror = if (rows || window.holder()) mirrorOf(window, form, properties, every, handled) else null,
             autoset = autoset,
             radios = radios,
         ),
         formTabs.takeIf { it.isNotEmpty() }?.let { PackForm(tabs = it) },
     )
 }
+
+// the windows of the kinds of interfaces inherit the fields of the generic window of the table of all of them, and the descriptions make no
+// window of either; their menus of the console are read from that table, each from the rows of its own kind
+suspend fun uiInheritedMirrors(entries: List<UiNode>, schema: UiSchema, known: Map<String, String>): Map<String, PackNative> {
+    val generics = entries.flatMap { it.children }.filter { it.kind == "map" && it.handler() != null }.mapNotNull { node -> node.text("generic")?.let { it to node } }.toMap()
+    if (generics.isEmpty()) return emptyMap()
+    val handled = handlers(entries.flatMap { entry -> entry.children.filter { it.kind == "map" } })
+    val resolver = UiResolver(schema, known)
+    val found = LinkedHashMap<String, PackNative>()
+    for (entry in entries) {
+        val title = entry.text("dname") ?: entry.label ?: continue
+        val first = entry.children.firstOrNull { it.kind == "map" || it.kind == "item" }
+        for (window in entry.children) {
+            if (window.kind != "map" || window.flag("nonpublic")) continue
+            val generic = window.text("inherit")?.let(generics::get) ?: window.takeIf { it.text("generic") != null } ?: continue
+            val base = resolver.entry(entry.text("group") ?: entry.text("section"), entry.name ?: title, title) ?: continue
+            // the kind of a tunnel is named without the word, EoIP Tunnel by the menu eoip
+            val label = window.label.orEmpty()
+            val path = (resolver.windows(base, label, window === first || window === generic).firstOrNull() ?: resolver.windows(base, label.removeSuffix(" Tunnel"), false).firstOrNull())?.toString() ?: continue
+            if (path in found) continue
+            val merged = inherited(generic, window)
+            val form = uiForm(merged)
+            val (every, _, _, matched) = fit(form, MenuPath.parse(path), schema)
+            // a window the menu names few of its own fields is the table of another menu
+            val own = window.children.toSet()
+            val placed = form.tabs.flatMap { tab -> tab.items.filterNotNull().filter { it.node in own }.map { tab to it } }
+            if (window === generic && !covered(form, MenuPath.parse(path), schema) || placed.count { (tab, field) -> matched.of(field, tab) in every } * 2 < placed.size) continue
+            val spec = mirrorOf(merged, form, matched, every, handled) ?: continue
+            val kind = window.number("typevalue")
+            val typeKey = generic.children.firstOrNull { it.name == generic.text("typeon") }?.text("id")?.drop(1)?.toIntOrNull(16)
+            found[path] = when {
+                kind == null -> spec
+                typeKey == null -> continue
+                else -> {
+                    val type = spec.fields.firstOrNull { it.key == typeKey } ?: PackNativeField(KIND_FIELD, typeKey, "number", letter = "u")
+                    spec.copy(fields = if (type in spec.fields) spec.fields else spec.fields + type, only = mapOf(type.name to kind.toString()))
+                }
+            }
+        }
+    }
+    return found
+}
+
+// the window of a kind takes the fields of the generic window, its own fields of the same id in their place; the kind of a row, which the
+// generic window shows by its name, is the number the table holds under typeon
+private fun inherited(generic: UiNode, window: UiNode): UiNode {
+    val typeon = generic.text("typeon")
+    val kind = generic.children.firstOrNull { it.name == typeon && it.text("id") != null }
+    fun shown(node: UiNode) = if (node.kind == "objtype" && kind != null) UiNode(kind.kind, kind.attrs - "nonpublic" + ("name" to JgString(node.name ?: "Type")), kind.children) else node
+    if (generic === window) return UiNode(window.kind, window.attrs, window.children.map(::shown))
+    val own = window.children.mapNotNull { child -> child.text("id")?.let { it to child } }.toMap()
+    val ids = generic.children.mapNotNullTo(HashSet()) { it.text("id") }
+    val children = generic.children.map { child -> child.text("id")?.let(own::get) ?: shown(child) } + window.children.filter { it.text("id") == null || it.text("id") !in ids }
+    return UiNode(window.kind, generic.attrs - "generic" - "typeon" + (window.attrs - "inherit"), children)
+}
+
+private const val KIND_FIELD = ".kind"
+
+// the fields every element of the object model has, which a window does not list
+private val ELEMENT_FIELDS = listOf(
+    PackNativeField("comment", 0xFE0009, "string", letter = "s"),
+    PackNativeField("disabled", 0xFE000A, "bool", letter = "b"),
+    PackNativeField("dynamic", 0xFE0007, "bool", letter = "b"),
+    PackNativeField("invalid", 0xFE0008, "bool", letter = "b"),
+)
+
+// the groups of fields of a read of the object model: the base ones and the counters, with those the refresh of a window asks for
+private const val READ_BASE = 0x10000005L
+private const val READ_COUNTERS = 0x2L
+
+private val SECOND_POSTFIXES = setOf("s", " s", "sec", " sec")
+
+// a table of the console in the shape of its window: each field the console prints and the description places, with its key, under the name of the console;
+// a column or a flag the window cannot read leaves the table to the console, a field of the form it cannot read leaves the window of a row to it
+private fun mirrorOf(window: UiNode, form: UiForm, properties: Properties, every: List<String>, handled: Map<List<Long>, UiNode>): PackNative? {
+    if (handled.isEmpty() || window.attrs["maxobjs"] != null) return null
+    val handler = window.handler() ?: return null
+    val fields = LinkedHashMap<String, PackNativeField>()
+    val unread = HashSet<String>()
+    val columns = form.columns.mapNotNullTo(HashSet()) { properties.of(it, null) }
+    val placed = form.tabs.flatMap { tab -> tab.items.filterNotNull().map { tab to it } } + (form.columns + form.extras).map { null to it }
+    for ((tab, field) in placed) {
+        // the console splits an address with its port in two, and names the address part so
+        val name = properties.of(field, tab)?.takeIf { it in every }
+            ?: nameOf(field.label)?.let { "$it-address" }?.takeIf { it in every && field.node.kind == "addr" }
+            ?: continue
+        if (name in fields) continue
+        val native = nativeField(field, name, handled) ?: secretField(field, name) ?: sinceField(field, name)
+        if (native == null) unread += name else fields[name] = consoleField(native, field.node.text("postfix"))
+    }
+    // the fields of the panes of a deck stand for one value of the field that chooses the pane, as To Addresses for the actions of NAT;
+    // the console names them by their titles, and one it names otherwise leaves the window of a row to the console
+    for (node in window.panes()) {
+        val label = node.label ?: continue
+        val name = nameOf(label)?.takeIf { it in every }
+        if (name == null) {
+            unread += label
+            continue
+        }
+        if (name in fields) continue
+        val field = UiField(label, node.kind.orEmpty(), node.flag("ro"), null, node)
+        val native = nativeField(field, name, handled) ?: secretField(field, name) ?: sinceField(field, name)
+        if (native == null) unread += name else fields[name] = consoleField(native, node.text("postfix"))
+    }
+    for (flag in form.flags) {
+        val node = flag.node ?: continue
+        val name = (if (flag.letter == "X" || flag.letter == "D") flag.name else every.firstOrNull { squeezed(it) == squeezed(flag.name) }) ?: continue
+        if (name in fields) continue
+        // Disabled and Dynamic are flags of every element, which the window names without an id of its own
+        val native = nativeField(UiField(flag.name, "flag", true, null, node), name, handled)?.let { consoleField(it) } ?: ELEMENT_FIELDS.firstOrNull { it.name == name }
+        if (native == null) unread += name else fields[name] = native
+    }
+    for (field in ELEMENT_FIELDS) if (field.name in every && field.name !in fields) fields[field.name] = field
+    unread -= fields.keys
+    // a window of settings is its form, which has to be whole
+    val single = window.kind == "item"
+    if (fields.isEmpty() || unread.any { it in columns } || single && unread.isNotEmpty()) return null
+    val refreshed = window.number("refreshfilter") ?: 0L
+    // the rows of an ordered table stand where the router keeps them, and the console has to print them in that order
+    return PackNative(
+        handler, fields.values.toList(), single = single, whole = true, partial = unread.isNotEmpty(), mask = READ_BASE or READ_COUNTERS or refreshed, move = window.flag("ordered"),
+    )
+}
+
+// the fields of the panes of the decks of a window, those of panes inside panes too
+private fun UiNode.panes(): List<UiNode> = children.flatMap { child ->
+    val panes = (child.attrs["panes"] as? JgList)?.items.orEmpty().flatMap { pane -> (pane as? JgObject)?.fields?.get("c")?.let(::uiNodes).orEmpty() }
+    panes.filter { it.name != null && it.kind != "separator" } + UiNode(null, emptyMap(), panes).panes() + child.panes()
+}
+
+// a date the router keeps as the uptime it came at, in hundredths of a second
+private fun sinceField(field: UiField, name: String): PackNativeField? {
+    val node = field.node
+    val id = node.text("id")?.takeIf { node.kind == "dateandtime" && node.flag("relative") } ?: return null
+    return id.drop(1).toIntOrNull(16)?.let { PackNativeField(name, it, MIRROR_SINCE, scale = node.number("scale")?.toInt(), letter = id.take(1)) }
+}
+
+// a key or a password the console prints to a user who may see it; whether the window sends it too, the check of the mirror finds out
+private fun secretField(field: UiField, name: String): PackNativeField? {
+    val id = field.node.text("id")?.takeIf { field.node.kind == "secret" } ?: return null
+    return id.drop(1).toIntOrNull(16)?.let { PackNativeField(name, it, "string", letter = id.take(1)) }
+}
+
+// the console prints a number without the unit WinBox puts after it, a number of seconds as a time, and a time and a date its own way
+private fun consoleField(field: PackNativeField, postfix: String? = null): PackNativeField = PackNativeField(
+    field.name,
+    field.key,
+    when (field.kind) {
+        "interval", "clocktime" -> MIRROR_TIME
+        "age" -> MIRROR_AGE
+        "dateandtime" -> MIRROR_STAMP
+        "unit", "bigunit" -> "number"
+        // the offset of a time zone is printed as the signed number of its seconds
+        "timezone" -> "integer"
+        "number", "integer", "fixedpoint", "decimal", "bigdecimal" -> if (postfix in SECOND_POSTFIXES) MIRROR_TIME else field.kind
+        else -> field.kind
+    },
+    field.names, field.scale, null, field.refers, field.letter, field.flag, field.pair, field.range, field.negation,
+    field.members.map(::consoleField), field.parts.map(::consoleField), field.separator,
+)
 
 private class Natives(val spec: PackNative, val named: Map<String, String>, val parts: Map<String, List<String>>, val controllers: Map<UiNode, PackNativeField> = emptyMap()) {
     fun of(kinds: Set<String>) = spec.fields.filter { it.kind in kinds }.map { it.name }
@@ -421,6 +598,7 @@ private fun nativeWindow(window: UiNode, originalForm: UiForm, handled: Map<List
                 bytes = native.of(byteSizes),
                 kibi = native.of(kibiSizes),
                 groups = native.of(groupedNumbers),
+                refresh = window.number("autorefresh"),
                 native = native.spec,
                 radios = form.tabs.flatMap { tab -> tab.items.filterNotNull() }.filter { it.isRadio() }.flatMap { native.parts[it.label] ?: listOfNotNull(native.named[it.label]) }.distinct(),
             ),

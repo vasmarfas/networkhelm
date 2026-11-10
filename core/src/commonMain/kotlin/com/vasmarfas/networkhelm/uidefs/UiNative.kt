@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.uidefs
 
 import com.vasmarfas.networkhelm.packs.NATIVE_NO_KEY
 import com.vasmarfas.networkhelm.packs.NATIVE_WRITABLE_KINDS
+import com.vasmarfas.networkhelm.packs.PRESENCE
 import com.vasmarfas.networkhelm.packs.PackNativeField
 import com.vasmarfas.networkhelm.packs.PackNativeRef
 
@@ -57,6 +58,8 @@ private fun idKey(id: String): Int? = id.drop(1).toIntOrNull(16)
 
 // inside a list of messages a part may be a tuple of parts or an address that is the whole message, and neither has an id
 internal fun nativeField(field: UiField, name: String, windows: Map<List<Long>, UiNode>, inside: Boolean = false, editable: Boolean = false, writing: Set<String> = NATIVE_WRITABLE_KINDS): PackNativeField? {
+    // a flag up while the record holds a field, as Managed of the ports of a bridge
+    field.node.text("hasid")?.takeIf { field.node.kind == "flag" }?.let { has -> return idKey(has)?.let { PackNativeField(name, it, PRESENCE, letter = "b") } }
     var node = field.node
     var flag: Int? = null
     var negation: Int? = null

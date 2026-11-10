@@ -62,22 +62,36 @@ class UiLoaderTest {
 
     @Test
     fun theListKeepsTheFilesOfDescriptionsThatHaveContent() = runTest {
-        val files = assertNotNull(loadUiList(server.web(), 80))
+        val files = assertNotNull(loadUiList(server.web().files(80)))
         assertEquals(listOf("roteros.jg", "wave2.jg", "broken.jg", "gone.jg"), files.map { it.name })
         assertEquals("roteros.jg:1,wave2.jg:2,broken.jg:4,gone.jg:5", uiState(files))
     }
 
     @Test
     fun aRouterThatServesNoMainFileOrNoListGivesNone() = runTest {
-        assertNull(loadUiList(Server(mapOf("/webfig/list" to "{ crc: 2, size: 80, name: \"wave2.jg\", unique: \"wave2-bb.jg\", version: \"7.99\" },\n")).web(), 80))
-        assertNull(loadUiList(Server(emptyMap()).web(), 80))
-        assertNull(loadUiList(Server(mapOf("/webfig/list" to "not a list")).web(), 80))
+        assertNull(loadUiList(Server(mapOf("/webfig/list" to "{ crc: 2, size: 80, name: \"wave2.jg\", unique: \"wave2-bb.jg\", version: \"7.99\" },\n")).web().files(80)))
+        assertNull(loadUiList(Server(emptyMap()).web().files(80)))
+        assertNull(loadUiList(Server(mapOf("/webfig/list" to "not a list")).web().files(80)))
     }
 
     @Test
     fun theEntriesOfEveryFileComeMainFirstAndAFileThatDoesNotReadIsLeftOut() = runTest {
         val web = server.web()
-        val entries = loadUiEntries(web, 80, assertNotNull(loadUiList(web, 80)))
+        val entries = loadUiEntries(web.files(80), assertNotNull(loadUiList(web.files(80))))
         assertEquals(listOf("Main", "Wave"), entries.map { it.name })
+    }
+
+    @Test
+    fun theWinBoxPortGivesTheListAsItIsAndEachDescriptionGzippedUnderItsUniqueName() = runTest {
+        val asked = ArrayList<String>()
+        val resources = mapOf(
+            "list" to list.encodeToByteArray(),
+            "roteros-aa.jg.gz" to gzipped("[{name:'Main',group:'IP',c:[]}]"),
+            "wave2-bb.jg.gz" to "not gzipped".encodeToByteArray(),
+        )
+        val files = nativeUiFiles { name -> asked += name; resources[name] }
+        val entries = loadUiEntries(files, assertNotNull(loadUiList(files)))
+        assertEquals(listOf("Main"), entries.map { it.name })
+        assertEquals(listOf("list", "roteros-aa.jg.gz"), asked.take(2))
     }
 }

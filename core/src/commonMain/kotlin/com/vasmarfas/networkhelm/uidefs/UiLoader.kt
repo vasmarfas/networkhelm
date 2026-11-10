@@ -21,7 +21,18 @@ fun parseUiList(text: String): List<UiFile> = (parseJg("[$text]") as JgList).ite
 
 class WebAccess(val host: String, val open: suspend (port: Int) -> ByteStream)
 
+// the files of the descriptions by their names: the list, and each description by its unique name
+typealias UiFiles = suspend (String) -> ByteArray?
+
 private const val MAIN_FILE = "roteros.jg"
+
+private const val LIST_FILE = "list"
+
+private fun unpacked(body: ByteArray): ByteArray? = try {
+    gunzip(body)
+} catch (e: Exception) {
+    null
+}
 
 private suspend fun WebAccess.get(port: Int, target: String): ByteArray? {
     val response = try {
@@ -33,33 +44,36 @@ private suspend fun WebAccess.get(port: Int, target: String): ByteArray? {
     }
     if (response.status != 200) return null
     if (response.headers["content-encoding"]?.contains("gzip") != true) return response.body
-    return try {
-        gunzip(response.body)
-    } catch (e: Exception) {
-        null
-    }
+    return unpacked(response.body)
 }
 
-suspend fun loadUiList(web: WebAccess, port: Int): List<UiFile>? {
-    val list = web.get(port, "/webfig/list")?.decodeToString()?.let { text ->
+fun WebAccess.files(port: Int): UiFiles = { name -> get(port, "/webfig/$name") }
+
+// the WinBox port serves the list as it is and each description gzipped under its unique name and .gz
+fun nativeUiFiles(resource: suspend (String) -> ByteArray?): UiFiles = { name ->
+    if (name == LIST_FILE) resource(name) else resource("$name.gz")?.let(::unpacked)
+}
+
+suspend fun loadUiList(files: UiFiles): List<UiFile>? {
+    val list = files(LIST_FILE)?.decodeToString()?.let { text ->
         try {
             parseUiList(text)
         } catch (e: IllegalArgumentException) {
             null
         }
     } ?: return null
-    return list.filter { it.name.endsWith(".jg") && it.size > 0 }.takeIf { files -> files.any { it.name == MAIN_FILE } }
+    return list.filter { it.name.endsWith(".jg") && it.size > 0 }.takeIf { found -> found.any { it.name == MAIN_FILE } }
 }
 
 fun uiState(files: List<UiFile>): String = files.joinToString(",") { "${it.name}:${it.crc}" }
 
-suspend fun loadUiEntries(web: WebAccess, port: Int, files: List<UiFile>): List<UiNode> {
+suspend fun loadUiEntries(files: UiFiles, list: List<UiFile>): List<UiNode> {
     val limit = Semaphore(4)
     return coroutineScope {
-        files.sortedBy { it.name != MAIN_FILE }.map { file ->
+        list.sortedBy { it.name != MAIN_FILE }.map { file ->
             async {
                 limit.withPermit {
-                    val body = web.get(port, "/webfig/${file.unique}") ?: return@withPermit emptyList()
+                    val body = files(file.unique) ?: return@withPermit emptyList()
                     try {
                         uiNodes(parseJg(body.decodeToString()))
                     } catch (e: IllegalArgumentException) {

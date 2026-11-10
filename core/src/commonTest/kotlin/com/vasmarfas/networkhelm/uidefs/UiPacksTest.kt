@@ -5,6 +5,7 @@ import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.NATIVE_NO_KEY
+import com.vasmarfas.networkhelm.packs.PRESENCE
 import com.vasmarfas.networkhelm.packs.PackNativeRef
 import com.vasmarfas.networkhelm.session.RouterFacts
 import kotlinx.coroutines.test.runTest
@@ -62,6 +63,14 @@ class UiPacksTest {
         assertEquals(listOf("address"), form.tabs[1].fields)
         assertEquals(mapOf("allow-reconfigure" to "Allow Reconfigure Messages", "address" to "IP Address"), path.labels)
         assertEquals(listOf("name", "code"), pack.paths.getValue("ip/gadget/option").columns)
+    }
+
+    @Test
+    fun aTableIsReadAgainAsOftenAsItsWindowSays() = runTest {
+        val slow = gadgets.replace("type:'map',path:[1,1],", "type:'map',path:[1,1],autorefresh:5000,")
+        val pack = uiPacks(entries(slow), router, emptyMap()).single()
+        assertEquals(5000L, pack.paths.getValue("ip/gadget").refresh)
+        assertNull(pack.paths.getValue("ip/gadget/option").refresh)
     }
 
     @Test
@@ -786,5 +795,56 @@ class UiPacksTest {
         assertEquals(listOf("wave2.jg", "hotspot.jg"), files.map { it.name })
         assertEquals("hotspot-fc3ae9805bbb8acc.jg", files[1].unique)
         assertEquals(84936, files[0].size)
+    }
+
+    @Test
+    fun theWindowsOfTheKindsOfInterfacesReadTheTableOfAllOfThemEachTheRowsOfItsKind() = runTest {
+        val interfaces = Router(
+            mapOf(
+                "" to (members("interface") to emptyList()),
+                "interface" to (members("wireguard", "print set get") to listOf("name", "type", "actual-mtu", "running", "disabled", "comment")),
+                "interface/wireguard" to (members("peers", "print set add get") to listOf("name", "mtu", "listen-port", "private-key", "public-key", "running", "disabled", "comment")),
+            ),
+        )
+        val text = "[{name:'Interfaces',c:[{name:'Interface',title:'Interface',type:'map',path:[20,0],generic:'iface',typeon:'type',c:[" +
+            "{name:'type',type:'number',id:'u10001',nonpublic:1,ro:1},{name:'General',type:'tab'},{name:'Name',type:'string',id:'s10006',width:100}," +
+            "{name:'Type',type:'objtype',width:120},{name:'Actual MTU',type:'number',id:'u10069',ro:1,width:70},{name:'Running',type:'flag',id:'b10004',hint:'R'}]}]}," +
+            "{name:'WireGuard',c:[{name:'Interface',title:'WireGuard',type:'map',inherit:'iface',typevalue:70,c:[{name:'General',type:'tab',combine:1}," +
+            "{name:'MTU',type:'number',id:'u10064',override:1,width:50},{name:'Listen Port',type:'number',id:'u3eb',width:55}," +
+            "{name:'Private Key',type:'secret',id:'s3e9',width:160},{name:'Public Key',type:'string',id:'s3ea',ro:1,width:160}]}]}]"
+        val mirrors = uiInheritedMirrors(entries(text), interfaces, mapOf("/interfaces" to "interface", "/wireguard" to "interface/wireguard"))
+        val all = mirrors.getValue("interface")
+        assertEquals(listOf(20L, 0L), all.handler)
+        assertEquals(0x10001, all.fields.single { it.name == "type" }.key)
+        assertTrue(all.only.isEmpty())
+        val wireguard = mirrors.getValue("interface/wireguard")
+        assertEquals(listOf(20L, 0L), wireguard.handler)
+        assertEquals(mapOf(".kind" to "70"), wireguard.only)
+        assertEquals(0x3E9, wireguard.fields.single { it.name == "private-key" }.key)
+        assertTrue(listOf("name", "mtu", "listen-port", "public-key", "running", "comment", "disabled").all { name -> wireguard.fields.any { it.name == name } })
+    }
+
+    @Test
+    fun theMirrorOfATableTakesTheFieldsOfThePanesOfADeckAndAFlagOfAFieldTheRecordHolds() = runTest {
+        val nat = Router(
+            mapOf(
+                "" to (members("ip") to emptyList()),
+                "ip" to (members("firewall") to emptyList()),
+                "ip/firewall" to (members("nat") to emptyList()),
+                "ip/firewall/nat" to (members("", "print set add get remove") to listOf("chain", "action", "to-addresses", "to-ports", "same-not-by-dst", "managed", "comment", "disabled")),
+            ),
+        )
+        val text = "[{name:'NAT',group:'IP',c:[{name:'NAT',title:'NAT',type:'map',path:[20,5],c:[" +
+            "{name:'General',type:'tab'},{name:'Chain',type:'string',id:'s27',width:60},{name:'Action',type:'tab'}," +
+            "{name:'Action',type:'enm',id:'u28',values:{type:'static',map:{20:'src-nat',22:'dst-nat'}},width:80}," +
+            "{type:'deck',panes:[{vals:[20,22],c:[{name:'To Addresses',type:'opt',id:'b3ee',c:[{type:'network',id:'u3e8',maskid:'u3e9',range:1}]}," +
+            "{name:'To Ports',type:'opt',id:'b3ef',c:[{type:'numberrange',id:'u3ea',highid:'u3eb'}]},{name:'Not by Dst.',type:'bool',id:'b3ed'}]}],selon:'Action'}," +
+            "{name:'managed',type:'flag',hasid:'uff001e',hint:'Y'}]}]}]"
+        val mirror = assertNotNull(uiPacks(entries(text), nat, mapOf("ip/nat" to "ip/firewall/nat"), natively = true).single().paths.getValue("ip/firewall/nat").mirror)
+        assertTrue(listOf("chain", "action", "to-addresses", "to-ports", "managed").all { name -> mirror.fields.any { it.name == name } })
+        assertEquals(PRESENCE, mirror.fields.single { it.name == "managed" }.kind)
+        assertEquals(0xFF001E, mirror.fields.single { it.name == "managed" }.key)
+        // the console calls Not by Dst. same-not-by-dst, so the window of a rule is left to the console
+        assertTrue(mirror.partial)
     }
 }

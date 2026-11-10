@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.routeros.console
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiReply
@@ -37,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
+import kotlin.random.Random
 
 private val BOOLEAN = Regex("invalid value of (\\S+), must be either yes or no")
 private val REFUSAL = Regex("^bad (?:parameter|command name) (\\S+)")
@@ -47,11 +49,12 @@ internal const val LINE_LIMIT = 16_000
 private const val CLASSIC_LINE_LIMIT = 2_500
 private const val ROUND_MILLIS = 1_000L
 private const val LONGEST_WAIT_MILLIS = 30_000L
+private const val SHARED_MOST = 40
 private const val CRASHED = "Console has crashed"
 
 class ConsoleClient internal constructor(
     private val size: Int = 4,
-    private val dialect: Dialect = Dialect.Serialize,
+    internal val dialect: Dialect = Dialect.Serialize,
     private val encoding: ApiEncoding = ApiEncoding.Utf8,
     private val alive: () -> Boolean = { true },
     private val open: suspend () -> ShellChannel,
@@ -70,6 +73,16 @@ class ConsoleClient internal constructor(
     private val heldLine = Mutex()
     private val mode = Mutex()
     private val heavyLine = Mutex()
+
+    private class Shared(val call: ConsoleCall) {
+        val answer = CompletableDeferred<Answer?>()
+    }
+
+    private val sharing = Mutex()
+    private val waiting = ArrayList<Shared>()
+    private var leaders = 0
+    private val separator = "rds" + Random.nextInt(1 shl 30).toString(36)
+    private val joint = "; :put \"$separator\"; "
 
     override val status: Flow<LinkState> = link.asStateFlow()
 
@@ -119,6 +132,12 @@ class ConsoleClient internal constructor(
     }
 
     override suspend fun call(words: List<String>): ApiResult = read(words) { _, _ -> }
+
+    override fun printTakes(menu: MenuPath, words: Collection<String>) {
+        if ("as-value" !in words) return
+        val key = "/" + menu.segments.joinToString("/")
+        refused.update { it + (key to it[key].orEmpty() + VIEW_WORDS.filter { word -> word !in words }) }
+    }
 
     override suspend fun table(words: List<String>, progress: suspend (Int, Int) -> Unit): List<Map<String, String>> = read(words, progress).rows
 
@@ -293,12 +312,72 @@ class ConsoleClient internal constructor(
     }
 
     private suspend fun asked(call: ConsoleCall): Answer {
+        if (!call.shared) return single(call)
+        val mine = Shared(call)
+        if (sharing.withLock { waiting += mine; (leaders < maxOf(1, size - 1)).also { if (it) leaders++ } }) lead()
+        return mine.answer.await() ?: single(call)
+    }
+
+    // inspections use every console but one, and those that wait share a line: one line costs a slow router far less than many
+    private suspend fun lead() {
+        var done = false
+        try {
+            val console = acquire()
+            var healthy = false
+            try {
+                while (true) {
+                    val taken = sharing.withLock { fitting().also { if (it.isEmpty()) leaders-- } }
+                    if (taken.isEmpty()) break
+                    together(console, taken)
+                }
+                healthy = true
+                done = true
+            } finally {
+                release(console, healthy)
+            }
+        } finally {
+            // with no console of inspections left, what still waits is asked alone
+            if (!done) sharing.withLock { leaders--; if (leaders == 0) waiting.toList().also { waiting.clear() } else emptyList() }.forEach { it.answer.complete(null) }
+        }
+    }
+
+    private suspend fun single(call: ConsoleCall): Answer {
         val console = acquire()
         var healthy = false
         try {
             return ask(console, call).also { healthy = true }
         } finally {
             release(console, healthy)
+        }
+    }
+
+    // a highlight inspection carries a whole script, so a line takes as many as fit, and at least one
+    private fun fitting(): List<Shared> {
+        var length = 0
+        var count = 0
+        while (count < minOf(waiting.size, SHARED_MOST)) {
+            length += waiting[count].call.line.length + joint.length
+            if (count > 0 && length > LINE_LIMIT) break
+            count++
+        }
+        return waiting.take(count).also { waiting.subList(0, count).clear() }
+    }
+
+    private suspend fun together(console: ConsoleTerminal, taken: List<Shared>) {
+        try {
+            val answer = ask(console, ConsoleCall(taken.joinToString(joint) { it.call.line }, Reply.Rows))
+            if (taken.size == 1) {
+                taken.single().answer.complete(answer)
+                return
+            }
+            val parts = answer.text.split('\n').fold(mutableListOf(mutableListOf<String>())) { parts, line ->
+                parts.also { if (line == separator) it += mutableListOf<String>() else it.last() += line }
+            }.map { it.joinToString("\n") }
+            // a line stops at the statement that failed: those before it are answered, that one and the rest go alone
+            val kept = if (answer.ok) taken.size.takeIf { it == parts.size } ?: 0 else parts.size - 1
+            taken.take(kept).forEachIndexed { at, shared -> shared.answer.complete(Answer(true, parts[at])) }
+        } finally {
+            taken.forEach { it.answer.complete(null) }
         }
     }
 

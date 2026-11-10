@@ -26,7 +26,9 @@ import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
 import com.vasmarfas.networkhelm.routeros.api.apiQuery
 import com.vasmarfas.networkhelm.routeros.api.call
+import com.vasmarfas.networkhelm.routeros.api.gone
 import com.vasmarfas.networkhelm.routeros.console.ConsoleClient
+import com.vasmarfas.networkhelm.routeros.console.Dialect
 import com.vasmarfas.networkhelm.routeros.schema.InspectSchema
 import com.vasmarfas.networkhelm.routeros.schema.MemorySchemaCache
 import com.vasmarfas.networkhelm.routeros.schema.PrintSchema
@@ -41,11 +43,16 @@ import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.uidefs.UiMembers
 import com.vasmarfas.networkhelm.uidefs.UiSchema
 import com.vasmarfas.networkhelm.uidefs.WebAccess
+import com.vasmarfas.networkhelm.uidefs.decodeUiMirrors
 import com.vasmarfas.networkhelm.uidefs.decodeUiPacks
+import com.vasmarfas.networkhelm.uidefs.encodeUiMirrors
 import com.vasmarfas.networkhelm.uidefs.encodeUiPacks
+import com.vasmarfas.networkhelm.uidefs.files
 import com.vasmarfas.networkhelm.uidefs.loadUiEntries
 import com.vasmarfas.networkhelm.uidefs.loadUiList
+import com.vasmarfas.networkhelm.uidefs.nativeUiFiles
 import com.vasmarfas.networkhelm.uidefs.routerFirst
+import com.vasmarfas.networkhelm.uidefs.uiInheritedMirrors
 import com.vasmarfas.networkhelm.uidefs.uiKnownPaths
 import com.vasmarfas.networkhelm.uidefs.uiPacks
 import com.vasmarfas.networkhelm.uidefs.uiQueries
@@ -59,15 +66,21 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.transformWhile
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
@@ -92,13 +105,33 @@ class RouterOsSession(
     private val mirrorsRefused = MutableStateFlow(emptySet<String>())
     private val mirrorsChecked = MutableStateFlow(emptyMap<String, Set<String>>())
     private val mirrorsHiding = MutableStateFlow(emptySet<String>())
+    // the rows each menu had at its last whole read, so a small table is not counted by the console before each read
+    private val sizes = MutableStateFlow(emptyMap<String, Int>())
 
-    private val inspect = if (capabilities.menuContents) {
+    private val build = run {
         val mode = device.deviceMode.entries.sortedBy { it.key }.joinToString(",") { "${it.key}=${it.value}" }
-        InspectSchema(client, schemaCache, "${device.id.orEmpty()} ${device.version} ${device.architecture} ${device.packages.sorted().joinToString(",")} ${device.policies.sorted().joinToString(",")} $mode", scope)
-    } else {
-        null
+        "${device.version} ${device.architecture} ${device.packages.sorted().joinToString(",")} ${device.policies.sorted().joinToString(",")} $mode"
     }
+    private val inspect = if (capabilities.menuContents) InspectSchema(client, schemaCache, "${device.id.orEmpty()} $build", scope) else null
+
+    // the routers of one build share what their consoles were seen to print, so a menu checked on one is read from its window on the others
+    @Volatile
+    private var release: TextStore? = null
+    @Volatile
+    private var released = emptyMap<String, List<Map<String, String>>>()
+    private val releaseName = "mirrors-${build.hashCode().toUInt().toString(16)}.json"
+    private val releasing = Mutex()
+
+    private val mirrors = (client as? ConsoleClient)?.let { console ->
+        MenuMirrors(nativeWindows, console.dialect == Dialect.Classic, { key -> inspect?.recalled(key) ?: released[key] }) { key, rows ->
+            inspect?.remember(key, rows)
+            release?.let { store -> releasing.withLock { store.write(releaseName, encodeAgreements(decodeAgreements(store.read(releaseName)) + (key to rows))) } }
+        }
+    }
+
+    // the menus just changed, so that their lists are read again at once
+    private val touched = MutableSharedFlow<String>(extraBufferCapacity = TOUCHED_KEPT)
+
     private val printing = PrintSchema(client)
     private val schema: suspend (MenuPath) -> MenuSchema = inspect?.let { it::describe } ?: printing::describe
     private val outlined: suspend (MenuPath) -> MenuSchema = inspect?.let { it::outline } ?: printing::outline
@@ -133,19 +166,27 @@ class RouterOsSession(
     }
 
     override suspend fun packs(store: TextStore?): List<Pack> = deviceErrors {
-        val access = web ?: return@deviceErrors emptyList()
+        release = store?.takeIf { mirrors != null }
+        released = decodeAgreements(release?.read(releaseName))
         val schema = inspect ?: return@deviceErrors emptyList()
-        val port = webPort() ?: return@deviceErrors emptyList()
-        val files = loadUiList(access, port) ?: return@deviceErrors emptyList()
+        val natively = nativeWindows.usable()
+        // the descriptions come over the WinBox port as WinBox takes them, and from the web server where that port cannot give them
+        val native = nativeUiFiles(nativeWindows::resource).takeIf { natively }
+        val (described, files) = native?.let { from -> loadUiList(from)?.let { from to it } }
+            ?: web?.let { access -> webPort()?.let { port -> access.files(port) } }?.let { from -> loadUiList(from)?.let { from to it } }
+            ?: return@deviceErrors emptyList()
         val running = RouterOsVersion.parse(device.version)
         val bundled = bundledPacks().values.filter { it.platform == Platform.RouterOs.packName && running?.within(it.since, it.until) != false }
-        val natively = nativeWindows.usable()
         // ipv6 is part of the main package from RouterOS 7; the other names the descriptions ask for have no known source and stay out
         val facts = if (natively) nativeWindows.facts()?.copy(addons = if ((running?.major ?: 0) >= 7) listOf("ipv6") else emptyList()) else null
         val state = "${device.id.orEmpty()} ${device.version} ${device.packages.sorted()} ${uiState(files)} ${encodeUiPacks(bundled).hashCode()} $UI_PACKS $natively $facts"
         val name = "ui-packs-${state.hashCode().toUInt().toString(16)}.json"
-        suspend fun standing(all: List<Pack>) = withQueries(nativeWindows.alive(all), bundled).also(nativeWindows::keep)
-        store?.read(name)?.let(::decodeUiPacks)?.let { return@deviceErrors standing(it) }
+        val mirrorsName = "ui-mirrors-${state.hashCode().toUInt().toString(16)}.json"
+        suspend fun standing(all: List<Pack>, inherited: Map<String, PackNative>) = withQueries(nativeWindows.alive(all), bundled).also {
+            nativeWindows.keep(it)
+            nativeWindows.inherit(inherited, bundled)
+        }
+        store?.read(name)?.let(::decodeUiPacks)?.let { return@deviceErrors standing(it, store.read(mirrorsName)?.let(::decodeUiMirrors).orEmpty()) }
         val source = object : UiSchema {
             override suspend fun members(path: MenuPath): UiMembers? = try {
                 outlined(path).let { UiMembers(it.children, it.commands) }
@@ -155,10 +196,13 @@ class RouterOsSession(
 
             override suspend fun properties(path: MenuPath): List<String> = schema.properties(path)
         }
-        val entries = loadUiEntries(access, port, files)
-        (routerFirst(bundled, uiPacks(entries, source, uiKnownPaths(bundledMenu().items, bundled), natively, facts, bundled)) + if (natively) uiQueries(entries, facts) else emptyList()).also {
+        val entries = loadUiEntries(described, files)
+        val known = uiKnownPaths(bundledMenu().items, bundled)
+        val inherited = if (natively) uiInheritedMirrors(entries, source, known) else emptyMap()
+        (routerFirst(bundled, uiPacks(entries, source, known, natively, facts, bundled)) + if (natively) uiQueries(entries, facts) else emptyList()).also {
             store?.write(name, encodeUiPacks(it))
-        }.let { standing(it) }
+            store?.write(mirrorsName, encodeUiMirrors(inherited))
+        }.let { standing(it, inherited) }
     }
 
     private suspend fun servicePort(name: String, usual: Int): Int? = try {
@@ -174,7 +218,7 @@ class RouterOsSession(
     override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> {
         val spec = nativeWindows.spec(path)
         return when {
-            nativeWindows.stands(path) -> spec?.let(nativeWindows::list) ?: flow { throw DeviceException(ErrorCategory.MissingItem, "no window of the native channel at $path") }
+            nativeWindows.stands(path) -> spec?.let { nativeWindows.list(it, filter, nativeWindows.refresh(path) ?: pollInterval) } ?: flow { throw DeviceException(ErrorCategory.MissingItem, "no window of the native channel at $path") }
             spec?.log == true && filter == null && properties == null -> nativeWindows.lines(spec, client.each { api -> follow(api, path, null, null) }) { count(path, null) }
             spec == null -> client.each { api -> follow(api, path, filter, properties) }
             else -> nativeWindows.joined(client.each { api -> follow(api, path, filter, properties) }, spec)
@@ -184,14 +228,23 @@ class RouterOsSession(
     override suspend fun get(path: MenuPath, id: String?, properties: List<String>?): Item? = deviceErrors {
         val spec = nativeWindows.spec(path)
         if (nativeWindows.stands(path)) return@deviceErrors spec?.let { nativeWindows.item(it, id) }
-        val item = client.call(print(path, properties) + listOfNotNull(id?.let { "?.id=$it" })).rows.firstOrNull()?.let(::item)
+        val mirrored = mirrors?.rows(path, id?.let { Filter.Equals(".id", it) }, properties, null) { ids -> printed(client, path, ids) }
+        val item = (mirrored ?: client.call(print(path, properties) + listOfNotNull(id?.let { "?.id=$it" })).rows).firstOrNull()?.let(::item)
         if (item == null || spec == null) item else nativeWindows.joined(item, spec)
     }
 
     override suspend fun count(path: MenuPath, filter: Filter?): Int = deviceErrors {
         nativeWindows.takeIf { it.stands(path) }?.let { windows -> return@deviceErrors windows.spec(path)?.let { windows.count(it) } ?: 0 }
+        mirrors?.rows(path, filter, emptyList(), null) { ids -> printed(client, path, ids) }?.let { return@deviceErrors it.size }
         val count = client.call(listOf(path.apiCommand("print"), "=count-only=") + filter?.apiQuery().orEmpty()).done["ret"]
         count?.toIntOrNull() ?: throw DeviceException(ErrorCategory.Api, "count-only answered ${count ?: "without a number"}")
+    }
+
+    // the rows of a mirrored menu the console prints to check them, the one record of settings whole, or null where it cannot print them now
+    private suspend fun printed(api: RouterOsLink, path: MenuPath, ids: List<String>): List<Map<String, String>>? = try {
+        api.call(listOf(path.apiCommand("print")) + if (ids.all { it.isEmpty() }) emptyList() else listOf("=from=" + ids.joinToString(","))).rows
+    } catch (e: ApiTrapException) {
+        null
     }
 
     // a window of the channel is written through the channel, the other windows through the API
@@ -203,7 +256,7 @@ class RouterOsSession(
         inspect?.forgetNames()
         client.call(listOf(path.apiCommand("add")) + values.words()).done["ret"]
             ?: throw DeviceException(ErrorCategory.Api, "${path.apiCommand("add")} answered without an id")
-    }
+    }.also { touched.tryEmit(path.toString()) }
 
     override suspend fun set(path: MenuPath, id: String?, changes: Map<String, String?>) = changing {
         nativeSpec(path)?.let { return@changing nativeWindows.change(it, id, changes) }
@@ -212,7 +265,7 @@ class RouterOsSession(
         val values = changes.mapNotNull { (name, value) -> value?.let { name to it } }.toMap()
         if (values.isNotEmpty()) client.call(listOf(path.apiCommand("set")) + target + values.words())
         changes.filterValues { it == null }.keys.forEach { client.call(listOf(path.apiCommand("unset")) + target + "=value-name=$it") }
-    }
+    }.also { touched.tryEmit(path.toString()) }
 
     override suspend fun remove(path: MenuPath, ids: List<String>) {
         changing {
@@ -220,6 +273,7 @@ class RouterOsSession(
             inspect?.forgetNames()
             for (part in ids.chunked(REMOVED_AT_ONCE)) client.call(path.apiCommand("remove"), "=.id=" + part.joinToString(","))
         }
+        touched.tryEmit(path.toString())
     }
 
     override suspend fun move(path: MenuPath, ids: List<String>, before: String?) {
@@ -227,6 +281,7 @@ class RouterOsSession(
             nativeSpec(path)?.let { return@changing nativeWindows.move(it, ids, before) }
             client.call(listOfNotNull(path.apiCommand("move"), "=numbers=" + ids.joinToString(","), before?.let { "=destination=$it" }))
         }
+        touched.tryEmit(path.toString())
     }
 
     override fun run(path: MenuPath, command: String, arguments: Map<String, String>): Flow<Item> =
@@ -287,7 +342,7 @@ class RouterOsSession(
             }
             sent.await()
             val items = LinkedHashMap<String, Item>()
-            rows(api, path, properties, query) { read, total, added -> emit(ListEvent.Progress(read, total, added.map(::item))) }.map(::item).forEach { items[it.id] = it }
+            rows(api, path, properties, query, filter) { read, total, added -> emit(ListEvent.Progress(read, total, added.map(::item))) }.map(::item).forEach { items[it.id] = it }
             emit(ListEvent.Snapshot(items.values.toList()))
             try {
                 // a window of one element skips the events of the others without asking the router about each
@@ -307,13 +362,20 @@ class RouterOsSession(
                 }
             } catch (e: ApiTrapException) {
                 var rows = items.values.toList()
-                // a list takes at most a tenth of the router's time; the log is read whole on every round, so it is asked less often
-                val least = if (path == LOG) pollInterval * 5 else pollInterval
+                // a list takes at most a tenth of the router's time and is read as often as its window in WinBox; the log is read whole on every round, so it is asked less often
+                val least = if (path == LOG) pollInterval * 5 else nativeWindows.refresh(path) ?: pollInterval
                 var wait = least
+                val menu = path.toString()
                 while (true) {
-                    delay(wait)
+                    withTimeoutOrNull(wait) { touched.first { it == menu } }
                     val asked = TimeSource.Monotonic.markNow()
-                    val fresh = rows(api, path, properties, query) { _, _, _ -> }.map(::item)
+                    // a round that rows going under the print broke leaves the list as it was until the next one
+                    val fresh = try {
+                        rows(api, path, properties, query, filter) { _, _, _ -> }.map(::item)
+                    } catch (e: ApiTrapException) {
+                        if (!e.gone()) throw e
+                        rows
+                    }
                     wait = maxOf(least, asked.elapsedNow() * 9)
                     if (fresh != rows) emit(ListEvent.Snapshot(fresh))
                     rows = fresh
@@ -321,18 +383,24 @@ class RouterOsSession(
             }
         }
 
-    // a big table of a console is read as WinBox reads it, from its window of the WinBox port, once the console agrees with what the window gives
+    // a menu of the console is read as WinBox reads it, from its window of the WinBox port, once the console agrees with what the window gives
     private suspend fun rows(
         api: RouterOsLink,
         path: MenuPath,
         properties: List<String>?,
         query: List<String>,
+        filter: Filter?,
         progress: suspend (Int, Int, List<Map<String, String>>) -> Unit,
     ): List<Map<String, String>> {
         val words = print(path, properties) + query
         val menu = path.toString()
-        val mirror = nativeMirrors[menu]?.takeIf { client is ConsoleClient && properties == null && query.isEmpty() && menu !in mirrorsRefused.value }
-        return mirror?.let { mirrored(api, menu, it, words, progress) } ?: api.table(words) { read, total -> progress(read, total, emptyList()) }
+        val mirror = nativeMirrors[menu]?.takeIf {
+            client is ConsoleClient && properties == null && query.isEmpty() && menu !in mirrorsRefused.value && (sizes.value[menu] ?: MIRRORED_LEAST) > MIRRORED_LEAST / 2
+        }
+        val console: suspend () -> List<Map<String, String>> = { api.table(words) { read, total -> progress(read, total, emptyList()) } }
+        val found = mirror?.let { mirrored(api, menu, it, words, progress) } ?: mirrors?.rows(path, filter, properties, console) { ids -> printed(api, path, ids) } ?: console()
+        if (properties == null && filter == null) sizes.update { it + (menu to found.size) }
+        return found
     }
 
     // the rows go on as they come once the first ones agree with the console; the whole table is checked again for the fields they lacked
@@ -515,7 +583,8 @@ class RouterOsSession(
     private fun item(attributes: Map<String, String>) = Item(attributes[".id"].orEmpty(), attributes - service)
 
     private companion object {
-        const val UI_PACKS = 15
+        const val UI_PACKS = 17
+        const val TOUCHED_KEPT = 16
 
         // a smaller table the console reads at once in less time than the check of the mirror takes
         const val MIRRORED_LEAST = 2_000

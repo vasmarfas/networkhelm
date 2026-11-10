@@ -3,17 +3,20 @@ package com.vasmarfas.networkhelm.routeros
 import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.ValueType
+import com.vasmarfas.networkhelm.model.matches
 import com.vasmarfas.networkhelm.packs.NATIVE_PATHS
 import com.vasmarfas.networkhelm.packs.Pack
 import com.vasmarfas.networkhelm.packs.PackNative
 import com.vasmarfas.networkhelm.packs.PackNativeField
 import com.vasmarfas.networkhelm.packs.PackNativeRef
+import com.vasmarfas.networkhelm.packs.PackPath
 import com.vasmarfas.networkhelm.packs.PackWindow
 import com.vasmarfas.networkhelm.session.Backoff
 import com.vasmarfas.networkhelm.session.NativeObjects
@@ -41,6 +44,7 @@ import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration
+import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 
 private const val ROWS = 500
@@ -50,9 +54,14 @@ private const val REOPEN_EVERY = 30
 private const val DROPS = 2
 private const val LINES_RETRIES = 3
 private const val PROBES = 6
+private const val IN_FLIGHT = 6
 private const val QUERY_LEAST_MILLIS = 100L
 private const val LOG_LEAST = 1_000
 private const val MIRROR_TRIES = 3
+
+private class Flight {
+    var crowded = false
+}
 
 internal class NativeWindows(
     private val side: NativeSide?,
@@ -62,8 +71,24 @@ internal class NativeWindows(
 ) {
     @Volatile
     private var specs: Map<String, PackNative> = emptyMap()
+
+    @Volatile
+    private var mirrors: Map<String, PackNative> = emptyMap()
+
+    @Volatile
+    private var tables: Map<String, PackPath> = emptyMap()
+
+    // the mirrors of the menus whose windows the descriptions make from others, and the bundled tables of those menus
+    @Volatile
+    private var inherited: Map<String, PackNative> = emptyMap()
+
+    @Volatile
+    private var described: Map<String, PackPath> = emptyMap()
     private val lock = Mutex()
-    private val reading = Mutex()
+    // WinBox keeps up to six requests on its channel
+    private val seats = Semaphore(IN_FLIGHT)
+    private val solo = Mutex()
+    private val ledger = Mutex()
     private val backoff = Backoff(time)
     private var opened: NativeObjects? = null
 
@@ -71,10 +96,28 @@ internal class NativeWindows(
     private var closed = false
     private val drops = HashMap<List<Long>, Int>()
     private val refused = HashMap<List<Long>, DeviceException>()
+    // the handlers read beside others when the channel dropped; each is read alone next time, so that a drop is charged to the read that made it
+    private val suspects = HashSet<List<Long>>()
+    private val flights = HashSet<Flight>()
 
     suspend fun usable() = side != null && port() != null
 
-    suspend fun facts(): RouterFacts? = reading.withLock {
+    // the files of the descriptions come beside the reads of the windows, as WinBox takes them
+    suspend fun resource(name: String): ByteArray? {
+        val objects = try {
+            objects()
+        } catch (e: DeviceException) {
+            return null
+        }
+        return try {
+            objects.resource(name)
+        } catch (e: DeviceException) {
+            if (e.category == ErrorCategory.ConnectionLost) dropped(objects, e)
+            null
+        }
+    }
+
+    suspend fun facts(): RouterFacts? = alone {
         try {
             objects().facts()
         } catch (e: DeviceException) {
@@ -84,7 +127,26 @@ internal class NativeWindows(
 
     fun keep(packs: List<Pack>) {
         specs = packs.flatMap { pack -> pack.paths.mapNotNull { (path, shown) -> shown.native?.let { path to it } } }.toMap()
+        mirrors = packs.flatMap { pack -> pack.paths.mapNotNull { (path, shown) -> shown.mirror?.let { path to it } } }.toMap()
+        tables = firstTables(packs)
     }
+
+    fun inherit(mirrors: Map<String, PackNative>, bundled: Collection<Pack>) {
+        inherited = mirrors
+        described = firstTables(bundled)
+    }
+
+    private fun firstTables(packs: Collection<Pack>): Map<String, PackPath> = buildMap { for (pack in packs) for ((path, table) in pack.paths) getOrPut(path) { table } }
+
+    fun mirror(path: MenuPath): PackNative? = path.toString().let { mirrors[it] ?: inherited[it] }
+
+    // as often as the window of the router reads the table of a menu again, and no more often than once a poll
+    fun refresh(path: MenuPath): Duration? = path.toString().let { tables[it] ?: described[it] }?.refresh?.milliseconds?.coerceAtLeast(every)
+
+    // what the table of a menu shows: its columns and the properties of its flags, icons and groups
+    fun shown(path: MenuPath): Set<String> = path.toString().let { tables[it] ?: described[it] }?.let { table ->
+        (table.columns + table.flags.map { it.property } + table.totals + listOfNotNull(table.category, table.iconBy)).toSet()
+    }.orEmpty()
 
     // the descriptions the router serves hold windows of hardware and services it does not have; the object model says which by refusing them or by staying silent
     suspend fun alive(packs: List<Pack>): List<Pack> {
@@ -107,23 +169,23 @@ internal class NativeWindows(
     // a handler may hold a table and queries, and the router refuses one command of it and not another
     private fun verdict(spec: PackNative) = spec.handler to spec.query?.poll
 
-    private suspend fun verdicts(specs: List<PackNative>): Map<Pair<List<Long>, Long?>, Boolean> = reading.withLock {
+    private suspend fun verdicts(specs: List<PackNative>): Map<Pair<List<Long>, Long?>, Boolean> = alone {
         val objects = try {
             objects()
         } catch (e: DeviceException) {
-            return@withLock specs.associate { verdict(it) to e.keepsWindow() }
+            return@alone specs.associate { verdict(it) to e.keepsWindow() }
         }
         val gate = Semaphore(PROBES)
         val probes = coroutineScope { specs.distinctBy(::verdict).map { spec -> async { spec to gate.withPermit { probe(objects, spec) } } }.awaitAll() }
         for ((spec, probe) in probes) {
-            if (probe.silent) refused[spec.handler] = DeviceException(ErrorCategory.Unsupported, "the router does not answer [${spec.handler.joinToString(",")}]")
+            if (probe.silent) ledger.withLock { refused[spec.handler] = DeviceException(ErrorCategory.Unsupported, "the router does not answer [${spec.handler.joinToString(",")}]") }
             probe.lost?.let { lost(objects, spec, it) }
         }
         probes.associate { (spec, probe) -> verdict(spec) to probe.stands }
     }
 
     private suspend fun probe(objects: NativeObjects, spec: PackNative): Probe {
-        if (spec.handler in refused) return Probe(false)
+        if (ledger.withLock { spec.handler in refused }) return Probe(false)
         return try {
             objects.answers(spec).let { Probe(it, silent = !it) }
         } catch (e: DeviceException) {
@@ -241,7 +303,7 @@ internal class NativeWindows(
             if (started != null) {
                 withContext(NonCancellable) {
                     try {
-                        reading.withLock { started.cancel() }
+                        seats.withPermit { started.cancel() }
                     } catch (e: DeviceException) {
                         // a channel that dropped took the query with it
                     }
@@ -250,8 +312,8 @@ internal class NativeWindows(
         }
     }
 
-    // a write waits for the read that is on the channel; a channel that drops under it is let go, and whether the write reached the router stays unknown
-    private suspend fun <T> written(action: suspend (NativeObjects) -> T): T = reading.withLock {
+    // a write waits for the reads that are on the channel; a channel that drops under it is let go, and whether the write reached the router stays unknown
+    private suspend fun <T> written(action: suspend (NativeObjects) -> T): T = alone {
         val objects = objects()
         try {
             action(objects)
@@ -276,17 +338,29 @@ internal class NativeWindows(
         return null
     }
 
+    // a console menu read whole from its window; a read the table changed under between two pages is made again
+    suspend fun whole(spec: PackNative): List<Item>? {
+        repeat(MIRROR_TRIES) {
+            try {
+                return read(spec, null)
+            } catch (e: DeviceException) {
+                if (e.category != ErrorCategory.MissingItem) throw e
+            }
+        }
+        return null
+    }
+
     suspend fun item(spec: PackNative, id: String?): Item? = read(spec, null).orEmpty().firstOrNull { it.id == id }
 
     // a read takes at most a tenth of the time, as a list of the console does
-    fun list(spec: PackNative): Flow<ListEvent> = flow {
+    fun list(spec: PackNative, filter: Filter? = null, period: Duration = every): Flow<ListEvent> = flow {
         var shown: List<Item>? = null
         while (true) {
             val started = time.markNow()
-            val items = read(spec, null).orEmpty()
+            val items = read(spec, null).orEmpty().filter { filter?.matches(it) != false }
             if (items != shown) emit(ListEvent.Snapshot(items))
             shown = items
-            delay(maxOf(every, started.elapsedNow() * 9))
+            delay(maxOf(period, started.elapsedNow() * 9))
         }
     }
 
@@ -387,22 +461,61 @@ internal class NativeWindows(
 
     private suspend fun read(spec: PackNative, limit: Int?): List<Item>? = counted(spec) { objects -> objects.read(spec, limit) }
 
-    // one read at a time, so a dropped channel is charged to the read that was on it; a run lives on the channel that started it and does not go on a new one
-    private suspend fun <T> counted(spec: PackNative, owner: NativeObjects? = null, action: suspend (NativeObjects) -> T): T = reading.withLock {
-        refused[spec.handler]?.let { throw it }
+    // reads share the channel; a run lives on the channel that started it and does not go on a new one
+    private suspend fun <T> counted(spec: PackNative, owner: NativeObjects? = null, action: suspend (NativeObjects) -> T): T {
+        val suspect = ledger.withLock {
+            refused[spec.handler]?.let { throw it }
+            spec.handler in suspects
+        }
+        return if (suspect) alone { flown(spec, owner, action) } else seats.withPermit { flown(spec, owner, action) }
+    }
+
+    private suspend fun <T> flown(spec: PackNative, owner: NativeObjects?, action: suspend (NativeObjects) -> T): T {
         val objects = if (owner == null) objects() else lock.withLock { opened }?.takeIf { it === owner } ?: throw DeviceException(ErrorCategory.ConnectionLost, "the channel of the window dropped")
+        val flight = Flight()
+        ledger.withLock {
+            flights.forEach { it.crowded = true }
+            flight.crowded = flights.isNotEmpty()
+            flights += flight
+        }
         try {
-            action(objects).also { drops.remove(spec.handler) }
+            return action(objects).also {
+                ledger.withLock {
+                    drops.remove(spec.handler)
+                    suspects.remove(spec.handler)
+                }
+            }
         } catch (e: DeviceException) {
-            if (e.category == ErrorCategory.ConnectionLost) lost(objects, spec, e)
+            if (e.category == ErrorCategory.ConnectionLost) {
+                val crowded = ledger.withLock { flight.crowded.also { if (it) suspects += spec.handler } }
+                if (crowded) dropped(objects, e) else lost(objects, spec, e)
+            }
             throw e
+        } finally {
+            withContext(NonCancellable) { ledger.withLock { flights -= flight } }
+        }
+    }
+
+    // a write, the probes of a pass and a read suspected of dropping the channel have the channel to themselves
+    private suspend fun <T> alone(action: suspend () -> T): T = solo.withLock {
+        var held = 0
+        try {
+            repeat(IN_FLIGHT) {
+                seats.acquire()
+                held++
+            }
+            action()
+        } finally {
+            repeat(held) { seats.release() }
         }
     }
 
     private suspend fun lost(objects: NativeObjects, spec: PackNative, cause: DeviceException) {
-        val times = (drops[spec.handler] ?: 0) + 1
-        drops[spec.handler] = times
-        if (times >= DROPS) refused[spec.handler] = DeviceException(ErrorCategory.Unsupported, "the router drops the channel every time [${spec.handler.joinToString(",")}] is read", cause)
+        ledger.withLock {
+            val times = (drops[spec.handler] ?: 0) + 1
+            drops[spec.handler] = times
+            if (times >= DROPS) refused[spec.handler] = DeviceException(ErrorCategory.Unsupported, "the router drops the channel every time [${spec.handler.joinToString(",")}] is read", cause)
+        }
         dropped(objects, cause)
     }
 

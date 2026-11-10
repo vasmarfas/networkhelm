@@ -61,6 +61,9 @@ interface NativeObjects {
     // the first read of a log gives the lines the router holds, each next one those added since; a read that finds the router has dropped the line it went on from gives all again as a snapshot
     suspend fun lines(spec: PackNative): NativeRun = throw DeviceException(ErrorCategory.Unsupported, "this connection cannot follow a log")
 
+    // a file of the web interface the router serves on the channel, by its name; null where the router has no such file
+    suspend fun resource(name: String): ByteArray? = null
+
     fun close()
 }
 

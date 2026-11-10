@@ -44,6 +44,8 @@ data class PackPath(
     val sort: String? = null,
     val follow: Boolean = false,
     val log: Boolean = false,
+    // how often in milliseconds the window of the router reads its table again, autorefresh of its description
+    val refresh: Long? = null,
     val join: String? = null,
     val monitor: PackMonitor? = null,
     val open: PackOpen? = null,
@@ -74,6 +76,8 @@ data class PackPath(
     val defaults: Map<String, String> = emptyMap(),
     val flags: List<PackFlag> = emptyList(),
     val native: PackNative? = null,
+    // the whole table of the menu in its window of the WinBox port, each field under the name of the console
+    val mirror: PackNative? = null,
     val combos: Map<String, PackCombo> = emptyMap(),
     // the fields that go to the router as soon as they change, without Apply
     val autoset: List<String> = emptyList(),
@@ -99,6 +103,17 @@ class PackFlag(val property: String, val letter: String)
 
 const val NATIVE_PATHS = "native"
 
+// the kinds of a field of a mirror that come as the bare number and are written as the console writes a time, the time left until a moment
+// on the clock of the uptime of the router, and a date
+const val MIRROR_TIME = "console-time"
+const val MIRROR_AGE = "console-age"
+const val MIRROR_STAMP = "console-stamp"
+// a moment on the clock of the uptime of the router in hundredths of a second, shown as the date and time it came at
+const val MIRROR_SINCE = "console-since"
+
+// a flag that is up while the record holds the field of its key
+const val PRESENCE = "presence"
+
 // the list of changes of the update window: the router's own text, or the vendor's text for the version the router names
 const val CHANGELOG_FIELD = "changelog"
 
@@ -117,6 +132,12 @@ data class PackNative(
     val log: Boolean = false,
     // the table stands in for a menu of the console, so a read the router broke off between two pages is no read of it
     val whole: Boolean = false,
+    // the mirror of a menu lacks fields of the form of a row, which the console reads
+    val partial: Boolean = false,
+    // the read asks for the fields of these groups: the base ones, and those the window refreshes, as its counters
+    val mask: Long? = null,
+    // the rows of the table that hold these values: the window of one kind of interface reads the table of all of them
+    val only: Map<String, String> = emptyMap(),
 )
 
 // a query or an action window of the router: the commands that start, read and end it, and the fields of its request; the fields of the result are those of the PackNative

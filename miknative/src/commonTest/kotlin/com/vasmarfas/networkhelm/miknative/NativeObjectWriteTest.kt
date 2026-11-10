@@ -70,6 +70,14 @@ class NativeObjectWriteTest {
     }
 
     @Test
+    fun aValueTakenOffGoesAsTheEmptyValueOfItsTypeAndItsKeyWithThatTypeAmongTheUnset() = session { model, writer ->
+        model.change(scripts, "*A", mapOf("name" to null, "dont-require-permissions" to null))
+        val asked = writer.asked.single()
+        assertEquals(listOf(0xFE0001 to M2Value.U32(10), 0x66 to M2Value.Text(""), 0x74 to M2Value.Bool(false)), asked.fieldsAfterTheHead())
+        assertEquals(listOf(0x20000066L, 0x00000074L), asked.numbers(M2Key.Unset))
+    }
+
+    @Test
     fun aButtonOfAWindowIsPressedWithACommandOfOneByteAndTheIdOfItsElement() = session { model, writer ->
         model.act(scripts, 7, "*A")
         model.act(clock, 9, null)

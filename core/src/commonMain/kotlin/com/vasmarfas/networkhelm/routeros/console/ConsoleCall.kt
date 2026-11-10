@@ -20,6 +20,7 @@ internal class ConsoleCall(
     val quick: Boolean = false,
     val heavy: Boolean = false,
     val plain: Boolean = false,
+    val shared: Boolean = false,
 )
 
 internal const val AS_VALUE = "bad parameter as-value"
@@ -30,6 +31,7 @@ private const val STATS = "stats"
 private const val PROPLIST = "proplist"
 internal const val FIND = "find"
 internal const val FROM = "from"
+internal val VIEW_WORDS = listOf(DETAIL, SENSITIVE, STATS_DETAIL, STATS, PROPLIST, FROM)
 
 // not a word of the router: the plain view of the menu gave no column that detail lacks, so a big table is read without it
 internal const val PLAIN = "plain"
@@ -89,6 +91,7 @@ internal fun consoleCall(words: List<String>, yesNo: Set<String>, refused: Map<S
         menu == "/password" -> ConsoleCall("$menu${given()}", Reply.Nothing, changes = true)
         else -> ConsoleCall(
             serialized("$menu${given()}$numbers$list as-value$select"), Reply.Rows, ConsoleCall("$menu$numbers${given()}", Reply.Text, changes = changes), changes,
+            shared = menu == "/console/inspect",
         )
     }
 }

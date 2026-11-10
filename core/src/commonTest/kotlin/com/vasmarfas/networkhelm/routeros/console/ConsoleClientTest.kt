@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.routeros.console
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
@@ -29,6 +30,7 @@ import kotlin.test.assertTrue
 
 private const val PROMPT_TEXT = "\r\r\r\u001b[9999B\u001b[K[\u001b[m\u001b[36mtester\u001b[m@\u001b[m\u001b[32mCHR\u001b[m] > "
 private val MARKERS = Regex("^:put \"(rd[0-9a-f]+-\\d+b)\"; (.*); :put \"(rd[0-9a-f]+-\\d+e)\"$")
+private val SHARED = Regex("; :put \"(rds[0-9a-z]+)\"; ")
 
 private fun bytes(vararg parts: ByteArray) = parts.flatMap { it.asList() }.joinToString("") { (it.toInt() and 0xFF).toChar().toString() }
 
@@ -262,6 +264,59 @@ class ConsoleClientTest {
         assertEquals(listOf(row), client.call(address).rows)
         assertEquals(4, sent.size)
         assertEquals(sent[2], sent[3])
+    }
+
+    @Test
+    fun theWordsThatPrintTakesSpareTheRefusals() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(size = 1, handler = router(sent, setOf("stats-detail", "stats"),
+            "[{\".id\":\"*2\",\"name\":\"peer1\"}]", "[{\".id\":\"*2\",\"public-key\":\"key\"}]",
+        ))
+        client.printTakes(MenuPath.parse("interface/wireguard/peers"), listOf("as-value", "count-only", "detail", "from", "proplist", "show-sensitive", "where"))
+        assertEquals(listOf(mapOf(".id" to "*2", "name" to "peer1", "public-key" to "key")), client.call(listOf("/interface/wireguard/peers/print")).rows)
+        assertEquals(1, sent.size)
+    }
+
+    private fun inspector(sent: MutableList<String>, failing: String? = null): suspend (String) -> String = { command ->
+        sent += command
+        val separator = SHARED.find(command)?.groupValues?.get(1)
+        val paths = command.split(SHARED).map { it.substringAfter("path=").substringBefore(' ') }
+        val broken = paths.indexOf(failing)
+        val answered = paths.take(if (broken < 0) paths.size else broken).map { "[{\"name\":\"$it\"}]" }
+        if (broken < 0) answered.joinToString("\r\n$separator\r\n") else "!" + (answered + "no such item (line 1 column 90)").joinToString("\r\n$separator\r\n")
+    }
+
+    @Test
+    fun inspectionsThatWaitForAConsoleGoInOneLine() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(size = 1, handler = inspector(sent))
+        val paths = (1..6).map { "ip,address,add,f$it" }
+        val answers = paths.map { path -> async { client.call(listOf("/console/inspect", "=request=syntax", "=path=$path")).rows } }.awaitAll()
+        assertEquals(paths.map { listOf(mapOf("name" to it)) }, answers)
+        assertEquals(1, sent.size)
+    }
+
+    @Test
+    fun inspectionsThatWouldNotFitOneLineGoInTwo() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(size = 1, handler = inspector(sent))
+        val paths = (1..2).map { n -> "ip,address,add," + "f$n".repeat(4500) }
+        val answers = paths.map { path -> async { client.call(listOf("/console/inspect", "=request=syntax", "=path=$path")).rows } }.awaitAll()
+        assertEquals(paths.map { listOf(mapOf("name" to it)) }, answers)
+        assertEquals(2, sent.size)
+    }
+
+    @Test
+    fun aLineOfInspectionsThatBreaksLeavesTheFailedOneAndTheRestToGoAlone() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(size = 1, handler = inspector(sent, failing = "ip,address,add,f3"))
+        val paths = (1..5).map { "ip,address,add,f$it" }
+        val answers = paths.map { path -> async { runCatching { client.call(listOf("/console/inspect", "=request=syntax", "=path=$path")).rows } } }.awaitAll()
+        assertEquals(listOf(mapOf("name" to "ip,address,add,f1")), answers[0].getOrThrow())
+        assertEquals(listOf(mapOf("name" to "ip,address,add,f2")), answers[1].getOrThrow())
+        assertEquals("no such item (line 1 column 90)", answers[2].exceptionOrNull()?.message)
+        assertEquals(listOf(mapOf("name" to "ip,address,add,f5")), answers[4].getOrThrow())
+        assertEquals(4, sent.size)
     }
 
     @Test
@@ -955,6 +1010,22 @@ class ConsoleClientTest {
         consoles.single().close()
         assertFailsWith<ApiConnectionClosedException> { client.call(listOf("/system/identity/print")) }
         client.status.first { it == LinkState.Closed }
+    }
+
+    private fun past(command: String, rows: Int) = PICK.find(command)?.let { it.groupValues[2].toInt() - it.groupValues[1].toInt() > rows } ?: true
+
+    @Test
+    fun aPortionThatRowsKeepLeavingIsAskedInHalves() = runTest {
+        val rows = table(3_000)
+        val client = client { command -> if (":pick" in command && past(command, 500)) "!interrupted" else rows(command) }
+        assertEquals(3_000, client.call(addresses).rows.size)
+    }
+
+    @Test
+    fun aTableOfOneAnswerThatRowsKeepLeavingIsAskedInHalves() = runTest {
+        val rows = table(1_500)
+        val client = client { command -> if ("count-only" !in command && past(command, 500)) "!interrupted" else rows(command) }
+        assertEquals(1_500, client.call(addresses).rows.size)
     }
 
     @Test

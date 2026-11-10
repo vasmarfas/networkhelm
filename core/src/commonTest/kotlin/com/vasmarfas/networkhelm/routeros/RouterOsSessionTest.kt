@@ -110,6 +110,27 @@ class RouterOsSessionTest {
     }
 
     @Test
+    fun aPollThatRowsGoingUnderThePrintBrokeKeepsTheList() = runTest {
+        val router = FakeRouterStream()
+        val events = Channel<ListEvent>(Channel.UNLIMITED)
+        backgroundScope.launch { session(router, backgroundScope).watch(MenuPath.parse("ip/firewall/connection")).collect { events.send(it) } }
+        val listen = router.expect("/ip/firewall/connection/listen")
+        val print = router.expect("/ip/firewall/connection/print")
+        router.reply("!trap", "=message=no such command", ".tag=$listen")
+        router.reply("!done", ".tag=$listen")
+        router.reply("!re", "=.id=*1", "=protocol=udp", ".tag=$print")
+        router.reply("!done", ".tag=$print")
+        assertEquals(ListEvent.Snapshot(listOf(Item("*1", mapOf("protocol" to "udp")))), events.receive())
+        val broken = router.expect("/ip/firewall/connection/print")
+        router.reply("!trap", "=message=interrupted", ".tag=$broken")
+        router.reply("!done", ".tag=$broken")
+        val again = router.expect("/ip/firewall/connection/print")
+        router.reply("!re", "=.id=*2", "=protocol=tcp", ".tag=$again")
+        router.reply("!done", ".tag=$again")
+        assertEquals(ListEvent.Snapshot(listOf(Item("*2", mapOf("protocol" to "tcp")))), events.receive())
+    }
+
+    @Test
     fun theLogIsPolledOnceInFiveIntervals() = runTest {
         val router = FakeRouterStream()
         val events = Channel<ListEvent>(Channel.UNLIMITED)

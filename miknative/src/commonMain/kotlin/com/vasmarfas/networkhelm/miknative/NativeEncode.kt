@@ -25,9 +25,33 @@ internal fun encoded(field: PackNativeField, text: String?, resolved: Map<Long, 
         fields += key to M2Value.Bool(!body.isNullOrEmpty())
         if (body.isNullOrEmpty()) return fields
     }
-    val typed = body ?: return fields
+    val typed = body ?: return fields + cleared(field)
     if (field.kind == "union") fields += member(field, typed, resolved) else fields += valued(field, typed, resolved)
     return fields
+}
+
+// a value taken off goes out as the empty value of its type; the router drops it only when the key with that type comes in 0xFF0014 beside it
+internal fun cleared(field: PackNativeField): List<Pair<Int, M2Value>> {
+    if (field.kind == "union") return field.members.flatMap { cleared(it) }
+    val empty = when (field.letter) {
+        "b" -> M2Value.Bool(false)
+        "u" -> M2Value.U32(0)
+        "q" -> M2Value.U64(0)
+        "a" -> M2Value.Address6(ByteArray(IPV6_BITS / 8))
+        "s" -> M2Value.Text("")
+        "m" -> M2Value.Message(M2Message(emptyList()))
+        "r" -> M2Value.Raw(ByteArray(0))
+        "B" -> M2Value.Bools(BooleanArray(0))
+        "U" -> M2Value.U32s(LongArray(0))
+        "Q" -> M2Value.U64s(LongArray(0))
+        "A" -> M2Value.Address6s(emptyList())
+        "S" -> M2Value.Texts(emptyList())
+        "M" -> M2Value.Messages(emptyList())
+        "R" -> M2Value.Raws(emptyList())
+        else -> throw rejected(field, "cannot be taken off")
+    }
+    val second = field.pair ?: return listOf(field.key to empty)
+    return listOf(field.key to empty, second to if (field.kind == "network6") M2Value.U32(0) else empty)
 }
 
 // a value with a second number beside it, the mask of a network or the top of a range, takes two keys of the request

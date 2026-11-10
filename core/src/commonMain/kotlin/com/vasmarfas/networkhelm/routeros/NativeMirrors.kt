@@ -82,7 +82,7 @@ private fun grew(before: String, after: String): Boolean {
     return first <= second
 }
 
-private fun shape(value: String) = when {
+internal fun shape(value: String) = when {
     value == "true" || value == "false" -> "flag"
     value.all(Char::isDigit) -> "number"
     CLOCK.matches(value) || SPELLED.matches(value) -> "duration"
@@ -94,7 +94,7 @@ private fun two(number: Long) = number.toString().padStart(2, '0')
 private fun interval(seconds: Long) = if (seconds == 0L) "0s" else if (seconds < DAY) "${two(seconds / 3_600)}:${two(seconds % 3_600 / 60)}:${two(seconds % 60)}" else duration(seconds)
 
 // seconds since 1970 as the date and time the console of RouterOS 7.10 and later prints
-private fun stamp(seconds: Long): String {
+internal fun stamp(seconds: Long): String {
     val days = seconds.floorDiv(DAY)
     val shifted = days + 719_468
     val era = shifted.floorDiv(146_097)
@@ -125,6 +125,9 @@ private fun pair(name: String, vararg parts: PackNativeField) = PackNativeField(
 
 // the uptime of the router in seconds, the clock the moments of a window are counted on
 internal val UPTIME = PackNative(listOf(24, 2), listOf(number("uptime", 0x1)), single = true)
+
+// the time on the clock of the router, in seconds since 1970 counted in its own zone
+internal val ROUTER_CLOCK = PackNative(listOf(24, 0), listOf(number("now", 0x7)), single = true)
 
 // the numbers of the protocols as the console names them
 private val PROTOCOLS = mapOf(

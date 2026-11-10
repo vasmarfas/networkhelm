@@ -58,6 +58,8 @@ private fun mergedPath(have: PackPath, said: PackPath, form: String?) = have.cop
     labels = have.labels + said.labels,
     flags = said.flags.ifEmpty { have.flags },
     native = said.native ?: have.native,
+    mirror = said.mirror ?: have.mirror,
+    refresh = said.refresh ?: have.refresh,
     autoset = (have.autoset + said.autoset).distinct(),
     radios = (have.radios + said.radios).distinct(),
 )

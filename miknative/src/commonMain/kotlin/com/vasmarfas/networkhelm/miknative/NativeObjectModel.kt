@@ -6,6 +6,7 @@ import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.duration
 import com.vasmarfas.networkhelm.packs.NATIVE_NO_KEY
+import com.vasmarfas.networkhelm.packs.PRESENCE
 import com.vasmarfas.networkhelm.packs.PackNative
 import com.vasmarfas.networkhelm.packs.PackNativeField
 import com.vasmarfas.networkhelm.packs.PackNativeRef
@@ -76,10 +77,27 @@ private val PROBE_WAIT = 4.seconds
 private val LOG_WAIT = 300.milliseconds
 private val DUMP_FIRST = 2.seconds
 private val DUMP_QUIET = 200.milliseconds
+// the router groups the events of 200 ms, and the removals of a read come in the first group after its end
+private val DUMP_SETTLE = 600.milliseconds
+private const val ROW_COUNT = 0xFE0019
+private const val STATE_END = 0xFF000B
+private const val NO_ELEMENT = 0xFFFFFFFFL
 private val SYSTEM_INFO = listOf(13L, 4L)
 private val QUICK_SET = listOf(120L)
 private const val INFO_COMMAND = 7
 private const val WORD_COMMAND = 5
+// the files of the web interface: the list of the descriptions and each description, which WinBox takes over this port
+private val RESOURCES = listOf(2L, 2L)
+private const val OPEN_RESOURCE = 7
+private const val READ_RESOURCE = 4
+private const val CLOSE_RESOURCE = 5
+private const val RESOURCE_NAME = 0x000001
+private const val RESOURCE_SIZE = 0x000002
+private const val RESOURCE_DATA = 0x000003
+private const val RESOURCE_END = 0x000004
+// the router gives at most 61 440 bytes of a file to one read
+private const val RESOURCE_PART = 61_440
+private const val RESOURCE_MOST = 64L shl 20
 private const val BOARD_ARCH = 0x11
 private const val BOARD_NAME = 0x15
 private const val BOARD_FAMILY = 0x17
@@ -93,33 +111,46 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
     private val kept = HashMap<PackNativeRef, Triple<TimeMark, Map<Long, String>, Set<Long>>>()
 
     override suspend fun read(spec: PackNative, limit: Int?): List<Item>? {
-        val records = alone(spec.handler) { if (spec.single) listOf(single(spec.handler)) else records(spec.handler, limit, spec.whole) } ?: return null
+        val records = alone(spec.handler) { if (spec.single) listOf(single(spec.handler)) else records(spec.handler, limit, spec.whole, mask = spec.mask ?: GET_ALL_FLAGS) } ?: return null
         return items(spec, records)
     }
 
-    // the table as the router hands it to a subscription: page after page without a request for each, in the order of
-    // the ids and with no mark of the end; getall from the last id then reads whatever a pause of the router left out
+    // the table as the router hands it to a subscription: page after page without a request for each, in the order of the ids, with the number of
+    // the rows of the table and an empty message at the end; the rows that went during the read come as removals after that end. A router that
+    // sends neither is read until it pauses, and getall from the last id then reads whatever the pause left out
     override suspend fun dump(spec: PackNative, expected: Int, page: suspend (List<Item>) -> Unit): List<Item>? {
         if (spec.single) return null
         return alone(spec.handler) {
             val items = LinkedHashMap<Long, Item>()
+            // a record that went may still come in a later page of the first state
+            val gone = HashSet<Long>()
             val source = connection.newSource()
             val subscription = arrayOf(
                 FIRST_STATE to M2Value.Bool(true),
                 M2Key.Command to M2Value.U32(SUBSCRIBE),
-                FLAGS to M2Value.U32(GET_ALL_FLAGS),
+                FLAGS to M2Value.U32(spec.mask ?: GET_ALL_FLAGS),
                 CREDITS to M2Value.U32(DUMP_CREDITS),
             )
             var last: TimeMark? = null
+            var counted = false
+            var ended = false
+            // after the end the read waits out the group of removals; a router that marks nothing is read up to the number the console gave
+            fun done() = !ended && !counted && items.size >= expected
             try {
                 source.send(spec.handler, *subscription)
                 var credits = DUMP_CREDITS
                 var longest = Duration.ZERO
-                while (items.size < expected) {
-                    val wait = last?.let { maxOf(DUMP_QUIET, longest * QUIET_GAPS) } ?: DUMP_FIRST
+                while (!done()) {
+                    val wait = when {
+                        ended -> DUMP_SETTLE
+                        last == null -> DUMP_FIRST
+                        else -> maxOf(DUMP_QUIET, longest * QUIET_GAPS)
+                    }
                     val message = withTimeoutOrNull(wait) { source.next() ?: throw DeviceException(ErrorCategory.ConnectionLost, "the channel closed during the read") } ?: break
                     // a router that does not subscribe this window leaves it to getall
                     message.refusal()?.let { if (last == null) return@alone null else throw it }
+                    if (message.number(ROW_COUNT) != null) counted = true
+                    if (message.number(STATE_END) == NO_ELEMENT) ended = true
                     val objects = message.messages(RECORDS).orEmpty()
                     if (objects.isEmpty()) continue
                     last?.let { longest = maxOf(longest, it.elapsedNow()) }
@@ -128,7 +159,12 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
                     val fresh = ArrayList<M2Message>(objects.size)
                     for (record in objects) {
                         val id = record.number(ELEMENT_ID) ?: continue
-                        if (record.number(GONE) == 1L) items.remove(id) else if (id !in items) fresh += record
+                        if (record.number(GONE) == 1L) {
+                            items.remove(id)
+                            gone += id
+                        } else if (id !in items && id !in gone) {
+                            fresh += record
+                        }
                     }
                     credits -= objects.size
                     if (credits < DUMP_CREDITS / 2) {
@@ -149,8 +185,9 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
                     source.close()
                 }
             }
+            if (ended) return@alone items.values.toList()
             val end = items.keys.maxOrNull() ?: return@alone null
-            val tail = records(spec.handler, null, spec.whole, end).orEmpty().filter { (it.number(ELEMENT_ID) ?: end) > end }
+            val tail = records(spec.handler, null, spec.whole, end, spec.mask ?: GET_ALL_FLAGS).orEmpty().filter { (it.number(ELEMENT_ID) ?: end) > end }
             if (tail.isNotEmpty()) page(kept(spec, tail, items))
             items.values.toList()
         }
@@ -202,6 +239,8 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
             shape.kind == "tuple" -> shape.parts.map { rendered(record, it, names) }.takeIf { texts -> texts.any { it != null } }
                 ?.mapIndexedNotNull { at, text -> text ?: "0".takeIf { shape.parts[at].kind in LATEST } }?.joinToString(between(shape.separator))
             shape.key == NATIVE_NO_KEY -> address(record, shape.refers?.let(names::get))
+            // a flag the description gives as hasid is up while the record holds that field
+            shape.kind == PRESENCE -> (record.fieldOf(shape.key) != null).toString()
             else -> {
                 val value = record.fieldOf(shape.key, shape.letter) ?: return null
                 if (shape.kind == "multi") (value as? M2Value.Messages)?.value?.mapNotNull { rendered(it, shape.parts.single(), names) }?.joinToString(", ")
@@ -219,7 +258,11 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
     override suspend fun change(spec: PackNative, id: String?, values: Map<String, String?>) {
         val fields = values.flatMap { (name, text) -> typed(spec, name, text) }
         if (fields.isEmpty()) return
-        if (spec.single) write(spec.handler, SET_SINGLETON, fields) else write(spec.handler, SET_RECORD, listOf(ELEMENT_ID to idOf(id)) + fields)
+        // a field with a flag of presence is taken off by the flag alone
+        val off = values.filterValues { it == null }.keys.mapNotNull { name -> spec.fields.firstOrNull { it.name == name }?.takeIf { it.flag == null } }
+            .flatMap(::cleared).map { (key, value) -> (M2Message.typeOf(value).toLong() shl 24) or key.toLong() }
+        val all = if (off.isEmpty()) fields else fields + (M2Key.Unset to M2Value.U32s(off.toLongArray()))
+        if (spec.single) write(spec.handler, SET_SINGLETON, all) else write(spec.handler, SET_RECORD, listOf(ELEMENT_ID to idOf(id)) + all)
     }
 
     override suspend fun create(spec: PackNative, values: Map<String, String>, before: String?): String {
@@ -454,6 +497,34 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
         }
     }
 
+    // the router hands a file a part at a time from where the last read stopped; a file read to its size without the mark of the end is closed
+    override suspend fun resource(name: String): ByteArray? {
+        val source = connection.newSource()
+        try {
+            val opened = source.exchange(RESOURCES, M2Value.U8(OPEN_RESOURCE), RESOURCE_NAME to M2Value.Text(name))
+            if (opened.refusal() != null) return null
+            val handle = opened.number(ELEMENT_ID) ?: return null
+            val size = opened.number(RESOURCE_SIZE)?.takeIf { it <= RESOURCE_MOST }?.toInt() ?: return null
+            val data = ByteArray(size)
+            var at = 0
+            var ended = false
+            try {
+                while (at < size && !ended) {
+                    val part = source.request(RESOURCES, M2Value.U8(READ_RESOURCE), ELEMENT_ID to M2Value.U32(handle), RESOURCE_SIZE to M2Value.U32(minOf(RESOURCE_PART, size - at).toLong()))
+                    val bytes = part.raw(RESOURCE_DATA)?.takeIf { it.size <= size - at } ?: return null
+                    bytes.copyInto(data, at)
+                    at += bytes.size
+                    ended = (part[RESOURCE_END] as? M2Value.Bool)?.value == true || bytes.isEmpty()
+                }
+            } finally {
+                if (!ended) withContext(NonCancellable) { source.exchange(RESOURCES, M2Value.U8(CLOSE_RESOURCE), ELEMENT_ID to M2Value.U32(handle)) }
+            }
+            return data.takeIf { at == size }
+        } finally {
+            source.close()
+        }
+    }
+
     override suspend fun facts(): RouterFacts? {
         val info = asked(SYSTEM_INFO, M2Value.U8(INFO_COMMAND)) ?: return null
         val capabilities = (info[INFO_CAPABILITIES] as? M2Value.Message)?.value?.numbers(CAPABILITY_MASK).orEmpty()
@@ -474,13 +545,13 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
     }
 
     // a cursor names the record a page starts with, so a read from one gives that record first
-    internal suspend fun records(handler: List<Long>, limit: Int? = null, whole: Boolean = false, from: Long? = null): List<M2Message>? {
+    internal suspend fun records(handler: List<Long>, limit: Int? = null, whole: Boolean = false, from: Long? = null, mask: Long = GET_ALL_FLAGS): List<M2Message>? {
         val source = connection.newSource()
         try {
             val records = ArrayList<M2Message>()
             var cursor: List<Pair<Int, M2Value>> = from?.let { listOf(CONTINUATION to M2Value.U32(it)) }.orEmpty()
             repeat(PAGES) {
-                val reply = source.exchange(handler, M2Value.U32(GET_ALL), FLAGS to M2Value.U32(GET_ALL_FLAGS), *cursor.toTypedArray())
+                val reply = source.exchange(handler, M2Value.U32(GET_ALL), FLAGS to M2Value.U32(mask), *cursor.toTypedArray())
                 val code = reply.number(M2Key.ErrorCode)?.takeIf { it != 0L }
                 if (code != null && code != NO_MORE) throw reply.refusal() ?: DeviceException(ErrorCategory.General, "the router refused the read (error 0x${code.toString(16)})")
                 // no more objects after a cursor: the record it names went between two pages, and the pages before it are not the whole table

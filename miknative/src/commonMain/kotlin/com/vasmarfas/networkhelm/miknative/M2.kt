@@ -15,6 +15,7 @@ internal object M2Key {
     const val Command = SYSTEM or 0x07
     const val ErrorCode = SYSTEM or 0x08
     const val Error = SYSTEM or 0x09
+    const val Unset = SYSTEM or 0x14
     const val SessionId = SESSION or 0x01
 }
 
@@ -98,6 +99,24 @@ internal class M2Message(val fields: List<M2Field>) {
         fun of(vararg fields: Pair<Int, M2Value>) = M2Message(fields.map { M2Field(it.first, it.second) })
 
         fun decode(bytes: ByteArray): M2Message = decode(bytes, 0, DecodeBudget())
+
+        // the type a field of this value goes under, as the high byte of a key names it in 0xFF0014: a u8 is the short u32, a bool the one of false
+        fun typeOf(value: M2Value): Int = when (value) {
+            is M2Value.Bool -> TYPE_FALSE
+            is M2Value.U8, is M2Value.U32 -> TYPE_U32
+            is M2Value.U64 -> TYPE_U64
+            is M2Value.Address6 -> TYPE_ADDRESS6
+            is M2Value.Text -> TYPE_TEXT
+            is M2Value.Message -> TYPE_MESSAGE
+            is M2Value.Raw -> TYPE_RAW
+            is M2Value.Bools -> TYPE_BOOLS
+            is M2Value.U32s -> TYPE_U32S
+            is M2Value.U64s -> TYPE_U64S
+            is M2Value.Address6s -> TYPE_ADDRESS6S
+            is M2Value.Texts -> TYPE_TEXTS
+            is M2Value.Messages -> TYPE_MESSAGES
+            is M2Value.Raws -> TYPE_RAWS
+        }
 
         private fun decode(bytes: ByteArray, depth: Int, budget: DecodeBudget): M2Message {
             if (depth > MAX_MESSAGE_DEPTH) throw M2FormatException("the message is nested too deeply")

@@ -132,7 +132,7 @@ private fun sinceEpoch(text: String): String {
     return duration(days(year.toInt(), month.toInt(), day.toInt()) * 86_400 + hour.toLong() * 3_600 + minute.toLong() * 60 + second.toLong())
 }
 
-private fun days(year: Int, month: Int, day: Int): Long {
+internal fun days(year: Int, month: Int, day: Int): Long {
     val shifted = if (month <= 2) year - 1 else year
     val era = shifted / 400
     val yearOfEra = shifted - era * 400

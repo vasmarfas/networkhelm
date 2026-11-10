@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.routeros
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
@@ -15,6 +16,8 @@ import com.vasmarfas.networkhelm.packs.PackWindow
 import com.vasmarfas.networkhelm.session.NativeObjects
 import com.vasmarfas.networkhelm.session.NativeSide
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
@@ -223,6 +226,13 @@ class NativeWindowsTest {
     }
 
     @Test
+    fun theWindowOfOneRowSeesOnlyThatRow() = runTest {
+        val side = Side(Script(rows(row("*1", "paired"), row("*2", "lost"))))
+        val events = native(side).list(spec, Filter.Equals(".id", "*2")).take(1).toList()
+        assertEquals(listOf(ListEvent.Snapshot(listOf(row("*2", "lost")))), events)
+    }
+
+    @Test
     fun aPortThatAFirewallClosedCountsAsAServiceThatIsOff() = runTest {
         val windows = native(NativeSide { throw IllegalStateException("Connection refused: getsockopt") })
         assertEquals(null, windows.facts())
@@ -306,7 +316,7 @@ class NativeWindowsTest {
     }
 
     @Test
-    fun theWindowsOfOneSessionShareOneChannelAndReadOneAtATime() = runTest {
+    fun theWindowsOfOneSessionShareOneChannelAndReadAtTheSameTime() = runTest {
         val side = Router { _, _ -> listOf(row("*1", "paired")) }
         val windows = native(side, time = testTimeSource)
         val console = flow {
@@ -322,8 +332,55 @@ class NativeWindowsTest {
         advanceTimeBy(5.minutes)
         runCurrent()
         assertEquals(1, side.opened)
-        assertEquals(1, side.overlap)
+        assertEquals(4, side.overlap)
         jobs.forEach { it.cancel() }
+    }
+
+    @Test
+    fun aListIsReadAgainAsOftenAsItsWindowSaysButNoMoreOftenThanEachPoll() = runTest {
+        var reads = 0
+        val windows = native(Router { _, _ -> listOf(row("*1", "paired")).also { reads++ } }, time = testTimeSource)
+        val paths = mapOf("ip/arp" to PackPath(refresh = 5000), "tool/scan" to PackPath(refresh = 100), "ip/pool" to PackPath())
+        windows.keep(listOf(Pack(menu = listOf("IP"), window = PackWindow("ARP", emptyList()), paths = paths)))
+        assertEquals(5.seconds, windows.refresh(MenuPath.parse("ip/arp")))
+        assertEquals(1.seconds, windows.refresh(MenuPath.parse("tool/scan")))
+        assertEquals(null, windows.refresh(MenuPath.parse("ip/pool")))
+        val job = launch { windows.list(spec, period = 5.seconds).collect { } }
+        advanceTimeBy(1.minutes)
+        runCurrent()
+        job.cancel()
+        assertTrue(reads in 11..13, "$reads reads in a minute")
+    }
+
+    @Test
+    fun aDropUnderReadsSideBySideIsChargedToNoneUntilTheReadThatMakesItDropsAlone() = runTest {
+        val bad = other(5)
+        val side = object : NativeSide {
+            override suspend fun open(port: Int): NativeObjects {
+                var dead = false
+                return object : NativeObjects {
+                    override suspend fun read(spec: PackNative, limit: Int?): List<Item>? {
+                        delay(if (spec === bad) 50 else 100)
+                        if (spec === bad) dead = true
+                        if (dead) throw dropped
+                        return listOf(row("*1", "paired"))
+                    }
+
+                    override fun close() = Unit
+                }
+            }
+        }
+        val windows = native(side, time = testTimeSource)
+        val together = listOf(async { runCatching { windows.count(bad) } }, async { runCatching { windows.count(spec) } }).awaitAll()
+        assertEquals(listOf(ErrorCategory.ConnectionLost, ErrorCategory.ConnectionLost), together.map { (it.exceptionOrNull() as DeviceException).category })
+        assertEquals(1, windows.count(spec))
+        repeat(2) {
+            delay(1.minutes)
+            assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { windows.count(bad) }.category)
+        }
+        assertEquals(ErrorCategory.Unsupported, assertFailsWith<DeviceException> { windows.count(bad) }.category)
+        delay(1.minutes)
+        assertEquals(1, windows.count(spec))
     }
 
     @Test
