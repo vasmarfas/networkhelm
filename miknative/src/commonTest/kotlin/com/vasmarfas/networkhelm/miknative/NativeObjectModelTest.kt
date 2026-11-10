@@ -45,6 +45,26 @@ private class ControllerRouter(private val pages: Map<Long, List<List<M2Message>
     }
 }
 
+// a table read as Routes are: the cursor of the first page names the read and not a row, the pages after it do not repeat it,
+// and the read ends with an empty page or with the answer [ending]
+private class RouteRouter(private val pages: List<List<M2Message>>, private val ending: Long? = null) {
+    val asked = ArrayList<M2Message>()
+    val stopped = ArrayList<M2Message>()
+
+    suspend fun FakeRouter.handle(message: M2Message) {
+        if (message.number(M2Key.Command) == 0xFE0018L) stopped += message
+        if (message.number(M2Key.Command) != GET_ALL) return
+        asked += message
+        val page = pages.getOrNull(asked.size - 1)
+        val cursor = if (asked.size == 1) arrayOf(0xFE0003 to M2Value.U32(0xFFFFF001)) else emptyArray()
+        when {
+            page != null -> reply(message, 0xFE0002 to M2Value.Messages(page), *cursor)
+            ending != null -> reply(message, M2Key.ErrorCode to M2Value.U32(ending))
+            else -> reply(message, 0xFE0002 to M2Value.Messages(emptyList()))
+        }
+    }
+}
+
 // a window that gives its first state to a subscription two records a message, the first [dumped] of them and then the removals,
 // the [early] removals before them, and reads by getall from the record the cursor names; a [counted] one says the number of rows,
 // marks the end of the first state and sends the removals after it
@@ -484,6 +504,48 @@ class NativeObjectModelTest {
         ),
     ) { items -> assertEquals(listOf("10.9.9.9", "ns1.example.", "10 mail.example.", null), items.map { it["data"] }) }
 
+    private fun route(id: Int, address: Long) = M2Message.of(0xFE0001 to M2Value.U8(id), 0x1 to M2Value.U32(address))
+
+    private val routeTable = PackNative(listOf(44, 21), listOf(PackNativeField("gateway", 0x1, "ipaddr", letter = "u")), whole = true)
+
+    private fun routes(router: RouteRouter, limit: Int? = null, block: suspend CoroutineScope.(List<Item>?) -> Unit) = runTest {
+        val (client, server) = pipe()
+        val fake = FakeRouter(this, server, "admin", "secret") { with(router) { handle(it) } }
+        val connection = NativeConnection.open(client, "admin", "secret", this)
+        try {
+            withTimeout(30_000) { block(NativeObjectModel(connection).read(routeTable, limit)) }
+        } finally {
+            connection.close()
+            fake.close()
+        }
+    }
+
+    private val routePages = listOf(listOf(route(1, 1), route(2, 2)), listOf(route(3, 3)), listOf(route(4, 4)))
+
+    @Test
+    fun aReadTheRouterKeepsGoesOnUnderItsFirstCursorToAnEmptyPage() {
+        val router = RouteRouter(routePages)
+        routes(router) { items ->
+            assertEquals(listOf("*1", "*2", "*3", "*4"), items.orEmpty().map { it.id })
+            assertEquals(listOf(null, 0xFFFFF001L, 0xFFFFF001L, 0xFFFFF001L), router.asked.map { it.number(0xFE0003) })
+        }
+    }
+
+    @Test
+    fun aReadTheRouterKeepsEndsWithNoMoreObjectsAndNotWithAChangedTable() = routes(RouteRouter(routePages, ending = 0xFE0004)) { items ->
+        assertEquals(listOf("*1", "*2", "*3", "*4"), items.orEmpty().map { it.id })
+    }
+
+    @Test
+    fun aReadTheRouterKeepsIsStoppedWhenTheTableHasMoreRowsThanTheWindowShows() {
+        val router = RouteRouter(routePages)
+        routes(router, limit = 2) { items ->
+            assertNull(items)
+            delay(100)
+            assertEquals(listOf(0xFFFFF001L), router.stopped.map { it.number(0xFE0003) })
+        }
+    }
+
     @Test
     fun theAnswerThatThereAreNoMoreObjectsEndsTheList() = read(
         ControllerRouter(mapOf(DEVICES to emptyList())),
@@ -598,8 +660,8 @@ class NativeObjectModelTest {
         val host = 0x0502_00C0L
         assertEquals("192.0.2.5", write(0xFEFF1F to M2Value.U8(1), 0xFEFF20 to M2Value.U32(host)))
         assertEquals("192.0.2.5/24%ether1", write(0xFEFF1F to M2Value.U8(1), 0xFEFF20 to M2Value.U32(host), 0xFEFF25 to M2Value.U32(24), 0xFEFF22 to M2Value.U32(2)))
-        assertEquals("%ether1", write(0xFEFF1F to M2Value.U8(9), 0xFEFF22 to M2Value.U32(2)))
-        assertEquals("%7", write(0xFEFF1F to M2Value.U8(9), 0xFEFF22 to M2Value.U32(7)))
+        assertEquals("ether1", write(0xFEFF1F to M2Value.U8(9), 0xFEFF22 to M2Value.U32(2)))
+        assertEquals("7", write(0xFEFF1F to M2Value.U8(9), 0xFEFF22 to M2Value.U32(7)))
         assertEquals("::1/128", write(0xFEFF21 to M2Value.Address6(ByteArray(16).also { it[15] = 1 }), 0xFEFF25 to M2Value.U32(128)))
         assertEquals("example.net", write(0xFEFF26 to M2Value.Text("example.net")))
         assertEquals("10.0.0.1@3", write(0xFEFF20 to M2Value.U32(0x0100_000AL), 0xFEFF23 to M2Value.U32(3)))

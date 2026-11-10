@@ -798,6 +798,26 @@ class UiPacksTest {
     }
 
     @Test
+    fun theRoutesOfIpv4AreTheMenuOfTheirEntryThoughTheHiddenWindowOfAllRoutesStandsFirst() = runTest {
+        val routes = Router(
+            mapOf(
+                "" to (members("ip") to emptyList()),
+                "ip" to (members("route") to emptyList()),
+                "ip/route" to (members("", "print set add get remove") to listOf("dst-address", "gateway", "distance", "disabled", "comment")),
+            ),
+        )
+        val text = "[{name:'Routes',group:'IP',c:[{name:'Route',title:'All Routes',type:'map',path:[44,21],generic:'route',hide:1,maxobjs:10000,nonpublic:1,typeon:'rtype',c:[" +
+            "{name:'rtype',type:'number',id:'u81',nonpublic:1,ro:1},{name:'General',type:'tab'},{name:'Dst. Address',type:'ipaddr',id:'u105',width:100}," +
+            "{name:'Gateway',type:'ipaddr',id:'u10d',width:100},{name:'Distance',type:'number',id:'u108',width:40}]}," +
+            "{title:'Routes',type:'map',inherit:'route',typevalue:2,c:[{name:'Distance',type:'number',id:'u108',width:40}," +
+            "{name:'BGP',type:'tab'},{name:'AS Path',type:'string',id:'s139'},{name:'Communities',type:'string',id:'s13a'},{name:'Local Pref.',type:'number',id:'u13b'}]}]}]"
+        val route = uiInheritedMirrors(entries(text), routes, mapOf("ip/routes" to "ip/route")).getValue("ip/route")
+        assertEquals(listOf(44L, 21L), route.handler)
+        assertEquals(mapOf(".kind" to "2"), route.only)
+        assertEquals(10000, route.most)
+    }
+
+    @Test
     fun theWindowsOfTheKindsOfInterfacesReadTheTableOfAllOfThemEachTheRowsOfItsKind() = runTest {
         val interfaces = Router(
             mapOf(
@@ -824,23 +844,56 @@ class UiPacksTest {
         assertTrue(listOf("name", "mtu", "listen-port", "public-key", "running", "comment", "disabled").all { name -> wireguard.fields.any { it.name == name } })
     }
 
+    private val nat = Router(
+        mapOf(
+            "" to (members("ip") to emptyList()),
+            "ip" to (members("firewall") to emptyList()),
+            "ip/firewall" to (members("nat") to emptyList()),
+            "ip/firewall/nat" to (members("", "print set add get remove") to listOf("chain", "action", "to-addresses", "to-ports", "same-not-by-dst", "managed", "comment", "disabled")),
+        ),
+    )
+
+    private val natText = "[{name:'NAT',group:'IP',c:[{name:'NAT',title:'NAT',type:'map',path:[20,5],c:[" +
+        "{name:'General',type:'tab'},{name:'Chain',type:'string',id:'s27',width:60},{name:'Action',type:'tab'}," +
+        "{name:'Action',type:'enm',id:'u28',values:{type:'static',map:{20:'src-nat',22:'dst-nat'}},width:80}," +
+        "{type:'deck',panes:[{vals:[20,22],c:[{name:'To Addresses',type:'opt',id:'b3ee',c:[{type:'network',id:'u3e8',maskid:'u3e9',range:1}]}," +
+        "{name:'To Ports',type:'opt',id:'b3ef',c:[{type:'numberrange',id:'u3ea',highid:'u3eb'}]},{name:'Not by Dst.',type:'bool',id:'b3ed'}]}],selon:'Action'}," +
+        "{name:'managed',type:'flag',hasid:'uff001e',hint:'Y'}]}]}]"
+
+    private suspend fun natMirror(text: String = natText) =
+        assertNotNull(uiPacks(entries(text), nat, mapOf("ip/nat" to "ip/firewall/nat"), natively = true).single().paths.getValue("ip/firewall/nat").mirror)
+
     @Test
-    fun theMirrorOfATableTakesTheFieldsOfThePanesOfADeckAndAFlagOfAFieldTheRecordHolds() = runTest {
-        val nat = Router(
+    fun theMirrorOfATableTakesEachPartOfATupleThatNamesItsPartsBeforeTheWordTheyShare() = runTest {
+        val connections = Router(
             mapOf(
                 "" to (members("ip") to emptyList()),
                 "ip" to (members("firewall") to emptyList()),
-                "ip/firewall" to (members("nat") to emptyList()),
-                "ip/firewall/nat" to (members("", "print set add get remove") to listOf("chain", "action", "to-addresses", "to-ports", "same-not-by-dst", "managed", "comment", "disabled")),
+                "ip/firewall" to (members("connection") to emptyList()),
+                "ip/firewall/connection" to (members("", "print get remove") to listOf("protocol", "orig-bytes", "repl-bytes", "limit-at")),
             ),
         )
-        val text = "[{name:'NAT',group:'IP',c:[{name:'NAT',title:'NAT',type:'map',path:[20,5],c:[" +
-            "{name:'General',type:'tab'},{name:'Chain',type:'string',id:'s27',width:60},{name:'Action',type:'tab'}," +
-            "{name:'Action',type:'enm',id:'u28',values:{type:'static',map:{20:'src-nat',22:'dst-nat'}},width:80}," +
-            "{type:'deck',panes:[{vals:[20,22],c:[{name:'To Addresses',type:'opt',id:'b3ee',c:[{type:'network',id:'u3e8',maskid:'u3e9',range:1}]}," +
-            "{name:'To Ports',type:'opt',id:'b3ef',c:[{type:'numberrange',id:'u3ea',highid:'u3eb'}]},{name:'Not by Dst.',type:'bool',id:'b3ed'}]}],selon:'Action'}," +
-            "{name:'managed',type:'flag',hasid:'uff001e',hint:'Y'}]}]}]"
-        val mirror = assertNotNull(uiPacks(entries(text), nat, mapOf("ip/nat" to "ip/firewall/nat"), natively = true).single().paths.getValue("ip/firewall/nat").mirror)
+        val text = "[{name:'Connections',group:'IP',c:[{name:'Connection',title:'Connections',type:'map',path:[20,32],maxobjs:10000,ro:1,c:[" +
+            "{name:'Protocol',type:'enm',id:'u1',values:{type:'static',map:{6:'tcp',17:'udp'}},width:60}," +
+            "{name:'Orig./Repl. Bytes',type:'tuple',width:100,c:[{type:'bigbytes',id:'q20'},{type:'bigbytes',id:'q24'}]}," +
+            "{name:'Limit At',type:'tuple',sep:'/',c:[{type:'bitrate',id:'u30'},{type:'bitrate',id:'u31'}]}]}]}]"
+        val mirror = assertNotNull(uiPacks(entries(text), connections, mapOf("ip/connections" to "ip/firewall/connection"), natively = true).single().paths.getValue("ip/firewall/connection").mirror)
+        assertEquals(mapOf("orig-bytes" to 0x20, "repl-bytes" to 0x24), mirror.fields.filter { it.name.endsWith("-bytes") }.associate { it.name to it.key })
+        // a tuple the console prints as one property stays one, which the window does not read, so the form of a row is left to the console
+        assertTrue(mirror.fields.none { it.name.startsWith("limit-at") })
+        assertTrue(mirror.partial)
+        assertEquals(10000, mirror.most)
+    }
+
+    @Test
+    fun theMirrorOfATableWhoseWindowShowsSoManyRowsAtMostReadsNoMoreOfThem() = runTest {
+        assertEquals(null, natMirror().most)
+        assertEquals(10000, natMirror(natText.replace("path:[20,5],", "path:[20,5],maxobjs:10000,")).most)
+    }
+
+    @Test
+    fun theMirrorOfATableTakesTheFieldsOfThePanesOfADeckAndAFlagOfAFieldTheRecordHolds() = runTest {
+        val mirror = natMirror()
         assertTrue(listOf("chain", "action", "to-addresses", "to-ports", "managed").all { name -> mirror.fields.any { it.name == name } })
         assertEquals(PRESENCE, mirror.fields.single { it.name == "managed" }.kind)
         assertEquals(0xFF001E, mirror.fields.single { it.name == "managed" }.key)

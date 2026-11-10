@@ -280,6 +280,35 @@ class NativeSessionTest {
         }
     }
 
+    @Test
+    fun theWindowsGoOverTheConnectionOfTheConsoleWithoutClosingIt() = runTest {
+        val routers = ArrayList<FakeRouter>()
+        val ssh = NativeSsh.open(
+            {
+                val (client, server) = pipe()
+                routers += FakeRouter(this, server, "admin", "secret", consoleRouter())
+                NativeConnection.open(client, "admin", "secret", this)
+            },
+            "secret",
+        )
+        try {
+            val side = ssh.side(18291)
+            assertEquals(18291, side.sessionPort)
+            assertEquals("banner> ", ssh.shell("xterm", 80, 24).readText(8))
+            side.open(8291).close()
+            assertTrue(ssh.connected)
+            assertEquals(1, routers.size)
+            routers.single().close()
+            delay(100)
+            side.open(8291).close()
+            assertEquals("banner> ", ssh.shell("xterm", 80, 24).readText(8))
+            assertEquals(2, routers.size)
+        } finally {
+            ssh.close()
+            routers.forEach { it.close() }
+        }
+    }
+
     @OptIn(ExperimentalCoroutinesApi::class)
     @Test
     fun aRouterThatDropsEverySessionIsNotLoggedInToForEveryConsole() = runTest {

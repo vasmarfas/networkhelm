@@ -182,9 +182,28 @@ class RouterOsSession(
         val state = "${device.id.orEmpty()} ${device.version} ${device.packages.sorted()} ${uiState(files)} ${encodeUiPacks(bundled).hashCode()} $UI_PACKS $natively $facts"
         val name = "ui-packs-${state.hashCode().toUInt().toString(16)}.json"
         val mirrorsName = "ui-mirrors-${state.hashCode().toUInt().toString(16)}.json"
-        suspend fun standing(all: List<Pack>, inherited: Map<String, PackNative>) = withQueries(nativeWindows.alive(all), bundled).also {
-            nativeWindows.keep(it)
-            nativeWindows.inherit(inherited, bundled)
+        val verdictsName = "ui-verdicts-${state.hashCode().toUInt().toString(16)}.json"
+        suspend fun standing(all: List<Pack>, inherited: Map<String, PackNative>): List<Pack> {
+            val known = store?.read(verdictsName)?.let(::decodeVerdicts)
+            var checked = false
+            val alive = nativeWindows.alive(all, known) { fresh ->
+                checked = true
+                store?.write(verdictsName, encodeVerdicts(fresh))
+            }
+            // the windows stand as a check made before found them, and are checked again beside the reads for the next connect
+            if (known != null && !checked) {
+                scope?.launch {
+                    try {
+                        nativeWindows.recheck(all)?.let { store.write(verdictsName, encodeVerdicts(it)) }
+                    } catch (e: DeviceException) {
+                        // a channel that cannot be asked now leaves the check made before to the next connect
+                    }
+                }
+            }
+            return withQueries(alive, bundled).also {
+                nativeWindows.keep(it)
+                nativeWindows.inherit(inherited, bundled)
+            }
         }
         store?.read(name)?.let(::decodeUiPacks)?.let { return@deviceErrors standing(it, store.read(mirrorsName)?.let(::decodeUiMirrors).orEmpty()) }
         val source = object : UiSchema {
@@ -398,7 +417,9 @@ class RouterOsSession(
             client is ConsoleClient && properties == null && query.isEmpty() && menu !in mirrorsRefused.value && (sizes.value[menu] ?: MIRRORED_LEAST) > MIRRORED_LEAST / 2
         }
         val console: suspend () -> List<Map<String, String>> = { api.table(words) { read, total -> progress(read, total, emptyList()) } }
-        val found = mirror?.let { mirrored(api, menu, it, words, progress) } ?: mirrors?.rows(path, filter, properties, console) { ids -> printed(api, path, ids) } ?: console()
+        // a table that had more rows than its window shows is left to the console until it has fewer
+        val shown = mirrors?.takeIf { sizes.value[menu]?.let { rows -> nativeWindows.mirror(path)?.most?.let { rows > it } } != true }
+        val found = mirror?.let { mirrored(api, menu, it, words, progress) } ?: shown?.rows(path, filter, properties, console) { ids -> printed(api, path, ids) } ?: console()
         if (properties == null && filter == null) sizes.update { it + (menu to found.size) }
         return found
     }
@@ -583,7 +604,7 @@ class RouterOsSession(
     private fun item(attributes: Map<String, String>) = Item(attributes[".id"].orEmpty(), attributes - service)
 
     private companion object {
-        const val UI_PACKS = 17
+        const val UI_PACKS = 18
         const val TOUCHED_KEPT = 16
 
         // a smaller table the console reads at once in less time than the check of the mirror takes

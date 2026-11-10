@@ -30,15 +30,17 @@ internal val kibiSizes = setOf("kbytes")
 
 internal val groupedNumbers = setOf("bignumber", "bigdecimal", "decimal")
 
-// a tuple is read a part at a time: Bandwidth (Tx and Rx) as two fields, Last Minute (In/Out) as In and Out
+// a tuple is read a part at a time: Bandwidth (Tx and Rx) as two fields, Last Minute (In/Out) as In and Out, Orig./Repl. Bytes as Orig. Bytes and Repl. Bytes
 internal fun UiField.parts(): List<UiField>? {
     if (kind != "tuple") return null
     val base = label.substringBefore(" (")
     val named = label.substringAfter(" (", "").substringBefore(')').split('/').map(String::trim).filter { it.isNotEmpty() }
     val parts = node.children.filter { it.text("id") != null }
+    val shared = label.substringAfter(' ', "")
+    val leading = label.substringBefore(' ').split('/').takeIf { named.isEmpty() && shared.isNotEmpty() && it.size > 1 && it.size == parts.size }
     return parts.mapIndexed { at, part ->
-        val title = part.label.orEmpty().ifEmpty { named.getOrNull(at) ?: "${at + 1}".takeIf { parts.size > 1 }.orEmpty() }
-        UiField("$base $title".trim(), part.kind.orEmpty(), true, part.number("width")?.toInt() ?: node.number("width")?.toInt(), part.inheriting(node.text("postfix")), needs)
+        val title = if (leading != null && part.label.isNullOrEmpty()) "${leading[at]} $shared" else "$base ${part.label.orEmpty().ifEmpty { named.getOrNull(at) ?: "${at + 1}".takeIf { parts.size > 1 }.orEmpty() }}".trim()
+        UiField(title, part.kind.orEmpty(), true, part.number("width")?.toInt() ?: node.number("width")?.toInt(), part.inheriting(node.text("postfix")), needs)
     }.takeIf { it.isNotEmpty() }
 }
 

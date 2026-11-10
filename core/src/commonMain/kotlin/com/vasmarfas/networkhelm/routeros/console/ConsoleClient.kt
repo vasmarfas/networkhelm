@@ -220,7 +220,7 @@ class ConsoleClient internal constructor(
         repeat(size - 1) {
             scope.launch {
                 val console = try {
-                    acquire()
+                    acquire(fresh = true)
                 } catch (e: ApiConnectionClosedException) {
                     return@launch
                 } catch (e: DeviceException) {
@@ -442,8 +442,8 @@ class ConsoleClient internal constructor(
         throw ApiConnectionClosedException("the client is closed", e)
     }
 
-    private suspend fun acquire(): ConsoleTerminal {
-        val slot = slot()
+    private suspend fun acquire(fresh: Boolean = false): ConsoleTerminal {
+        val slot = slot() ?: if (fresh) null else parked()
         if (slot != null) return slot
         return try {
             ConsoleTerminal.open(open, dialect, encoding).also { if (it.expired) expired.value = true }
@@ -456,6 +456,23 @@ class ConsoleClient internal constructor(
                 else -> lost(ApiConnectionClosedException(e.message ?: "the console did not open", e))
             }
         }
+    }
+
+    // the free places of the pool stand before the consoles parked behind them, and a new console takes the router about 300 ms to greet
+    private fun parked(): ConsoleTerminal? {
+        var free = 0
+        while (true) {
+            val slot = slots.tryReceive()
+            if (!slot.isSuccess) break
+            val console = slot.getOrNull()
+            if (console != null) {
+                repeat(free + 1) { slots.trySend(null) }
+                return console
+            }
+            free++
+        }
+        repeat(free) { slots.trySend(null) }
+        return null
     }
 
     private fun release(console: ConsoleTerminal, healthy: Boolean) {

@@ -6,7 +6,6 @@ import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.schema.MemorySchemaCache
 import com.vasmarfas.networkhelm.routeros.schema.SchemaCache
 import com.vasmarfas.networkhelm.session.DeviceSession
-import com.vasmarfas.networkhelm.session.NativeSide
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 
@@ -21,7 +20,7 @@ suspend fun connectMacTelnetHost(destination: MacAddress, user: String, password
     } catch (e: Exception) {
         null
     }
-    if (stream != null) return consoleHost(stream, user, encoding, scope, info("RouterOS (MAC)"), schemaCache, native = NativeSide { NativeObjectModel(connect()) })
+    if (stream != null) return consoleHost(stream, user, encoding, scope, info("RouterOS (MAC)"), schemaCache, native = stream.side())
     val ssh = connectMacTelnet(destination, user, password, scope, link.mac, destinationAddress = link.broadcast, terminalType = "xterm-256color")
     return consoleHost(ssh, user, encoding, scope, info("RouterOS (MAC-Telnet)"), schemaCache)
 }

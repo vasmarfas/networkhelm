@@ -527,6 +527,18 @@ class ConsoleClientTest {
         assertEquals(3, consoles.size)
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun callsOneAfterAnotherTakeTheOpenConsoleAndTheWarmingOpensTheRest() = runTest {
+        val client = client { "[]" }
+        repeat(3) { client.call(listOf("/ip/address/print")) }
+        assertEquals(1, consoles.size)
+        client.warm(backgroundScope)
+        runCurrent()
+        assertEquals(4, consoles.size)
+        client.close()
+    }
+
     @Test
     fun aConsoleThatEndsFailsItsCallAndTheNextCallOpensAnother() = runTest {
         var first = true

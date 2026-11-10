@@ -42,6 +42,9 @@ import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.json.Json
 import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
@@ -61,6 +64,20 @@ private const val MIRROR_TRIES = 3
 
 private class Flight {
     var crowded = false
+}
+
+// the windows the router served at a check of a set of descriptions, by handler and command: whether each stands, and which stayed silent
+@Serializable
+internal class WindowVerdicts(val stands: Map<String, Boolean> = emptyMap(), val silent: Set<String> = emptySet())
+
+private val verdictsJson = Json { ignoreUnknownKeys = true }
+
+internal fun encodeVerdicts(verdicts: WindowVerdicts): String = verdictsJson.encodeToString(WindowVerdicts.serializer(), verdicts)
+
+internal fun decodeVerdicts(text: String): WindowVerdicts? = try {
+    verdictsJson.decodeFromString(WindowVerdicts.serializer(), text)
+} catch (e: SerializationException) {
+    null
 }
 
 internal class NativeWindows(
@@ -99,8 +116,10 @@ internal class NativeWindows(
     // the handlers read beside others when the channel dropped; each is read alone next time, so that a drop is charged to the read that made it
     private val suspects = HashSet<List<Long>>()
     private val flights = HashSet<Flight>()
+    // the handlers refused for staying silent at a check, which a check beside the reads asks again
+    private val quiet = HashSet<List<Long>>()
 
-    suspend fun usable() = side != null && port() != null
+    suspend fun usable() = side != null && (side.sessionPort ?: port()) != null
 
     // the files of the descriptions come beside the reads of the windows, as WinBox takes them
     suspend fun resource(name: String): ByteArray? {
@@ -148,11 +167,20 @@ internal class NativeWindows(
         (table.columns + table.flags.map { it.property } + table.totals + listOfNotNull(table.category, table.iconBy)).toSet()
     }.orEmpty()
 
-    // the descriptions the router serves hold windows of hardware and services it does not have; the object model says which by refusing them or by staying silent
-    suspend fun alive(packs: List<Pack>): List<Pack> {
-        val verdicts = verdicts(packs.flatMap { pack -> pack.window.tabs.mapNotNull { tab -> pack.paths[tab.path]?.native?.takeIf { stands(MenuPath.parse(tab.path)) } } })
+    // the descriptions the router serves hold windows of hardware and services it does not have; the object model says which by refusing them or by staying silent.
+    // A check of the same descriptions made before stands in for a new one, a silent handler of it refused at once; a new check goes to found
+    suspend fun alive(packs: List<Pack>, known: WindowVerdicts? = null, found: suspend (WindowVerdicts) -> Unit = {}): List<Pack> {
+        val specs = checkedSpecs(packs)
+        val verdicts = if (known != null && specs.all { keyOf(it) in known.stands }) {
+            ledger.withLock {
+                for (spec in specs) if (keyOf(spec) in known.silent) silenced(spec)
+            }
+            known
+        } else {
+            alone { checked(specs, beside = false) }.also { if (it.fresh) found(it.verdicts) }.verdicts
+        }
         val standing = packs.mapNotNull { pack ->
-            val tabs = pack.window.tabs.filter { tab -> pack.paths[tab.path]?.native?.let { spec -> verdicts[verdict(spec)] != false } ?: true }
+            val tabs = pack.window.tabs.filter { tab -> pack.paths[tab.path]?.native?.let { spec -> verdicts.stands[keyOf(spec)] != false } ?: true }
             when {
                 tabs.size == pack.window.tabs.size -> pack
                 tabs.isEmpty() -> null
@@ -163,29 +191,50 @@ internal class NativeWindows(
         return standing
     }
 
+    // the check of the windows again beside the reads, for the next connect: it does not hold the channel, charges no drop to a handler, and asks the
+    // silent handlers too, so one that answers now is refused no more; null where the channel dropped under it
+    suspend fun recheck(packs: List<Pack>): WindowVerdicts? = checked(checkedSpecs(packs), beside = true).takeIf { it.fresh }?.verdicts
+
     private class Probe(val stands: Boolean, val silent: Boolean = false, val lost: DeviceException? = null)
 
-    // the windows of one pass are asked about a few at a time, so that handlers which stay silent cost their waiting once and not each in turn
-    // a handler may hold a table and queries, and the router refuses one command of it and not another
-    private fun verdict(spec: PackNative) = spec.handler to spec.query?.poll
+    private class Checked(val verdicts: WindowVerdicts, val fresh: Boolean)
 
-    private suspend fun verdicts(specs: List<PackNative>): Map<Pair<List<Long>, Long?>, Boolean> = alone {
+    private fun checkedSpecs(packs: List<Pack>) =
+        packs.flatMap { pack -> pack.window.tabs.mapNotNull { tab -> pack.paths[tab.path]?.native?.takeIf { stands(MenuPath.parse(tab.path)) } } }.distinctBy(::keyOf)
+
+    // a handler may hold a table and queries, and the router refuses one command of it and not another
+    private fun keyOf(spec: PackNative) = spec.handler.joinToString(",") + "/" + (spec.query?.poll?.toString() ?: "")
+
+    // the windows of one pass are asked about a few at a time, so that handlers which stay silent cost their waiting once and not each in turn
+    private suspend fun checked(specs: List<PackNative>, beside: Boolean): Checked {
         val objects = try {
             objects()
         } catch (e: DeviceException) {
-            return@alone specs.associate { verdict(it) to e.keepsWindow() }
+            return Checked(WindowVerdicts(specs.associate { keyOf(it) to e.keepsWindow() }), fresh = false)
         }
         val gate = Semaphore(PROBES)
-        val probes = coroutineScope { specs.distinctBy(::verdict).map { spec -> async { spec to gate.withPermit { probe(objects, spec) } } }.awaitAll() }
+        val probes = coroutineScope { specs.map { spec -> async { spec to gate.withPermit { probe(objects, spec, again = beside) } } }.awaitAll() }
         for ((spec, probe) in probes) {
-            if (probe.silent) ledger.withLock { refused[spec.handler] = DeviceException(ErrorCategory.Unsupported, "the router does not answer [${spec.handler.joinToString(",")}]") }
-            probe.lost?.let { lost(objects, spec, it) }
+            ledger.withLock {
+                if (probe.silent) silenced(spec) else if (probe.stands && spec.handler in quiet) {
+                    quiet -= spec.handler
+                    refused -= spec.handler
+                }
+            }
+            if (!beside) probe.lost?.let { lost(objects, spec, it) }
         }
-        probes.associate { (spec, probe) -> verdict(spec) to probe.stands }
+        val verdicts = WindowVerdicts(probes.associate { (spec, probe) -> keyOf(spec) to probe.stands }, probes.filter { it.second.silent }.mapTo(HashSet()) { keyOf(it.first) })
+        return Checked(verdicts, fresh = probes.none { it.second.lost != null })
     }
 
-    private suspend fun probe(objects: NativeObjects, spec: PackNative): Probe {
-        if (ledger.withLock { spec.handler in refused }) return Probe(false)
+    // under the ledger
+    private fun silenced(spec: PackNative) {
+        refused[spec.handler] = DeviceException(ErrorCategory.Unsupported, "the router does not answer [${spec.handler.joinToString(",")}]")
+        quiet += spec.handler
+    }
+
+    private suspend fun probe(objects: NativeObjects, spec: PackNative, again: Boolean = false): Probe {
+        if (ledger.withLock { spec.handler in refused && !(again && spec.handler in quiet) }) return Probe(false)
         return try {
             objects.answers(spec).let { Probe(it, silent = !it) }
         } catch (e: DeviceException) {
@@ -338,11 +387,11 @@ internal class NativeWindows(
         return null
     }
 
-    // a console menu read whole from its window; a read the table changed under between two pages is made again
+    // a console menu read whole from its window, up to the rows the window shows; a read the table changed under between two pages is made again
     suspend fun whole(spec: PackNative): List<Item>? {
         repeat(MIRROR_TRIES) {
             try {
-                return read(spec, null)
+                return read(spec, spec.most)
             } catch (e: DeviceException) {
                 if (e.category != ErrorCategory.MissingItem) throw e
             }
@@ -543,7 +592,7 @@ internal class NativeWindows(
 
     private suspend fun open(): NativeObjects {
         val side = side ?: throw DeviceException(ErrorCategory.Unsupported, "this connection has no native channel")
-        val port = port() ?: throw DeviceException(ErrorCategory.Unsupported, "the WinBox service of the router is off")
+        val port = side.sessionPort ?: port() ?: throw DeviceException(ErrorCategory.Unsupported, "the WinBox service of the router is off")
         return try {
             side.open(port)
         } catch (e: CancellationException) {

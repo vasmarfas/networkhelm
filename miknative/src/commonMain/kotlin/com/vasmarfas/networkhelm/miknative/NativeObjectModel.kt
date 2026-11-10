@@ -50,6 +50,9 @@ private const val REMOVE = 0xFE0006L
 private const val MOVE = 0xFE0007L
 private const val BEFORE = 0xFE0005
 private const val PAGES = 2_000
+// the numbers a router gives the reads it keeps for a source
+private val KEPT_READS = 0xFFFFF001L..0xFFFFFFFCL
+private const val STOP_READ = 0xFE0018L
 private const val SUBSCRIBE = 0xFE0012L
 private const val UNSUBSCRIBE = 0xFE0013L
 private const val CREDIT = 0xFE0017L
@@ -104,7 +107,7 @@ private const val BOARD_FAMILY = 0x17
 private const val INFO_CAPABILITIES = 0x28
 private const val CAPABILITY_MASK = 0x6D
 
-class NativeObjectModel(private val connection: NativeConnection) : NativeObjects {
+class NativeObjectModel(private val connection: NativeConnection, private val owned: Boolean = true) : NativeObjects {
 
     private val lock = Mutex()
     // the numbers a read was asked for and the table did not have, as the all and the nothing of a field, are not asked for again until the table is read anew
@@ -463,7 +466,9 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
         }
     }
 
-    override fun close() = connection.close()
+    override fun close() {
+        if (owned) connection.close()
+    }
 
     override suspend fun lines(spec: PackNative): NativeRun = Lines(spec)
 
@@ -544,21 +549,32 @@ class NativeObjectModel(private val connection: NativeConnection) : NativeObject
         }
     }
 
-    // a cursor names the record a page starts with, so a read from one gives that record first
+    // a cursor names the record a page starts with, so a read from one gives that record first; one among the numbers the router gives the reads
+    // it keeps, as that of Routes, names the read itself: it goes with every page, the pages after the first need not repeat it, and an empty
+    // page or no more objects ends the read
     internal suspend fun records(handler: List<Long>, limit: Int? = null, whole: Boolean = false, from: Long? = null, mask: Long = GET_ALL_FLAGS): List<M2Message>? {
         val source = connection.newSource()
         try {
             val records = ArrayList<M2Message>()
             var cursor: List<Pair<Int, M2Value>> = from?.let { listOf(CONTINUATION to M2Value.U32(it)) }.orEmpty()
+            var kept = false
             repeat(PAGES) {
                 val reply = source.exchange(handler, M2Value.U32(GET_ALL), FLAGS to M2Value.U32(mask), *cursor.toTypedArray())
                 val code = reply.number(M2Key.ErrorCode)?.takeIf { it != 0L }
                 if (code != null && code != NO_MORE) throw reply.refusal() ?: DeviceException(ErrorCategory.General, "the router refused the read (error 0x${code.toString(16)})")
+                val page = reply.messages(RECORDS).orEmpty()
+                if (kept && (code == NO_MORE || page.isEmpty())) return records
                 // no more objects after a cursor: the record it names went between two pages, and the pages before it are not the whole table
                 if (whole && code == NO_MORE && cursor.isNotEmpty()) throw DeviceException(ErrorCategory.MissingItem, "the table [${handler.joinToString(",")}] changed between two pages of the read")
-                records += reply.messages(RECORDS).orEmpty()
-                if (limit != null && records.size > limit) return null
+                records += page
+                if (limit != null && records.size > limit) {
+                    // the router keeps the rest of a read it keeps for the source until it is told to stop
+                    if (kept) source.send(handler, M2Key.Command to M2Value.U32(STOP_READ), *cursor.toTypedArray())
+                    return null
+                }
+                if (kept) return@repeat
                 cursor = reply.fields.filter { it.key == CONTINUATION || it.key == CONTINUATION_RAW }.map { it.key to it.value }
+                kept = cursor.any { (_, value) -> (value as? M2Value.U32)?.value in KEPT_READS }
                 if (code == NO_MORE || cursor.isEmpty()) return records
             }
             throw DeviceException(ErrorCategory.General, "the router did not end the list of [${handler.joinToString(",")}] in $PAGES pages")
@@ -693,9 +709,10 @@ private fun address(message: M2Message, interfaces: Map<Long, String>?): String?
         ?: message.text(ADDRESS_NAME)
         ?: message.text(ADDRESS_DISTINGUISHER)
         ?: message.raw(ADDRESS_MAC)?.takeIf { it.size == MAC_BYTES }?.let(::macOf)
+    // an interface alone is written by its name, as the gateway of a route; after an address it is the zone of it
     val text = host.orEmpty() +
         message.number(ADDRESS_LENGTH)?.let { "/$it" }.orEmpty() +
-        message.number(ADDRESS_INTERFACE)?.let { "%" + (interfaces?.get(it) ?: it) }.orEmpty() +
+        message.number(ADDRESS_INTERFACE)?.let { (if (host == null) "" else "%") + (interfaces?.get(it) ?: it) }.orEmpty() +
         message.number(ADDRESS_VRF)?.let { "@$it" }.orEmpty()
     return text.takeIf { it.isNotEmpty() }
 }

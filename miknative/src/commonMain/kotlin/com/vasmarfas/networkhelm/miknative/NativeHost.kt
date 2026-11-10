@@ -15,8 +15,10 @@ import com.vasmarfas.networkhelm.transport.openTcp
 import com.vasmarfas.networkhelm.uidefs.WebAccess
 import kotlinx.coroutines.CoroutineScope
 
-suspend fun connectNativeHost(host: String, port: Int, user: String, password: String, encoding: ApiEncoding, scope: CoroutineScope, schemaCache: SchemaCache = MemorySchemaCache()): DeviceSession =
-    consoleHost(connectNative(host, user, password, scope, port), user, encoding, scope, DeviceInfo(Platform.Ssh, "RouterOS", "TCP 8291", "", "", emptySet(), setOf("read", "write")), schemaCache, WebAccess(host) { webPort -> openTcp(host, webPort) }.takeIf { host != Jump.LOOPBACK }, NativeSide { openNativeObjects(host, port, user, password, scope) })
+suspend fun connectNativeHost(host: String, port: Int, user: String, password: String, encoding: ApiEncoding, scope: CoroutineScope, schemaCache: SchemaCache = MemorySchemaCache()): DeviceSession {
+    val native = connectNative(host, user, password, scope, port)
+    return consoleHost(native, user, encoding, scope, DeviceInfo(Platform.Ssh, "RouterOS", "TCP 8291", "", "", emptySet(), setOf("read", "write")), schemaCache, WebAccess(host) { webPort -> openTcp(host, webPort) }.takeIf { host != Jump.LOOPBACK }, native.side(port))
+}
 
 suspend fun connectNativeHost(host: String, port: Int, user: String, password: String, scope: CoroutineScope): DeviceSession =
     connectNativeHost(host, port, user, password, ApiEncoding.Utf8, scope)

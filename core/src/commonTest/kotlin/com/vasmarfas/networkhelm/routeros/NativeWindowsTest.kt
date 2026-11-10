@@ -56,7 +56,7 @@ class NativeWindowsTest {
         }
     }
 
-    private class Side(vararg objects: NativeObjects) : NativeSide {
+    private class Side(vararg objects: NativeObjects, override val sessionPort: Int? = null) : NativeSide {
         private val queue = objects.toMutableList()
         var opened = 0
         var port: Int? = null
@@ -193,6 +193,42 @@ class NativeWindowsTest {
     }
 
     @Test
+    fun aCheckOfTheWindowsMadeBeforeStandsInWithoutAskingAndTheCheckAgainFindsAHandlerThatAnswersNow() = runTest {
+        val live = other(1)
+        val silent = other(2)
+        var answering = false
+        val objects = object : NativeObjects {
+            var asked = 0
+
+            override suspend fun read(spec: PackNative, limit: Int?): List<Item>? = listOf(row("*1", "paired"))
+
+            override suspend fun answers(spec: PackNative): Boolean {
+                asked++
+                return spec !== silent || answering
+            }
+
+            override fun close() = Unit
+        }
+        fun tab(spec: PackNative) = PackTab(spec.handler.last().toString(), "native/167/${spec.handler.last()}")
+        val pack = Pack(menu = listOf("Controller", "Things"), window = PackWindow("Things", listOf(tab(live), tab(silent))), paths = mapOf(tab(live).path to PackPath(native = live), tab(silent).path to PackPath(native = silent)))
+        val found = ArrayList<WindowVerdicts>()
+        val first = native(Side(objects)).alive(listOf(pack)) { found += it }
+        assertEquals(listOf(listOf("1")), first.map { it.window.tabs.map { tab -> tab.title } })
+        val kept = decodeVerdicts(encodeVerdicts(found.single()))
+        assertEquals(setOf("167,2/"), kept?.silent)
+        assertEquals(2, objects.asked)
+        val windows = native(Side(objects))
+        val again = windows.alive(listOf(pack), kept) { found += it }
+        assertEquals(listOf(listOf("1")), again.map { it.window.tabs.map { tab -> tab.title } })
+        assertEquals(2, objects.asked)
+        assertEquals(1, found.size)
+        assertEquals(ErrorCategory.Unsupported, assertFailsWith<DeviceException> { windows.count(silent) }.category)
+        answering = true
+        assertEquals(mapOf("167,1/" to true, "167,2/" to true), windows.recheck(listOf(pack))?.stands)
+        assertEquals(1, windows.count(silent))
+    }
+
+    @Test
     fun theButtonsOfAWindowAreItsCommandsAndPressingOneGoesThroughTheChannel() = runTest {
         val buttons = PackNative(listOf(24, 2), listOf(PackNativeField("uptime", 0x1, "interval")), single = true, doits = listOf(3, 4))
         val objects = object : NativeObjects {
@@ -230,6 +266,17 @@ class NativeWindowsTest {
         val side = Side(Script(rows(row("*1", "paired"), row("*2", "lost"))))
         val events = native(side).list(spec, Filter.Equals(".id", "*2")).take(1).toList()
         assertEquals(listOf(ListEvent.Snapshot(listOf(row("*2", "lost")))), events)
+    }
+
+    @Test
+    fun theChannelOfTheSessionItselfNeedsNoServiceOfTheRouter() = runTest {
+        val side = Side(Script(rows(row("*1", "paired"))), sessionPort = 18291)
+        var asked = 0
+        val windows = NativeWindows(side, { asked++; null }, 1.seconds)
+        assertTrue(windows.usable())
+        assertEquals(listOf(ListEvent.Snapshot(listOf(row("*1", "paired")))), windows.list(spec).take(1).toList())
+        assertEquals(18291, side.port)
+        assertEquals(0, asked)
     }
 
     @Test
@@ -334,6 +381,21 @@ class NativeWindowsTest {
         assertEquals(1, side.opened)
         assertEquals(4, side.overlap)
         jobs.forEach { it.cancel() }
+    }
+
+    @Test
+    fun aMenuTableIsReadWholeFromItsWindowOnlyUpToTheRowsTheWindowShows() = runTest {
+        val limits = ArrayList<Int?>()
+        val objects = object : NativeObjects {
+            override suspend fun read(spec: PackNative, limit: Int?): List<Item>? {
+                limits += limit
+                return listOf(row("*1", "paired"))
+            }
+
+            override fun close() = Unit
+        }
+        native(Side(objects)).whole(spec.copy(most = 10000))
+        assertEquals(listOf<Int?>(10000), limits)
     }
 
     @Test

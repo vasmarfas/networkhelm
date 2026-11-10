@@ -134,6 +134,10 @@ class NativeEncodeTest {
         assertEquals(listOf(ADDRESS_V6, ADDRESS_INTERFACE), address("fe80::1%ether1", mapOf(2L to "ether1")).map { it.first })
         assertEquals(M2Value.U32(2), address("fe80::1%ether1", mapOf(2L to "ether1")).last().second)
         assertEquals(listOf(ADDRESS_V4, ADDRESS_LENGTH, ADDRESS_VRF), address("10.0.0.0/8@5").map { it.first })
+        // an interface alone, as the gateway of a route
+        assertEquals(listOf(ADDRESS_INTERFACE to M2Value.U32(2)), address("ether1", mapOf(2L to "ether1")))
+        assertEquals(listOf(ADDRESS_INTERFACE to M2Value.U32(2)), address("%ether1", mapOf(2L to "ether1")))
+        assertEquals(listOf(ADDRESS_NAME to M2Value.Text("example.com")), address("example.com", mapOf(2L to "ether1")))
     }
 
     @Test

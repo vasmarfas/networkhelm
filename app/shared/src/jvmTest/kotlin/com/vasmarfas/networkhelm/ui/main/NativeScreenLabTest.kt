@@ -99,11 +99,13 @@ class NativeScreenLabTest {
             picture("native-dialog-$prefix")
             onNodeWithText("OK").performClick()
             waitUntil(timeoutMillis = 20_000) { onAllNodes(hasText("OK")).fetchSemanticsNodes().isEmpty() }
-            waitUntil(timeoutMillis = 20_000) { onAllNodes(hasText("203.0.113.51")).fetchSemanticsNodes().isNotEmpty() }
+            // the lab router keeps more addresses than the window shows, and the new one is found by the filter of the window
+            onAllNodes(hasTestTag("find")).onLast().performTextInput("203.0.113.51")
+            waitUntil(timeoutMillis = 20_000) { onAllNodes(hasText("203.0.113.51") and !hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
             assertEquals(1, offTest { session.count(list, Filter.Equals("list", "rd-test-native")) })
             assertEquals("made in a window; \"quoted\"", offTest { (session.watch(list, Filter.Equals("list", "rd-test-native")).first() as ListEvent.Snapshot).items.single()["comment"] })
-            onAllNodes(hasText("203.0.113.51")).onLast().performMouseInput { doubleClick() }
-            waitUntil(timeoutMillis = 20_000) { onAllNodes(hasSetTextAction() and hasText("203.0.113.51")).fetchSemanticsNodes().isNotEmpty() }
+            onAllNodes(hasText("203.0.113.51") and !hasSetTextAction()).onLast().performMouseInput { doubleClick() }
+            waitUntil(timeoutMillis = 20_000) { onAllNodes(hasSetTextAction() and hasText("203.0.113.51") and hasAnyAncestor(hasTestTag("field-address"))).fetchSemanticsNodes().isNotEmpty() }
             picture("native-opened-$prefix")
         } finally {
             runCatching { offTest { removeEntries(session, list) } }

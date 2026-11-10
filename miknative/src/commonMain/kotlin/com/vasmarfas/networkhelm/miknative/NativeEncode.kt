@@ -306,11 +306,15 @@ private fun addressOf(field: PackNativeField, text: String, resolved: Map<Long, 
     val parts = rest.split('.')
     val groups = rest.split(':')
     val fields = ArrayList<Pair<Int, M2Value>>()
+    // a word that names an interface of the router is that interface, as the console takes gateway=ether1
+    val named = resolved?.entries?.firstOrNull { it.value.equals(rest, ignoreCase = true) }?.key?.takeIf { interfaceName.isEmpty() }
     when {
+        rest.isEmpty() && interfaceName.isNotEmpty() -> Unit
         rest.isEmpty() -> throw rejected(field, "takes an address")
         parts.size == 4 && parts.all { it.isNotEmpty() && it.all(Char::isDigit) } -> fields += ADDRESS_V4 to M2Value.U32(dottedOf(field, rest))
         groups.size == 6 && groups.all { it.length == 2 } -> fields += ADDRESS_MAC to M2Value.Raw(macOf(field, rest))
         groups.size > 2 -> fields += ADDRESS_V6 to M2Value.Address6(ipv6Of(field, rest))
+        named != null -> fields += ADDRESS_INTERFACE to M2Value.U32(named)
         else -> fields += ADDRESS_NAME to M2Value.Text(rest)
     }
     if (length.isNotEmpty()) fields += ADDRESS_LENGTH to M2Value.U32(prefixOf(field, length, IPV6_BITS))

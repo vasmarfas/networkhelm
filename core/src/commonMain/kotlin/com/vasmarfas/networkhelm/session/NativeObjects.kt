@@ -88,4 +88,7 @@ private fun readOnly() = DeviceException(ErrorCategory.Unsupported, "this connec
 
 fun interface NativeSide {
     suspend fun open(port: Int): NativeObjects
+
+    // a side over the WinBox connection of the session itself has its port, and the router is not asked for the service
+    val sessionPort: Int? get() = null
 }

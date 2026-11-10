@@ -138,6 +138,8 @@ data class PackNative(
     val mask: Long? = null,
     // the rows of the table that hold these values: the window of one kind of interface reads the table of all of them
     val only: Map<String, String> = emptyMap(),
+    // the most rows the window shows before it asks to load them all, maxobjs of its description; a bigger table the console reads
+    val most: Int? = null,
 )
 
 // a query or an action window of the router: the commands that start, read and end it, and the fields of its request; the fields of the result are those of the PackNative

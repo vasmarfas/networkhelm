@@ -288,7 +288,8 @@ suspend fun uiInheritedMirrors(entries: List<UiNode>, schema: UiSchema, known: M
     val found = LinkedHashMap<String, PackNative>()
     for (entry in entries) {
         val title = entry.text("dname") ?: entry.label ?: continue
-        val first = entry.children.firstOrNull { it.kind == "map" || it.kind == "item" }
+        // the generic window of All Routes stands first and hidden, so the window of IPv4 routes is the one of the menu of the entry
+        val first = entry.children.firstOrNull { (it.kind == "map" || it.kind == "item") && !it.flag("nonpublic") }
         for (window in entry.children) {
             if (window.kind != "map" || window.flag("nonpublic")) continue
             val generic = window.text("inherit")?.let(generics::get) ?: window.takeIf { it.text("generic") != null } ?: continue
@@ -300,10 +301,11 @@ suspend fun uiInheritedMirrors(entries: List<UiNode>, schema: UiSchema, known: M
             val merged = inherited(generic, window)
             val form = uiForm(merged)
             val (every, _, _, matched) = fit(form, MenuPath.parse(path), schema)
-            // a window the menu names few of its own fields is the table of another menu
+            // a window the menu names few of its own fields is the table of another menu, unless it is the window of the menu of its entry, as
+            // IPv4 Routes with the attributes of BGP, OSPF and LDP the console does not print
             val own = window.children.toSet()
             val placed = form.tabs.flatMap { tab -> tab.items.filterNotNull().filter { it.node in own }.map { tab to it } }
-            if (window === generic && !covered(form, MenuPath.parse(path), schema) || placed.count { (tab, field) -> matched.of(field, tab) in every } * 2 < placed.size) continue
+            if (window === generic && !covered(form, MenuPath.parse(path), schema) || window !== first && placed.count { (tab, field) -> matched.of(field, tab) in every } * 2 < placed.size) continue
             val spec = mirrorOf(merged, form, matched, every, handled) ?: continue
             val kind = window.number("typevalue")
             val typeKey = generic.children.firstOrNull { it.name == generic.text("typeon") }?.text("id")?.drop(1)?.toIntOrNull(16)
@@ -352,20 +354,25 @@ private val SECOND_POSTFIXES = setOf("s", " s", "sec", " sec")
 // a table of the console in the shape of its window: each field the console prints and the description places, with its key, under the name of the console;
 // a column or a flag the window cannot read leaves the table to the console, a field of the form it cannot read leaves the window of a row to it
 private fun mirrorOf(window: UiNode, form: UiForm, properties: Properties, every: List<String>, handled: Map<List<Long>, UiNode>): PackNative? {
-    if (handled.isEmpty() || window.attrs["maxobjs"] != null) return null
+    if (handled.isEmpty()) return null
     val handler = window.handler() ?: return null
     val fields = LinkedHashMap<String, PackNativeField>()
     val unread = HashSet<String>()
     val columns = form.columns.mapNotNullTo(HashSet()) { properties.of(it, null) }
     val placed = form.tabs.flatMap { tab -> tab.items.filterNotNull().map { tab to it } } + (form.columns + form.extras).map { null to it }
-    for ((tab, field) in placed) {
-        // the console splits an address with its port in two, and names the address part so
-        val name = properties.of(field, tab)?.takeIf { it in every }
-            ?: nameOf(field.label)?.let { "$it-address" }?.takeIf { it in every && field.node.kind == "addr" }
-            ?: continue
-        if (name in fields) continue
-        val native = nativeField(field, name, handled) ?: secretField(field, name) ?: sinceField(field, name)
-        if (native == null) unread += name else fields[name] = consoleField(native, field.node.text("postfix"))
+    for ((tab, whole) in placed) {
+        // a tuple the console prints as one property stays one field the window does not read; one it prints a property for each part of,
+        // as orig-bytes and repl-bytes of Orig./Repl. Bytes, is read a part at a time
+        val split = whole.parts()?.takeIf { properties.of(whole, tab) !in every }
+        for (field in split ?: listOf(whole)) {
+            // the console splits an address with its port in two, and names the address part so
+            val name = properties.of(field, tab)?.takeIf { it in every }
+                ?: nameOf(field.label)?.let { if (split != null) it else "$it-address".takeIf { field.node.kind == "addr" } }?.takeIf { it in every }
+                ?: continue
+            if (name in fields) continue
+            val native = nativeField(field, name, handled) ?: secretField(field, name) ?: sinceField(field, name)
+            if (native == null) unread += name else fields[name] = consoleField(native, field.node.text("postfix"))
+        }
     }
     // the fields of the panes of a deck stand for one value of the field that chooses the pane, as To Addresses for the actions of NAT;
     // the console names them by their titles, and one it names otherwise leaves the window of a row to the console
@@ -398,6 +405,7 @@ private fun mirrorOf(window: UiNode, form: UiForm, properties: Properties, every
     // the rows of an ordered table stand where the router keeps them, and the console has to print them in that order
     return PackNative(
         handler, fields.values.toList(), single = single, whole = true, partial = unread.isNotEmpty(), mask = READ_BASE or READ_COUNTERS or refreshed, move = window.flag("ordered"),
+        most = window.number("maxobjs")?.toInt(),
     )
 }
 

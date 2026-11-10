@@ -3,6 +3,8 @@ package com.vasmarfas.networkhelm.miknative
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.session.Backoff
+import com.vasmarfas.networkhelm.session.NativeObjects
+import com.vasmarfas.networkhelm.session.NativeSide
 import com.vasmarfas.networkhelm.ssh.ExecResult
 import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.ShellChannel
@@ -43,6 +45,13 @@ class NativeSsh private constructor(
 
     override val connected get() = connection.alive
 
+    // the windows go over the connection of the console as WinBox keeps one for everything, so the router computes one login; the console closes it
+    fun side(port: Int? = null) = object : NativeSide {
+        override val sessionPort = port
+
+        override suspend fun open(port: Int): NativeObjects = NativeObjectModel(live(), owned = false)
+    }
+
     override fun close() {
         closed = true
         connection.close()
@@ -78,7 +87,7 @@ suspend fun connectNative(
     scope: CoroutineScope,
     port: Int = DEFAULT_PORT,
     via: RomonTarget? = null,
-): SshSession = NativeSsh.open(
+): NativeSsh = NativeSsh.open(
     {
         val connection = NativeConnection.open(host, user, password, scope, port)
         try {
