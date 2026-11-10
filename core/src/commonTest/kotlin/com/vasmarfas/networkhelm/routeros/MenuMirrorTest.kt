@@ -220,6 +220,18 @@ class MenuMirrorTest {
     }
 
     @Test
+    fun aWindowOfSettingsWithoutAValueItsMenuShowsForReadingLeavesTheMenuToTheConsole() = runTest {
+        val update = MenuPath.parse("system/package/update")
+        val spec = PackNative(listOf(24, 24), listOf(PackNativeField("installed-version", 1, "string")), single = true, whole = true)
+        val windows = NativeWindows(NativeSide { Window(listOf(Item("#0", mapOf("installed-version" to "7.26beta1")))) }, { 8291 }, 1.seconds)
+        windows.keep(listOf(Pack(menu = listOf("System"), window = PackWindow("Check For Updates", listOf(PackTab("Check For Updates", update.toString()))), paths = mapOf(update.toString() to PackPath(readonly = listOf("installed-version", "status"), mirror = spec)))))
+        val mirrors = MenuMirrors(windows, classic = false, { null }) { _, _ -> }
+        val console = listOf(mapOf("installed-version" to "7.26beta1", "status" to "New version is available"))
+        assertEquals(console, mirrors.rows(update, null, null, { console }) { null })
+        assertNull(mirrors.rows(update, null, null, { console }) { null })
+    }
+
+    @Test
     fun aMirrorThatLacksFieldsOfTheFormLeavesTheWindowOfARowToTheConsole() = runTest {
         val kept = HashMap<String, List<Map<String, String>>>()
         val mirrors = mirrors(Window(listOf(Item("*1", mapOf("name" to "a")))), kept, peers.copy(partial = true))

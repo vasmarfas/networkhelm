@@ -33,8 +33,8 @@ private const val KEPT = "mirror:"
 private const val TIME_SLACK = 2L
 // a reference to nothing and a date or a moment that never came
 private const val NONE = 0xFFFFFFFFL
-// the way the rows are written from the window: an agreement made before it changed is checked again
-private const val WRITING = 1
+// the way the rows are written from the window and what the check asks of it: an agreement made before either changed is checked again
+private const val WRITING = 2
 // the uptime and the clock of the router go on as the time here does and are read again after this long
 private val TICKS_KEPT = 30.seconds
 private val NAMED_KINDS = setOf("enm", "set", "bool", "flag", "numflag", "multitristate")

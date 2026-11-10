@@ -162,9 +162,11 @@ internal class NativeWindows(
     // as often as the window of the router reads the table of a menu again, and no more often than once a poll
     fun refresh(path: MenuPath): Duration? = path.toString().let { tables[it] ?: described[it] }?.refresh?.milliseconds?.coerceAtLeast(every)
 
-    // what the table of a menu shows: its columns and the properties of its flags, icons and groups
+    // what the table of a menu shows: its columns and the properties of its flags, icons and groups; a window of one record shows
+    // its values for reading too, and those it works out its state from
     fun shown(path: MenuPath): Set<String> = path.toString().let { tables[it] ?: described[it] }?.let { table ->
-        (table.columns + table.flags.map { it.property } + table.totals + listOfNotNull(table.category, table.iconBy)).toSet()
+        val record = if (mirror(path)?.single == true) table.readonly + table.derived.values.map { it.of } else emptyList()
+        (table.columns + table.flags.map { it.property } + table.totals + listOfNotNull(table.category, table.iconBy) + record).toSet()
     }.orEmpty()
 
     // the descriptions the router serves hold windows of hardware and services it does not have; the object model says which by refusing them or by staying silent.
