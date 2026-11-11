@@ -20,9 +20,12 @@ class FileGatewayStore(home: File, private val sealing: SecretKeySpec) : Gateway
 
     override suspend fun read(name: String): String? = withContext(Dispatchers.IO) { document(name).takeIf { it.isFile }?.readText() }
 
-    override suspend fun write(name: String, text: String) = withContext(Dispatchers.IO) {
-        documents.mkdirs()
-        replace(document(name), text)
+    // one writer at a time, and for the stores of all the sockets: two of them share the temporary file of a name
+    override suspend fun write(name: String, text: String) = lock.withLock {
+        withContext(Dispatchers.IO) {
+            documents.mkdirs()
+            replace(document(name), text)
+        }
     }
 
     override suspend fun secret(key: String): String? = lock.withLock { stored()[key]?.let { unseal(sealing, it).decodeToString() } }

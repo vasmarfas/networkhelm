@@ -6,6 +6,9 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.platform.LocalUriHandler
@@ -260,6 +263,43 @@ class ToolbarTest {
         onNodeWithText("Keep changes").performClick()
         waitUntil(timeoutMillis = 5_000) { disconnected }
         assertEquals(listOf("enter", "commit"), safeMode.calls)
+    }
+
+    @Test
+    fun anAppThatIsBeingClosedAsksAboutSafeModeAsDisconnectDoes() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val safeMode = FakeSafeMode().also { it.on.value = true }
+        var leaves by mutableStateOf(false)
+        var disconnected = false
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(safeMode = safeMode), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = { disconnected = true }, leaves = leaves, onStay = { leaves = false }) } }
+        leaves = true
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Keep changes")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Cancel").performClick()
+        waitUntil(timeoutMillis = 5_000) { !leaves }
+        waitForIdle()
+        assertFalse(disconnected)
+        leaves = true
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Roll back changes")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Roll back changes").performClick()
+        waitUntil(timeoutMillis = 5_000) { disconnected }
+        assertEquals(listOf("rollback"), safeMode.calls)
+    }
+
+    @Test
+    fun onAPhoneTheMarkOfAnUnencryptedConnectionLeavesDisconnectOnTheBar() = runDesktopComposeUiTest(360, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(encrypted = false, safeMode = FakeSafeMode()), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { CompositionLocalProvider(LocalCompact provides true) { MainScreen(tab, onDisconnect = {}) } } }
+        waitForIdle()
+        picture("unencrypted-phone")
+        val mark = onNodeWithTag("unencrypted").fetchSemanticsNode().boundsInRoot
+        val more = onNodeWithTag("more").fetchSemanticsNode().boundsInRoot
+        val disconnect = onNodeWithTag("disconnect").fetchSemanticsNode().boundsInRoot
+        assertTrue(mark.right <= more.left && more.right <= disconnect.left && disconnect.right <= 360f, "the mark $mark, More $more and Disconnect $disconnect fit a width of 360")
+        assertTrue(disconnect.width > 20f, "Disconnect keeps its width: $disconnect")
     }
 
     @Test

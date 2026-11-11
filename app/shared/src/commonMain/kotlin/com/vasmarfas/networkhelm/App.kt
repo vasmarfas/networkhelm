@@ -7,12 +7,17 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.exclude
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
+import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -77,9 +82,10 @@ fun App(shell: Shell, tabsInTitle: Boolean = false) {
     val read = shell.settings.loaded
     LaunchedEffect(shell, read, shell.settings.current.checkUpdates) { if (read) shell.checkRelease() }
     ShellTheme(shell) {
-        BoxWithConstraints(Modifier.fillMaxSize().background(Theme.palette.workspace).safeDrawingPadding()) {
+        // the keyboard takes its room inside: counted in the height, it turns a tablet to the layout of a phone, which makes the field anew and hides the keyboard
+        BoxWithConstraints(Modifier.fillMaxSize().background(Theme.palette.workspace).windowInsetsPadding(WindowInsets.safeDrawing.exclude(WindowInsets.ime))) {
             val compact = maxWidth < CompactWidth || maxHeight < CompactHeight
-            CompositionLocalProvider(LocalCompact provides compact) { TouchMetrics(compact) { HintHost { Routers(shell, tabsInTitle) } } }
+            CompositionLocalProvider(LocalCompact provides compact) { TouchMetrics(compact) { HintHost { Box(Modifier.imePadding()) { Routers(shell, tabsInTitle) } } } }
         }
     }
 }
@@ -141,6 +147,8 @@ private fun Routers(shell: Shell, tabsInTitle: Boolean) {
                         onSearch = { shell.searchShown = true },
                         others = shell.routers.filter { it !== tab && it.session.device.platform == tab.session.device.platform },
                         release = shell.release,
+                        leaves = shell.leaving === tab,
+                        onStay = shell::stay,
                     )
                 }
             }

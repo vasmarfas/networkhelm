@@ -22,7 +22,9 @@ import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
+import kotlin.test.assertTrue
 
 class FileBackendTest {
 
@@ -211,6 +213,33 @@ class FileBackendTest {
         assertEquals(Route.Over(FileVia.Api), backend.readRoute(ten))
         assertEquals(10_000, backend.read(ten).size)
         assertEquals("file/read" to mapOf("file" to "log.txt", "offset" to "0", "chunk-size" to "32768"), router.ran.single())
+    }
+
+    @Test
+    fun filesAreDraggedOutOverSftpOnlyOnceSshHasOpened() = runTest {
+        val backend = FileBackend(router(Ssh(Sftp())), files)
+        backend.probe()
+        backend.read(small)
+        assertFalse(backend.canDrag, "a text read by the commands opens no SSH")
+        backend.read(big)
+        assertTrue(backend.canDrag)
+        val native = FileBackend(router(Ssh(Sftp(), fileStore = true)), files)
+        native.probe()
+        assertTrue(native.canDrag, "port 8291 asks about no host key")
+    }
+
+    @Test
+    fun aFileToReplaceIsFoundByTheCommandsOnRouterOsAndInItsFolderElsewhere() = runTest {
+        val rows = listOf(Item("*1", mapOf("name" to "flash", "type" to "directory")), Item("*2", mapOf("name" to "flash/rc.local", "type" to ".local file")))
+        val ssh = Ssh(Sftp())
+        val routerOs = FileBackend(FakeRouter(mapOf("file" to rows), ssh = ssh), files)
+        assertTrue(routerOs.exists("flash/rc.local"))
+        assertFalse(routerOs.exists("flash/new.txt"))
+        assertFalse(routerOs.exists("flash"), "a folder is not replaced by a file")
+        assertEquals(0, ssh.opened)
+        val host = FileBackend(router(Ssh(Sftp(mapOf("/tmp" to listOf(RemoteFile("a.log", 10, false, 1_800_000_000))))), platform = Platform.OpenWrt), files)
+        assertTrue(host.exists("tmp/a.log"))
+        assertFalse(host.exists("tmp/b.log"))
     }
 
     @Test

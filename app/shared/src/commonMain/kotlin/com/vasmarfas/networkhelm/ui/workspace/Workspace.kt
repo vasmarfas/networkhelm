@@ -59,10 +59,12 @@ fun Workspace(
             .onPreviewKeyEvent { event ->
                 if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
                 val active = state.active
+                // AltGr comes as Ctrl with Alt, and with it the key is a character of the layout
+                val alt = event.isAltPressed && !event.isCtrlPressed
                 when {
-                    event.isAltPressed && event.key == Key.S -> state.switchToPrevious()
-                    event.isAltPressed && event.key == Key.A -> state.raiseBottom()
-                    active != null && ((event.isCtrlPressed && event.key == Key.F4) || (event.isAltPressed && event.key == Key.W)) -> state.close(active)
+                    alt && event.key == Key.S -> state.switchToPrevious()
+                    alt && event.key == Key.A -> state.raiseBottom()
+                    active != null && ((event.isCtrlPressed && event.key == Key.F4) || (alt && event.key == Key.W)) -> state.close(active)
                     else -> return@onPreviewKeyEvent false
                 }
                 true

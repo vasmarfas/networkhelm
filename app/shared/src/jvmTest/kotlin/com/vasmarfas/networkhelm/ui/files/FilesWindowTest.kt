@@ -337,6 +337,23 @@ class FilesWindowTest {
     }
 
     @Test
+    fun textThatWasNotSavedStaysWithAMinimizedWindowAndKeepsItFromClosing() = runDesktopComposeUiTest(1100, 700) {
+        val router = FakeRouter(mapOf("file" to files), ssh = Ssh(Sftp()), fileTexts = mapOf("*1" to "contents of /rc.local"))
+        val tab = window(router)
+        onNodeWithText("rc.local").performMouseInput { doubleClick() }
+        waitUntil(timeoutMillis = 5_000) { shown("contents of /rc.local") }
+        onNodeWithTag("editor-text").performTextInput("typed and ")
+        waitUntil(timeoutMillis = 5_000) { shown("Modified") }
+        val editor = tab.workspace.windows.last()
+        runOnIdle { tab.workspace.minimize(editor) }
+        waitUntil(timeoutMillis = 5_000) { !shown("Modified") }
+        runOnIdle { tab.workspace.close(editor) }
+        waitUntil(timeoutMillis = 5_000) { shown("typed and ", substring = true) }
+        assertTrue(shown("Modified"), "a close meant for the minimized window brings it back with its text still to be saved")
+        assertEquals(1, tab.files.size)
+    }
+
+    @Test
     fun aWindowWithChangesNotSavedAsksBeforeItCloses() = runDesktopComposeUiTest(1100, 700) {
         val router = FakeRouter(mapOf("file" to files), ssh = Ssh(Sftp()), fileTexts = mapOf("*1" to "contents of /rc.local"))
         val tab = window(router)
@@ -369,6 +386,24 @@ class FilesWindowTest {
         assertTrue(router.changed.isEmpty())
         assertEquals("original", router.fileText["*1"])
         assertEquals(setOf("/new.txt"), sftp.written.keys)
+    }
+
+    @Test
+    fun saveAsOverAFileOfTheRouterAsksBeforeItIsReplaced() = runDesktopComposeUiTest(1100, 700) {
+        val sftp = Sftp()
+        val router = FakeRouter(mapOf("file" to files), ssh = Ssh(sftp), fileTexts = mapOf("*1" to "original"))
+        window(router)
+        onNodeWithText("rc.local").performMouseInput { doubleClick() }
+        waitUntil(timeoutMillis = 5_000) { shown("original") && onAllNodes(hasTestTag("file-save-as")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("file-save-as").performClick()
+        onNodeWithTag("file-save-as-name").performTextReplacement("flash/skins/dark.json")
+        onAllNodes(hasText("Save")).onLast().performClick()
+        waitUntil(timeoutMillis = 5_000) { shown("The router already has /flash/skins/dark.json. Replace?") }
+        assertEquals(emptyMap(), sftp.written.toMap(), "nothing is written before the answer")
+        onAllNodes(hasText("Replace")).onLast().performClick()
+        waitUntil(timeoutMillis = 5_000) { shown("/flash/skins/dark.json") && sftp.written.isNotEmpty() }
+        assertEquals(mapOf("/flash/skins/dark.json" to "original"), sftp.written.toMap())
+        assertEquals("original", router.fileText["*1"])
     }
 
     @Test

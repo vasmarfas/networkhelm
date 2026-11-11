@@ -15,6 +15,7 @@
     <string name="files_path">Путь</string>
     <string name="files_name_hint">Имя</string>
     <string name="files_name_taken">%1$s уже есть в этой папке.</string>
+    <string name="files_replace_question">На роутере уже есть %1$s. Заменить?</string>
     <string name="files_bad_name">В имени не может быть косой черты.</string>
     <string name="files_no_folder">Папки %1$s нет.</string>
     <string name="files_empty">Папка пуста</string>
@@ -37,6 +38,7 @@
     <string name="files_transfer_retry">Повторить</string>
     <string name="files_transfer_remove">Убрать из списка</string>
     <string name="files_transfer_clear">Убрать завершённые</string>
+    <string name="files_too_big">%1$s весит %2$s, а приложение передаёт не больше %3$s.</string>
     <string name="file_save">Сохранить</string>
     <string name="file_save_as">Сохранить как</string>
     <string name="file_saved">Сохранено</string>

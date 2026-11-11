@@ -65,7 +65,11 @@ class WorkspaceState(private val closed: (Long) -> Unit = {}) {
     }
 
     fun close(window: WindowState) {
-        if (window.closeGuard?.invoke() == false) return
+        if (window.closeGuard?.invoke() == false) {
+            // what keeps a minimized window open is seen only in the window
+            if (window.minimized) bringToFront(window)
+            return
+        }
         windows -= window
         closed(window.id)
     }

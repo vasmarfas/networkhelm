@@ -16,9 +16,11 @@ The account is `admin`. Its password is the one in `NETWORKHELM_GATEWAY_PASSWORD
 
 The code of an authenticator app (Google Authenticator, Aegis, 2FAS and the like) is asked when the gateway starts with `--code`, and always when it is open to any address (`--public`). Until a login takes a code, the gateway prints its `otpauth://` link at every start, and the login page shows the QR code of it after the right password, so the app is set up from the page itself.
 
-Five failed logins from one address in ten minutes close the login from that address for ten minutes. Every try goes to `logins.log`. A session lasts twelve hours.
+Five failed logins from one address in ten minutes close the login from that address for ten minutes. Every try goes to `logins.log`; while the login of an address is closed, its tries make one line there. A session lasts twelve hours.
 
 Without `--public` the gateway answers only the local networks: 10/8, 172.16/12, 192.168/16, 100.64/10 (CGNAT, Tailscale), IPv6 ULA and link-local, loopback.
+
+Behind a reverse proxy the gateway sees the address of the proxy in place of the client's. The proxy stands on the same computer or in the local network, so the filter of local networks lets in everyone the proxy does, and the five failed logins are counted for all of them together: the tries of one visitor close the login for the rest. Start such a gateway with `--code` or `--public`, so that a login takes the code of an authenticator app as well.
 
 ## The password from the console
 

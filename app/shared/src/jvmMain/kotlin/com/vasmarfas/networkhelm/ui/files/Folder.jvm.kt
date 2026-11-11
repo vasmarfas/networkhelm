@@ -11,6 +11,7 @@ internal actual val folderDialogs = true
 internal actual suspend fun pickFolderDialog(): LocalFolder? {
     val directory = FileKit.openDirectoryPicker()?.file ?: return null
     val files = directory.listFiles { file -> file.isFile }.orEmpty().sortedBy { it.name }
-        .map { file -> LocalFile(file.name) { withContext(Dispatchers.IO) { file.readBytes() } } }
-    return LocalFolder(directory.name, files) { name, bytes -> withContext(Dispatchers.IO) { File(directory, name).writeBytes(bytes) } }
+        .map { file -> LocalFile(file.name, file.length()) { withContext(Dispatchers.IO) { file.readBytes() } } }
+    // a name from the router is kept to its last part, so nothing is written outside the chosen folder
+    return LocalFolder(directory.name, files) { name, bytes -> withContext(Dispatchers.IO) { File(directory, File(name).name).writeBytes(bytes) } }
 }

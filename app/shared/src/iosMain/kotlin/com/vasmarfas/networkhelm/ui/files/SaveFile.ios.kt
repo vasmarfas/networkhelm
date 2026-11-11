@@ -21,6 +21,8 @@ actual fun filesOut(names: List<String>, read: suspend (String) -> ByteArray): D
 
 internal actual val filesDragOut = false
 
+internal actual val transferLimit = 128 * 1024 * 1024L
+
 // a folder of iOS is a security-scoped URL, which the app does not write into
 internal actual val folderDialogs = false
 

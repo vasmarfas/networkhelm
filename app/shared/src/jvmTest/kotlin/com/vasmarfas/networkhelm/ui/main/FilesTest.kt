@@ -1,6 +1,9 @@
 package com.vasmarfas.networkhelm.ui.main
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -46,6 +49,7 @@ import com.vasmarfas.networkhelm.ui.files.FileExchange
 import com.vasmarfas.networkhelm.ui.files.LocalFolder
 import com.vasmarfas.networkhelm.ui.files.LocalFile
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
+import com.vasmarfas.networkhelm.ui.files.transferLimit
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import java.net.ConnectException
@@ -169,6 +173,125 @@ class FilesTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Cancelled")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(1, exchange.saved.size)
         assertTrue(onAllNodes(hasText("8 B in", substring = true)).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aFileBeyondTheLimitOfATransferIsNeitherReadNorSent() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val sftp = Sftp()
+        var read = false
+        val exchange = object : FileExchange {
+            override suspend fun pick() = listOf(LocalFile("rd-test.img", transferLimit * 2) { read = true; ByteArray(0) })
+            override suspend fun save(name: String, bytes: ByteArray) = true
+        }
+        val files = listOf(Item("*1", mapOf("name" to "rd-test.tar", "type" to ".tar file", "size" to "${transferLimit * 2}")))
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(mapOf("file" to files), ssh = Ssh(sftp)), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        tab.open(MenuEntry("Files", "file"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rd-test.tar")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Upload")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("rd-test.tar").performClick()
+        onNodeWithTag("files-download").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rd-test.tar is", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Upload").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rd-test.img is", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(emptyList(), sftp.reads)
+        assertEquals(emptyMap(), sftp.written.toMap())
+        assertTrue(!read, "the file of the computer is not read either")
+    }
+
+    @Test
+    fun aFileWithTheNameOfOneOnTheRouterGoesUpOnlyAfterTheQuestion() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val sftp = Sftp()
+        val exchange = object : FileExchange {
+            override suspend fun pick() = listOf(LocalFile("rc.local") { "rd-test".encodeToByteArray() })
+            override suspend fun save(name: String, bytes: ByteArray) = false
+        }
+        val files = listOf(Item("*1", mapOf("name" to "rc.local", "type" to ".local file", "size" to "127")))
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(mapOf("file" to files), ssh = Ssh(sftp)), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        tab.open(MenuEntry("Files", "file"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rc.local")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Upload")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Upload").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The router already has rc.local. Replace?")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(emptyMap(), sftp.written.toMap(), "nothing goes before the answer")
+        onNodeWithText("Replace").performClick()
+        waitUntil(timeoutMillis = 5_000) { sftp.written.isNotEmpty() }
+        assertEquals(mapOf("/rc.local" to "rd-test"), sftp.written.toMap())
+    }
+
+    @Test
+    fun aFolderOfAHostThatIsNotOpenIsListedBeforeAFileGoesIntoIt() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val sftp = Sftp(
+            mapOf(
+                "/home" to listOf(RemoteFile("rd-test", 0, true, 1_800_000_000), RemoteFile("shared", 0, true, 1_800_000_000)),
+                "/home/shared" to listOf(RemoteFile("notes.txt", 12, false, 1_800_000_000)),
+                "/tmp" to emptyList(),
+            ),
+        )
+        val exchange = object : FileExchange {
+            override suspend fun pick() = listOf(LocalFile("notes.txt") { "rd-test".encodeToByteArray() })
+            override suspend fun save(name: String, bytes: ByteArray) = false
+        }
+        val device = DeviceInfo(Platform.Ssh, "rd-test-host", "", "", "", emptySet(), setOf("read", "write"))
+        val storage = MemoryStorage()
+        val tab = RouterTab(SshHostSession(Ssh(sftp, "/home/rd-test\n+0000\n"), device), "192.0.2.50", bundledPacks().values, storage, TableLayouts(storage))
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        tab.open(MenuEntry("Files", "file"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("home")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("home").performMouseInput { doubleClick() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("shared")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("shared").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Upload")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue("/home/shared" !in sftp.listed, "the folder is closed in the tree")
+        onNodeWithText("Upload").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The router already has notes.txt. Replace?")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(emptyMap(), sftp.written.toMap(), "nothing goes before the answer")
+        onNodeWithText("Replace").performClick()
+        waitUntil(timeoutMillis = 5_000) { sftp.written.isNotEmpty() }
+        assertEquals(setOf("/home/shared/notes.txt"), sftp.written.keys)
+    }
+
+    @Test
+    fun aClipboardHeldByAnotherProgramLeavesTheWindowStanding() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val held = object : Clipboard {
+            override suspend fun getClipEntry(): ClipEntry? = null
+            override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+                throw IllegalStateException("cannot open system clipboard")
+            }
+        }
+        val files = listOf(Item("*1", mapOf("name" to "rc.local", "type" to ".local file", "size" to "127")))
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(mapOf("file" to files), ssh = Ssh(Sftp())), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent {
+            CompositionLocalProvider(LocalClipboard provides held) {
+                NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        tab.open(MenuEntry("Files", "file"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rc.local")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("rc.local").performMouseInput { rightClick() }
+        onNodeWithText("Copy path").performClick()
+        waitForIdle()
+        onNodeWithTag("tree").assertExists()
     }
 
     @Test

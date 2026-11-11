@@ -40,6 +40,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
@@ -149,7 +150,7 @@ internal fun TreeTable(
             Modifier.fillMaxSize()
                 .onPreviewKeyEvent { event ->
                     if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                    val ctrl = event.isCtrlPressed || event.isMetaPressed
+                    val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
                     when {
                         ctrl && event.key == Key.A -> choose(order.toSet(), order.firstOrNull())
                         event.key == Key.DirectionDown || event.key == Key.DirectionUp -> {

@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.server
 
+import java.io.File
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.Executors
 import java.util.concurrent.TimeUnit
@@ -22,6 +23,21 @@ class GatewayTest {
         })
         repeat(8) { assertEquals(Login.Refused, gateway.login("192.0.2.1", "admin", "wrong", "")) }
         assertEquals(5, calls.get())
+    }
+
+    @Test
+    fun aLockIsWrittenDownOnceHoweverManyLoginsItRefuses() {
+        var clock = 1_800_000_000_000L
+        val home = createTempDirectory("rd-test-gateway-limit").toFile()
+        val gateway = Gateway.open(home, public = false, code = false, password = "rd-test-password", announce = {}, now = { clock }, derive = { _, _ -> Master(ByteArray(32)) })
+        fun written() = File(home, "logins.log").readLines().map { it.substringAfterLast(' ') }
+        repeat(4) { gateway.login("192.0.2.1", "admin", "wrong", "") }
+        clock += 60_000L
+        repeat(4) { gateway.login("192.0.2.1", "admin", "wrong", "") }
+        assertEquals(List(5) { "password" } + "locked", written())
+        clock += 9 * 60_000L
+        repeat(8) { gateway.login("192.0.2.1", "admin", "wrong", "") }
+        assertEquals(List(5) { "password" } + "locked" + List(4) { "password" } + "locked", written())
     }
 
     @Test

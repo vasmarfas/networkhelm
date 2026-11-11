@@ -13,12 +13,15 @@ import androidx.compose.ui.draganddrop.dragData
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.Transferable
 import java.awt.datatransfer.UnsupportedFlavorException
 import java.io.File
 import java.net.URI
 import java.nio.file.Files
+import kotlin.time.Duration
+import kotlin.time.Duration.Companion.seconds
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual fun Modifier.fileDrop(onDrop: (List<LocalFile>) -> Unit, onHover: (Boolean) -> Unit): Modifier = dragAndDropTarget(
@@ -34,7 +37,7 @@ actual fun Modifier.fileDrop(onDrop: (List<LocalFile>) -> Unit, onHover: (Boolea
             onHover(false)
             // folders are not sent: the router's SFTP takes files one by one
             val files = (event.dragData() as? DragData.FilesList)?.readFiles().orEmpty().map { File(URI(it)) }.filter { it.isFile }
-            if (files.isNotEmpty()) onDrop(files.map { file -> LocalFile(file.name) { withContext(Dispatchers.IO) { file.readBytes() } } })
+            if (files.isNotEmpty()) onDrop(files.map { file -> LocalFile(file.name, file.length()) { withContext(Dispatchers.IO) { file.readBytes() } } })
             return files.isNotEmpty()
         }
     },
@@ -42,18 +45,19 @@ actual fun Modifier.fileDrop(onDrop: (List<LocalFile>) -> Unit, onHover: (Boolea
 
 @OptIn(ExperimentalComposeUiApi::class)
 actual fun filesOut(names: List<String>, read: suspend (String) -> ByteArray): DragAndDropTransferData? =
-    DragAndDropTransferData(DragAndDropTransferable(RouterFiles(names, read)), listOf(DragAndDropTransferAction.Copy))
+    DragAndDropTransferData(DragAndDropTransferable(RouterFiles(names, read = read)), listOf(DragAndDropTransferAction.Copy))
 
 internal actual val filesDragOut = true
 
 // stale drag folders go after an hour: the file manager may still be copying from a newer one
-internal class RouterFiles(private val names: List<String>, private val read: suspend (String) -> ByteArray) : Transferable {
+internal class RouterFiles(private val names: List<String>, private val limit: Duration = 30.seconds, private val read: suspend (String) -> ByteArray) : Transferable {
     private val files by lazy {
         val prefix = "networkhelm-drag"
         val folder = Files.createTempDirectory(prefix).toFile().apply { deleteOnExit() }
         val hourAgo = System.currentTimeMillis() - 3_600_000
         folder.parentFile.listFiles { file -> file.name.startsWith(prefix) && file.isDirectory && file.lastModified() < hourAgo }?.forEach { it.deleteRecursively() }
-        names.map { name -> File(folder, name.substringAfterLast('/')).apply { deleteOnExit(); writeBytes(runBlocking { read(name) }) } }
+        // the drop asks for the files on the thread of the interface, which stands still until they are here
+        runBlocking { withTimeout(limit) { names.map { name -> File(folder, File(name).name).apply { deleteOnExit(); writeBytes(read(name)) } } } }
     }
 
     override fun getTransferDataFlavors(): Array<DataFlavor> = arrayOf(DataFlavor.javaFileListFlavor)

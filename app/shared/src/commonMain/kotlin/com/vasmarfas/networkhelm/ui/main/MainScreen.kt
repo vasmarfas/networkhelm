@@ -74,6 +74,7 @@ import com.composables.icons.lucide.History
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.List
 import com.composables.icons.lucide.Lock
+import com.composables.icons.lucide.LockOpen
 import com.composables.icons.lucide.LogOut
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.Redo
@@ -221,6 +222,8 @@ fun MainScreen(
     onSearch: () -> Unit = {},
     others: List<RouterTab> = emptyList(),
     release: Release? = null,
+    leaves: Boolean = false,
+    onStay: () -> Unit = {},
 ) {
     val palette = Theme.palette
     LaunchedEffect(tab) { tab.loadMenu() }
@@ -235,8 +238,10 @@ fun MainScreen(
     }
     val link by remember(tab) { tab.session.link }.collectAsState(LinkState.Up)
     val safeMode = tab.session.safeMode
-    val safe by remember(tab) { safeMode?.active ?: flowOf(false) }.collectAsState(false)
+    // the mode of a session behind the gateway fails with the gateway, which the banner of the link tells of
+    val safe by remember(tab) { safeMode?.active?.catch { emit(false) } ?: flowOf(false) }.collectAsState(false)
     var leaving by remember { mutableStateOf(false) }
+    LaunchedEffect(leaves) { if (leaves) leaving = true }
     var problem by remember { mutableStateOf<String?>(null) }
     var naming by remember { mutableStateOf<Pair<Naming, TextFieldState>?>(null) }
     val scope = rememberCoroutineScope()
@@ -250,6 +255,7 @@ fun MainScreen(
                 onDisconnect()
             } catch (e: DeviceException) {
                 problem = e.message
+                onStay()
             }
         }
     }
@@ -291,9 +297,10 @@ fun MainScreen(
     Box(
         Modifier.fillMaxSize().onPreviewKeyEvent { event ->
             if (event.type != KeyEventType.KeyDown || event.key != Key.F) return@onPreviewKeyEvent false
+            // AltGr comes as Ctrl with Alt, and with it the key is a character of the layout
             when {
-                (event.isCtrlPressed || event.isMetaPressed) && event.isShiftPressed -> onSearch()
-                event.isAltPressed && !compact -> search.requestFocus()
+                (event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed) && event.isShiftPressed -> onSearch()
+                event.isAltPressed && !event.isCtrlPressed && !compact -> search.requestFocus()
                 else -> return@onPreviewKeyEvent false
             }
             true
@@ -335,7 +342,10 @@ fun MainScreen(
             Confirm(
                 stringResource(Res.string.safe_leave_question),
                 stringResource(Res.string.safe_keep),
-                onCancel = { leaving = false },
+                onCancel = {
+                    leaving = false
+                    onStay()
+                },
                 alternative = stringResource(Res.string.safe_rollback) to { leave { it.rollback() } },
             ) { leave { it.commit() } }
         }
@@ -527,7 +537,7 @@ private fun Toolbar(
         }
         tab.session.safeMode?.takeIf { canWrite }?.let { safeMode ->
             val draft = tab.session.capabilities.safeMode == SafeModeKind.ApplyRollback
-            val active by remember(safeMode) { safeMode.active }.collectAsState(false)
+            val active by remember(safeMode) { safeMode.active.catch { emit(false) } }.collectAsState(false)
             val actions by remember(safeMode, active) { if (active || draft) safeMode.actions.catch { emit(0) } else flowOf(0) }.collectAsState(0)
             val title = stringResource(if (draft) Res.string.main_apply else Res.string.main_safe_mode)
             val held = stringResource(if (draft) Res.string.apply_held else Res.string.safe_held)
@@ -562,14 +572,15 @@ private fun Toolbar(
         if (!tab.session.capabilities.encrypted) {
             val prepare = stringResource(Res.string.prepare_title)
             val opens = tab.session.device.platform == Platform.RouterOs
-            Text(
-                stringResource(Res.string.main_unencrypted),
-                Modifier.clip(RoundedCornerShape(Theme.metrics.radius)).background(palette.warning)
-                    .then(if (opens) Modifier.clickable { tab.openPrepare(prepare) }.hand() else Modifier)
-                    .padding(horizontal = 8.dp, vertical = 2.dp).testTag("unencrypted"),
-                color = palette.on(palette.warning),
-                style = Theme.type.small,
-            )
+            val unencrypted = stringResource(Res.string.main_unencrypted)
+            val mark = Modifier.clip(RoundedCornerShape(Theme.metrics.radius)).background(palette.warning)
+                .then(if (opens) Modifier.clickable { tab.openPrepare(prepare) }.hand() else Modifier)
+            // on a phone the words would push the buttons that end the session off the bar
+            if (compact) {
+                Hint(unencrypted) { UnstyledIcon(Lucide.LockOpen, unencrypted, mark.padding(4.dp).size(16.dp).testTag("unencrypted"), tint = palette.on(palette.warning)) }
+            } else {
+                Text(unencrypted, mark.padding(horizontal = 8.dp, vertical = 2.dp).testTag("unencrypted"), color = palette.on(palette.warning), style = Theme.type.small)
+            }
         }
         val offline = tab.session.capabilities.offline
         if (offline) {
@@ -760,7 +771,7 @@ internal fun trail(steps: List<String>, muted: Color): AnnotatedString = buildAn
 
 @Composable
 private fun Stranded(safeMode: SafeMode, onProblem: (String?) -> Unit) {
-    val stranded by remember(safeMode) { safeMode.stranded }.collectAsState(false)
+    val stranded by remember(safeMode) { safeMode.stranded.catch { emit(false) } }.collectAsState(false)
     if (!stranded) return
     val palette = Theme.palette
     val scope = rememberCoroutineScope()

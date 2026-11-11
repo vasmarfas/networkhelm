@@ -362,6 +362,31 @@ class GatewayTest {
     }
 
     @Test
+    fun aConnectionGivenUpAsItsAnswerArrivesIsClosedOnTheGateway() = runTest {
+        val router = LabSession()
+        val (browser, gateway) = wires()
+        backgroundScope.launch { GatewayHost(gateway, MemoryTrustStore(), { _, _, _ -> router }, { _, _ -> router }).serve() }
+        lateinit var connecting: Job
+        val client = GatewayClient(object : Wire by browser {
+            override suspend fun receive() = browser.receive()?.also { if ("\"type\":\"value\"" in it) connecting.cancel() }
+        }, backgroundScope)
+        connecting = launch { client.connect(login, trust) }
+        connecting.join()
+        assertFailsWith<DeviceException> { client.readDocument("routers.json") }
+        assertTrue(router.closed)
+    }
+
+    @Test
+    fun aFrameTheGatewayCannotReadEndsTheWireAndIsNotQuoted() = runTest {
+        val (browser, gateway) = wires()
+        browser.send("{\"type\":\"ask\",\"id\":1,\"request\":{\"type\":\"connect-routeros\",\"login\":{\"host\":\"192.0.2.1\",\"user\":\"rd-test\",\"password\":\"rd-test-secret\",\"port\":\"none\"}}}")
+        val failure = assertFailsWith<DeviceException> { GatewayHost(gateway, MemoryTrustStore(), { _, _, _ -> LabSession() }, { _, _ -> LabSession() }).serve() }
+        assertFalse("rd-test-secret" in failure.stackTraceToString())
+        browser.receive()
+        assertNull(browser.receive())
+    }
+
+    @Test
     fun aGatewayOfAnotherProtocolIsRefused() = runTest {
         val (browser, gateway) = wires()
         gateway.send(gatewayJson.encodeToString(FromGateway.serializer(), FromGateway.Hello(GATEWAY_PROTOCOL + 1)))

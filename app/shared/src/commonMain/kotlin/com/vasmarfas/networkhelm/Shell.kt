@@ -34,6 +34,9 @@ import com.vasmarfas.networkhelm.update.Release
 import com.vasmarfas.networkhelm.update.newerRelease
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.plus
 
 class Detached(val tab: RouterTab, val spec: WindowSpec, val size: DpSize)
@@ -57,6 +60,11 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
     var searchShown by mutableStateOf(false)
     var release by mutableStateOf<Release?>(null)
         private set
+
+    // the router that is asked about its Safe Mode before the app closes, and what closes the app
+    var leaving by mutableStateOf<RouterTab?>(null)
+        private set
+    private var exit: (() -> Unit)? = null
     private val packs = bundledPacks().values
 
     suspend fun checkRelease() {
@@ -94,6 +102,28 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
         tab.session.close()
         routers.remove(tab)
         selected = selected.coerceAtMost(routers.size)
+        if (leaving === tab) exit?.let(::quit)
+    }
+
+    // a router rolls back what was changed in Safe Mode when its session ends, so the app closes only after every router
+    // that holds the mode was asked what to do with it, as Disconnect asks
+    fun quit(exit: () -> Unit) {
+        stay()
+        scope.launch {
+            val held = routers.firstOrNull { tab -> tab.session.safeMode?.active?.catch { emit(false) }?.first() == true }
+            if (held == null) {
+                exit()
+            } else {
+                this@Shell.exit = exit
+                selected = routers.indexOf(held)
+                leaving = held
+            }
+        }
+    }
+
+    fun stay() {
+        leaving = null
+        exit = null
     }
 
     fun open(tab: RouterTab, hit: Finding.Hit) {

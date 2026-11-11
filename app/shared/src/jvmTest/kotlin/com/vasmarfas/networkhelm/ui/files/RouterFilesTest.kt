@@ -1,5 +1,7 @@
 package com.vasmarfas.networkhelm.ui.files
 
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.awaitCancellation
 import java.awt.datatransfer.DataFlavor
 import java.awt.datatransfer.UnsupportedFlavorException
 import java.io.File
@@ -10,6 +12,7 @@ import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertSame
 import kotlin.test.assertTrue
+import kotlin.time.Duration.Companion.milliseconds
 
 class RouterFilesTest {
 
@@ -42,5 +45,18 @@ class RouterFilesTest {
         assertTrue(File(recent, "recent.rsc").exists())
         assertEquals("new", (dropped.single() as File).readText())
         recent.deleteRecursively()
+    }
+
+    @Test
+    fun aNameWithABackslashStaysInTheFolderOfTheDrag() {
+        val dropped = RouterFiles(listOf("backup.rsc", "pub/..\\..\\rd-test-escape.txt")) { "content".encodeToByteArray() }.getTransferData(DataFlavor.javaFileListFlavor) as List<*>
+        val folders = dropped.map { (it as File).canonicalFile.parentFile }
+        assertEquals(folders[0], folders[1])
+    }
+
+    @Test
+    fun aReadThatDoesNotEndIsGivenUpAfterTheLimit() {
+        val files = RouterFiles(listOf("backup.rsc"), 200.milliseconds) { awaitCancellation() }
+        assertFailsWith<TimeoutCancellationException> { files.getTransferData(DataFlavor.javaFileListFlavor) }
     }
 }

@@ -51,6 +51,7 @@ class Gateway private constructor(val home: File, val public: Boolean, val asksC
     private var totp = totpOf(account)
     private val sessions = HashMap<String, Session>()
     private val failures = HashMap<String, List<Long>>()
+    private val locked = HashSet<String>()
     private val derivations = Semaphore(2, true)
     val trust = FileTrustStore(File(home, "known-routers"))
     val schemas = FileSchemaCache(File(home, "schema"))
@@ -89,11 +90,14 @@ class Gateway private constructor(val home: File, val public: Boolean, val asksC
                 (it.expires <= time).also { expired -> if (expired) revoke(it) }
             }
             failures.values.removeAll { times -> times.all { time - it >= WINDOW } }
+            locked.retainAll(failures.keys)
             val recent = failures[address].orEmpty().filter { time - it < WINDOW }
             if (recent.size >= ATTEMPTS) {
-                journal(time, address, user, "locked")
+                // one line for a lock: an address that keeps asking while it is locked would fill the disk with them
+                if (locked.add(address)) journal(time, address, user, "locked")
                 return Login.Refused
             }
+            locked.remove(address)
             failures[address] = recent + time
             account
         }

@@ -16,6 +16,9 @@ actual fun filesOut(names: List<String>, read: suspend (String) -> ByteArray): D
 
 internal actual val filesDragOut = false
 
+// the gateway carries a file as base64 inside one message of 128 MiB at the most
+internal actual val transferLimit = 64 * 1024 * 1024L
+
 internal actual val folderDialogs = false
 
 internal actual suspend fun pickFolderDialog(): LocalFolder? = null

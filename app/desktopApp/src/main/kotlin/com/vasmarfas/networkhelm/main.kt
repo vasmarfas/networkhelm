@@ -55,7 +55,7 @@ private fun startApplication() = application {
         Frame(shell.settings.current.scale) {
             val tab = shell.routers.getOrNull(shell.selected)
             DecoratedWindow(
-                onCloseRequest = { quit() },
+                onCloseRequest = { shell.quit { quit() } },
                 state = rememberFrameState(shell.services.storage),
                 title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
                 icon = appIcon(),

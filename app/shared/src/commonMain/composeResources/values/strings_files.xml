@@ -15,6 +15,7 @@
     <string name="files_path">Path</string>
     <string name="files_name_hint">Name</string>
     <string name="files_name_taken">%1$s already exists here.</string>
+    <string name="files_replace_question">The router already has %1$s. Replace?</string>
     <string name="files_bad_name">A name cannot hold a slash.</string>
     <string name="files_no_folder">There is no folder %1$s.</string>
     <string name="files_empty">This folder is empty</string>
@@ -35,6 +36,7 @@
     <string name="files_transfer_retry">Retry</string>
     <string name="files_transfer_remove">Remove from the list</string>
     <string name="files_transfer_clear">Clear finished</string>
+    <string name="files_too_big">%1$s is %2$s, and the app transfers no more than %3$s.</string>
     <string name="file_save">Save</string>
     <string name="file_save_as">Save as</string>
     <string name="file_saved">Saved</string>

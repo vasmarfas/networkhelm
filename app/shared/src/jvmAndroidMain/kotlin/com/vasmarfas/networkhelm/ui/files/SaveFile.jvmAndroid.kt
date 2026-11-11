@@ -12,3 +12,6 @@ internal actual suspend fun saveFile(name: String, bytes: ByteArray): Boolean {
     target.write(bytes)
     return true
 }
+
+// an eighth of the heap, 128 MiB on the desktop, lets two files of that size be read at once
+internal actual val transferLimit = Runtime.getRuntime().maxMemory() / 8

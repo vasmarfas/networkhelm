@@ -7,10 +7,15 @@ import com.vasmarfas.networkhelm.app.Services
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsProtocol
+import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
 import com.vasmarfas.networkhelm.ui.theme.BundledThemes
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.TestScope
+import kotlinx.coroutines.test.runCurrent
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -42,6 +47,46 @@ class ShellTest {
         assertEquals(1, shell.selected)
         assertEquals(RouterOsProtocol.ApiSsl, shell.routers[1].login?.protocol)
         assertEquals(listOf(SavedRouter("192.0.2.1", "admin", Access.ApiSsl, group = "lab")), shell.saved.routers.value)
+    }
+
+    private class Held : SafeMode {
+        override val active = MutableStateFlow(true)
+        override val actions = flowOf(0)
+
+        override suspend fun enter() = true
+
+        override suspend fun commit() = Unit
+
+        override suspend fun rollback() = Unit
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theAppClosesOnlyAfterEveryRouterThatHoldsSafeModeIsLeft() {
+        val scope = TestScope()
+        val shell = Shell(Services(MemoryStorage(), MemoryTrustStore(), neighbors = null), scope)
+        var closed = false
+        shell.add(FakeRouter(id = "rd-test-plain"), "192.0.2.1")
+        shell.add(FakeRouter(id = "rd-test-safe", safeMode = Held()), "192.0.2.2")
+        shell.add(FakeRouter(id = "rd-test-safe-too", safeMode = Held()), "192.0.2.3")
+        shell.selected = 0
+        shell.quit { closed = true }
+        scope.runCurrent()
+        assertSame(shell.routers[1], shell.leaving)
+        assertEquals(1, shell.selected)
+        shell.stay()
+        scope.runCurrent()
+        assertFalse(closed, "a close that was given up closes nothing later")
+
+        shell.quit { closed = true }
+        scope.runCurrent()
+        shell.disconnect(shell.routers[1])
+        scope.runCurrent()
+        assertFalse(closed)
+        assertEquals("192.0.2.3", shell.leaving?.address)
+        shell.disconnect(shell.routers[1])
+        scope.runCurrent()
+        assertTrue(closed)
     }
 
     @Test

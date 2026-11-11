@@ -41,7 +41,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
 import io.ktor.server.testing.ApplicationTestBuilder
 import io.ktor.server.testing.testApplication
-import io.ktor.websocket.CloseReason
+import io.ktor.utils.io.ByteReadChannel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.awaitCancellation
@@ -155,6 +155,16 @@ class ApplicationTest {
     }
 
     @Test
+    fun aLongLoginFormIsNotReadWhetherItsLengthIsToldOrNot() = testApplication {
+        val client = start()
+        fun form(password: String) = "{\"user\":\"admin\",\"password\":\"$password\",\"code\":\"${code()}\"}"
+        assertEquals(HttpStatusCode.PayloadTooLarge, client.login(password = "x".repeat(8 * 1024)).status)
+        assertEquals(HttpStatusCode.PayloadTooLarge, client.post("/login") { setBody(ByteReadChannel(form("x".repeat(8 * 1024)))) }.status)
+        assertFalse(File(home, "logins.log").exists())
+        assertEquals(HttpStatusCode.NoContent, client.post("/login") { setBody(ByteReadChannel(form("rd-test-password"))) }.status)
+    }
+
+    @Test
     fun theWebAppComesFromTheGatewayAndAPageLoadedAgainFindsItsSession() = testApplication {
         val client = start()
         val page = client.get("/")
@@ -180,14 +190,19 @@ class ApplicationTest {
     fun theSessionWantsTheCookieAndAPageOfTheGatewayItself() = testApplication {
         val client = start()
         val cookie = cookie(client.login().headers[HttpHeaders.SetCookie])
-        client.webSocket("/session") {
-            assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, closeReason.await()?.code)
+        assertFailsWith<IllegalStateException> { client.webSocket("/session") {} }
+        assertFailsWith<IllegalStateException> {
+            client.webSocket("/session", request = {
+                header(HttpHeaders.Cookie, cookie)
+                header(HttpHeaders.Origin, "https://rd-test.example")
+            }) {}
         }
         client.webSocket("/session", request = {
             header(HttpHeaders.Cookie, cookie)
-            header(HttpHeaders.Origin, "https://rd-test.example")
+            header(HttpHeaders.Host, "localhost:8443")
+            header(HttpHeaders.Origin, "https://localhost:8443")
         }) {
-            assertEquals(CloseReason.Codes.VIOLATED_POLICY.code, closeReason.await()?.code)
+            assertTrue(Json.decodeFromString(FromGateway.serializer(), assertNotNull(KtorWire(this).receive())) is FromGateway.Hello)
         }
     }
 

@@ -8,8 +8,9 @@ import io.github.vinceglb.filekit.dialogs.FileKitMode
 import io.github.vinceglb.filekit.dialogs.openFilePicker
 import io.github.vinceglb.filekit.name
 import io.github.vinceglb.filekit.readBytes
+import io.github.vinceglb.filekit.size
 
-class LocalFile(val name: String, val read: suspend () -> ByteArray)
+class LocalFile(val name: String, val size: Long? = null, val read: suspend () -> ByteArray)
 
 class LocalFolder(val name: String, val files: List<LocalFile>, val write: suspend (String, ByteArray) -> Unit)
 
@@ -26,7 +27,7 @@ interface FileExchange {
 val LocalFileExchange = staticCompositionLocalOf<FileExchange> { DialogFileExchange }
 
 private object DialogFileExchange : FileExchange {
-    override suspend fun pick() = FileKit.openFilePicker(mode = FileKitMode.Multiple()).orEmpty().map { file -> LocalFile(file.name) { file.readBytes() } }
+    override suspend fun pick() = FileKit.openFilePicker(mode = FileKitMode.Multiple()).orEmpty().map { file -> LocalFile(file.name, file.size().takeIf { it >= 0 }) { file.readBytes() } }
 
     override suspend fun save(name: String, bytes: ByteArray) = saveFile(name, bytes)
 
@@ -49,3 +50,6 @@ expect fun filesOut(names: List<String>, read: suspend (String) -> ByteArray): D
 
 // on a touch screen the drag source of Compose takes the press of a finger, and the rows stop answering taps
 internal expect val filesDragOut: Boolean
+
+// a transfer holds the whole file in memory, and reading one takes up to three times its size
+internal expect val transferLimit: Long

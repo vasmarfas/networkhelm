@@ -39,7 +39,8 @@ import io.ktor.server.http.content.staticResources
 import io.ktor.server.netty.Netty
 import io.ktor.server.plugins.compression.Compression
 import io.ktor.server.plugins.origin
-import io.ktor.server.request.receiveText
+import io.ktor.server.request.contentLength
+import io.ktor.server.request.receiveChannel
 import io.ktor.server.response.respond
 import io.ktor.server.response.respondText
 import io.ktor.server.routing.get
@@ -49,6 +50,7 @@ import io.ktor.server.websocket.WebSockets
 import io.ktor.server.websocket.pingPeriod
 import io.ktor.server.websocket.timeout
 import io.ktor.server.websocket.webSocket
+import io.ktor.utils.io.readBuffer
 import io.ktor.websocket.CloseReason
 import io.ktor.websocket.close
 import kotlinx.coroutines.CancellationException
@@ -59,6 +61,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.job
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.io.readByteArray
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import org.slf4j.LoggerFactory
@@ -91,6 +94,7 @@ private fun ask(prompt: String): String? = System.console()?.readPassword(prompt
 
 // a login waits for its key on one of two threads, so a flood of them leaves the rest of Dispatchers.IO to the routers
 private val logins = Dispatchers.IO.limitedParallelism(2)
+private const val LOGIN_MOST = 8 * 1024
 
 fun serve(
     gateway: Gateway,
@@ -138,6 +142,13 @@ fun Application.gateway(
             finish()
             return@intercept
         }
+        // an upgraded socket reads a frame of up to maxFrameSize before its handler looks at the cookie, so the upgrade itself is refused
+        // the header tells an upgrade, not the path: the routing takes //session and %73ession for the socket as well
+        if (context.request.headers[HttpHeaders.Upgrade] != null && (!sameOrigin(context) || gateway.session(context.request.cookies[Gateway.COOKIE]) == null)) {
+            context.respond(HttpStatusCode.Unauthorized)
+            finish()
+            return@intercept
+        }
         context.response.headers.append("X-Frame-Options", "DENY")
         context.response.headers.append("X-Content-Type-Options", "nosniff")
         context.response.headers.append("Referrer-Policy", "no-referrer")
@@ -151,8 +162,15 @@ fun Application.gateway(
             }
         }
         post("/login") {
+            // the form is a name, a password and a code: a longer body is not read to its end, whether its length is told or not
+            val told = call.request.contentLength()
+            val body = if (told != null && told > LOGIN_MOST) null else call.receiveChannel().readBuffer(LOGIN_MOST + 1L).readByteArray().takeIf { it.size <= LOGIN_MOST }
+            if (body == null) {
+                call.respond(HttpStatusCode.PayloadTooLarge)
+                return@post
+            }
             val form = try {
-                Json.decodeFromString(LoginForm.serializer(), call.receiveText())
+                Json.decodeFromString(LoginForm.serializer(), body.decodeToString())
             } catch (e: SerializationException) {
                 call.respond(HttpStatusCode.BadRequest)
                 return@post

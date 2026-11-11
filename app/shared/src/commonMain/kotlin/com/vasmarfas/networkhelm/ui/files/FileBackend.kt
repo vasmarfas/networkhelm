@@ -43,10 +43,14 @@ internal class FileBackend(private val session: DeviceSession, private val files
     private val asking = Mutex()
     private val used = MutableStateFlow<FileVia?>(null)
     private var known: Set<String>? = null
+    private var sshOpen = false
 
     val bulk: StateFlow<Bulk> get() = state
 
     val via: StateFlow<FileVia?> get() = used
+
+    // a drag out of the window is read on the thread of the interface, where the question about the host key of SSH is never answered
+    val canDrag: Boolean get() = (state.value as? Bulk.Ready)?.via.let { it != null && (it != FileVia.Sftp || sshOpen) }
 
     // RouterOS 7 adds and renames files with the commands; 6 has neither /file add nor a name to set
     val commandNames: Boolean get() = routerOs && seven
@@ -177,6 +181,7 @@ internal class FileBackend(private val session: DeviceSession, private val files
             throw NoChannelException(Why.KeyRefused)
         } ?: throw NoChannelException(Why.NoSsh)
         used.value = via
+        if (via == FileVia.Sftp) sshOpen = true
         try {
             return block(client)
         } finally {
@@ -198,6 +203,15 @@ internal class FileBackend(private val session: DeviceSession, private val files
                 Result.failure(e)
             }
         }
+    }
+
+    suspend fun exists(path: String): Boolean {
+        val found = if (routerOs) {
+            withTimeout(10.seconds) { session.watch(files, Filter.Equals("name", path)).rows().drop(1).first() }.mapNotNull(::entryOf)
+        } else {
+            list(path.substringBeforeLast('/', ""))
+        }
+        return found.any { it.path == path && !it.directory }
     }
 
     private suspend fun listing(client: SftpClient, folder: String): List<Entry> = client.list("/$folder").map { file ->

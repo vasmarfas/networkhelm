@@ -20,6 +20,7 @@ import com.jcraft.jsch.WindowsSSHAgentConnector
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.transport.ByteStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -231,9 +232,21 @@ private class JschSftp(private val channel: ChannelSftp, private val later: Coro
             .map { RemoteFile(it.filename, it.attrs.size, it.attrs.isDir, it.attrs.mTime.toLong()) }
     }
 
-    override suspend fun read(path: String): ByteArray = withContext(Dispatchers.IO) { channel.get(path).use { it.readBytes() } }
+    override suspend fun read(path: String): ByteArray = moving { channel.get(path).use { it.readBytes() } }
 
-    override suspend fun write(path: String, bytes: ByteArray) = withContext(Dispatchers.IO) { channel.put(bytes.inputStream(), path) }
+    override suspend fun write(path: String, bytes: ByteArray) = moving { channel.put(bytes.inputStream(), path) }
+
+    // jsch moves a file in one blocking call that no cancellation reaches, so the channel is closed under it;
+    // the call is left to fail by itself: awaited to its end, it would give the caller its failure in place of the cancellation
+    private suspend fun <T> moving(block: () -> T): T {
+        val moved = later.async(Dispatchers.IO) { block() }
+        try {
+            return moved.await()
+        } catch (e: CancellationException) {
+            close()
+            throw e
+        }
+    }
 
     override suspend fun remove(path: String) = withContext(Dispatchers.IO) {
         val directory = try {

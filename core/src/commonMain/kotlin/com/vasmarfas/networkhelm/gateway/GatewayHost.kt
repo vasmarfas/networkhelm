@@ -38,6 +38,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
@@ -55,6 +56,7 @@ class GatewayHost(
     private val lock = Mutex()
     private var last = 0L
     private val sessions = HashMap<Long, DeviceSession>()
+    private val connected = HashMap<Long, Long>()
     private val jobs = HashMap<Long, Job>()
     private val shells = HashMap<Long, ShellChannel>()
     private val questions = HashMap<Long, CompletableDeferred<Boolean>>()
@@ -64,17 +66,30 @@ class GatewayHost(
             post(FromGateway.Hello(GATEWAY_PROTOCOL, reach.offers()))
             while (true) {
                 val text = wire.receive() ?: break
-                when (val frame = gatewayJson.decodeFromString(ToGateway.serializer(), text)) {
+                val frame = try {
+                    gatewayJson.decodeFromString(ToGateway.serializer(), text)
+                } catch (e: SerializationException) {
+                    // the exception quotes the frame in its message, and a frame may carry the password of a router; what leaves here goes to the log of the gateway
+                    throw DeviceException(ErrorCategory.General, "the browser sent a message this gateway cannot read")
+                }
+                when (frame) {
                     is ToGateway.Ask -> {
                         val job = launch(start = CoroutineStart.LAZY) { answer(this@supervisorScope, frame.id, frame.request) }
                         lock.withLock { jobs[frame.id] = job }
                         job.start()
                     }
-                    is ToGateway.Cancel -> lock.withLock { jobs[frame.id] }?.cancel()
+                    is ToGateway.Cancel -> {
+                        lock.withLock { jobs[frame.id] }?.cancel()
+                        // a browser that gives a connection up while its answer is on the way never hears of the session, and this cancel is all it sends
+                        lock.withLock { connected.remove(frame.id)?.let { sessions.remove(it) } }?.close()
+                    }
                     is ToGateway.Answer -> lock.withLock { questions.remove(frame.question) }?.complete(frame.accepted)
                     is ToGateway.Input -> lock.withLock { shells[frame.channel] }?.let { type(it, frame.bytes) }
                     is ToGateway.Resize -> lock.withLock { shells[frame.channel] }?.resize(frame.columns, frame.rows)
-                    is ToGateway.Close -> lock.withLock { sessions.remove(frame.session) }?.close()
+                    is ToGateway.Close -> lock.withLock {
+                        connected.values.remove(frame.session)
+                        sessions.remove(frame.session)
+                    }?.close()
                 }
             }
         } finally {
@@ -88,11 +103,11 @@ class GatewayHost(
     private suspend fun answer(scope: CoroutineScope, id: Long, request: Request) {
         try {
             when (request) {
-                is Request.ConnectRouterOs -> value(id, Opened.serializer(), opened(connectRouterOs(request.login, policy(id), scope)))
-                is Request.ConnectOpenWrt -> value(id, Opened.serializer(), opened(connectOpenWrt(request.login, policy(id))))
-                is Request.Connect -> value(id, Opened.serializer(), opened(connectLogin(request.login, policy(id))))
-                is Request.ConnectNative -> value(id, Opened.serializer(), opened(offered(reach.connectNative, "reach a router over port 8291")(request.login, scope)))
-                is Request.ConnectMacTelnet -> value(id, Opened.serializer(), opened(offered(reach.connectMacTelnet, "reach a router by its MAC address")(request.login, scope)))
+                is Request.ConnectRouterOs -> value(id, Opened.serializer(), opened(id, connectRouterOs(request.login, policy(id), scope)))
+                is Request.ConnectOpenWrt -> value(id, Opened.serializer(), opened(id, connectOpenWrt(request.login, policy(id))))
+                is Request.Connect -> value(id, Opened.serializer(), opened(id, connectLogin(request.login, policy(id))))
+                is Request.ConnectNative -> value(id, Opened.serializer(), opened(id, offered(reach.connectNative, "reach a router over port 8291")(request.login, scope)))
+                is Request.ConnectMacTelnet -> value(id, Opened.serializer(), opened(id, offered(reach.connectMacTelnet, "reach a router by its MAC address")(request.login, scope)))
                 is Request.Neighbors -> stream(id, MndpSighting.serializer(), offered(reach.neighbors, "hear MNDP")())
                 is Request.RefreshNeighbors -> value(id, Unit.serializer(), offered(reach.refreshNeighbors, "ask for MNDP announcements")())
                 is Request.Scan -> stream(id, Found.serializer(), offered(reach.scan, "sweep addresses")(sweepable(request.addresses)))
@@ -145,11 +160,14 @@ class GatewayHost(
         }
     }
 
-    private suspend fun opened(session: DeviceSession): Opened {
+    private suspend fun opened(ask: Long, session: DeviceSession): Opened {
         val id = try {
             lock.withLock {
                 currentCoroutineContext().ensureActive()
-                (++last).also { sessions[it] = session }
+                (++last).also {
+                    sessions[it] = session
+                    connected[ask] = it
+                }
             }
         } catch (e: CancellationException) {
             session.close()

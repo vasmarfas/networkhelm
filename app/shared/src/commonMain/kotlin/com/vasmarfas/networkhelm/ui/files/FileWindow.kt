@@ -63,8 +63,7 @@ import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.Select
 import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
-import com.vasmarfas.networkhelm.ui.kit.copyClipboard
-import com.vasmarfas.networkhelm.ui.kit.writeText
+import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.main.Confirm
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.workspace.WindowState
@@ -110,6 +109,7 @@ import networkhelm.app.shared.generated.resources.file_zoom_in
 import networkhelm.app.shared.generated.resources.file_zoom_out
 import networkhelm.app.shared.generated.resources.files_download
 import networkhelm.app.shared.generated.resources.files_no_ftp
+import networkhelm.app.shared.generated.resources.files_replace_question
 import networkhelm.app.shared.generated.resources.main_redo
 import networkhelm.app.shared.generated.resources.main_undo
 
@@ -124,6 +124,10 @@ class FileSpec(path: String, id: String?, val size: Long?) {
     var path by mutableStateOf(path)
     var id by mutableStateOf(id)
     val name: String get() = path.substringAfterLast('/')
+
+    // the text the editor holds and the bytes it was read from: a window that is minimized, under another one on a phone
+    // or behind the tab of another router is not drawn, and what was typed into it is not read over from the router
+    internal var draft: Pair<ByteArray, EditorState>? = null
 }
 
 private sealed interface Opened {
@@ -173,20 +177,26 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
     val scope = rememberCoroutineScope()
     val backend = remember(session) { FileBackend(session, FILE_MENU) }
     val exchange = LocalFileExchange.current
-    val clipboard = copyClipboard()
+    val copier = rememberCopier()
     val controls = remember { EditorControls() }
     var reloads by remember { mutableIntStateOf(0) }
     val bulk by backend.bulk.collectAsState()
     val via by backend.via.collectAsState()
     LaunchedEffect(backend) { backend.probe() }
     val opened by produceState<Opened>(Opened.Reading(backend.readsOver(Entry(spec.id, spec.path, false, spec.size, "", ""))), backend, reloads) {
+        val unsaved = spec.draft?.takeIf { it.second.dirty }
+        if (unsaved != null) {
+            value = Opened.Edit(unsaved.first, unsaved.second)
+            return@produceState
+        }
         value = Opened.Reading(null)
-        value = read(backend, spec) { value = it }
+        value = read(backend, spec) { value = it }.also { spec.draft = (it as? Opened.Edit)?.let { edit -> edit.bytes to edit.editor } }
     }
     var problem by remember { mutableStateOf<String?>(null) }
     var notice by remember { mutableStateOf<String?>(null) }
     var asking by remember { mutableStateOf<Asking?>(null) }
     var naming by remember { mutableStateOf<TextFieldState?>(null) }
+    var replacing by remember { mutableStateOf<String?>(null) }
     var importing by remember { mutableStateOf(false) }
     var scale by remember { mutableStateOf<Float?>(null) }
     var picture by remember { mutableStateOf<Pair<Int, Int>?>(null) }
@@ -204,7 +214,8 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
             if (unsaved) asking = Asking.Close
             !unsaved
         }
-        onDispose { window.closeGuard = null }
+        // out of sight the window still holds its text: a close meant for it is refused, and a minimized one comes back to be asked there
+        onDispose { window.closeGuard = { spec.draft?.second?.dirty != true } }
     }
     LaunchedEffect(notice) {
         if (notice != null) {
@@ -226,7 +237,7 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
         }
     }
 
-    fun save(path: String? = null, closeAfter: Boolean = false) {
+    fun save(path: String? = null, closeAfter: Boolean = false, replace: Boolean = false) {
         val edit = editor ?: return
         if (saving) return
         val snapshot = try {
@@ -239,6 +250,10 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
         saving = true
         guarded {
             try {
+                if (path != null && !replace && backend.exists(path)) {
+                    replacing = path
+                    return@guarded
+                }
                 backend.write(target, snapshot.bytes)
                 edit.markSaved(snapshot)
                 if (path != null) {
@@ -297,7 +312,7 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
                     ToolbarButton(stringResource(Res.string.files_download), Lucide.Download, { guarded { exchange.save(spec.name, original) } }, Modifier.testTag("file-download"), iconOnly = compact)
                 }
                 if (editor != null) {
-                    ToolbarButton(stringResource(Res.string.file_copy_all), Lucide.Copy, { scope.launch { clipboard.writeText(editor.snapshot()) } }, iconOnly = true)
+                    ToolbarButton(stringResource(Res.string.file_copy_all), Lucide.Copy, { copier.copy(editor.snapshot()) }, iconOnly = true)
                 }
                 ToolbarButton(stringResource(Res.string.file_reload), Lucide.RefreshCw, { if (dirty) asking = Asking.Reload else reloads++ }, Modifier.testTag("file-reload"), enabled = !saving, iconOnly = true)
             }
@@ -374,6 +389,7 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
             }
             Asking.Reload -> Confirm(stringResource(Res.string.file_reload_question, spec.name), stringResource(Res.string.file_reload), onCancel = { asking = null }) {
                 asking = null
+                spec.draft = null
                 reloads++
             }
             null -> {}
@@ -385,6 +401,12 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
                 val path = field.text.toString().trim().trim('/')
                 naming = null
                 if (path.isNotEmpty()) save(path)
+            }
+        }
+        replacing?.let { path ->
+            Confirm(stringResource(Res.string.files_replace_question, "/$path"), stringResource(Res.string.file_replace), onCancel = { replacing = null }) {
+                replacing = null
+                save(path, replace = true)
             }
         }
         if (importing) {

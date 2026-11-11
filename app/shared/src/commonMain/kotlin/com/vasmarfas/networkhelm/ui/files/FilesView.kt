@@ -97,9 +97,8 @@ import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
-import com.vasmarfas.networkhelm.ui.kit.copyClipboard
 import com.vasmarfas.networkhelm.ui.kit.hand
-import com.vasmarfas.networkhelm.ui.kit.writeText
+import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.main.ActionsMenu
 import com.vasmarfas.networkhelm.ui.main.Confirm
 import com.vasmarfas.networkhelm.ui.main.Output
@@ -127,6 +126,7 @@ import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.command_question
 import networkhelm.app.shared.generated.resources.file_import
+import networkhelm.app.shared.generated.resources.file_replace
 import networkhelm.app.shared.generated.resources.files_auto_question
 import networkhelm.app.shared.generated.resources.files_back
 import networkhelm.app.shared.generated.resources.files_bad_name
@@ -159,10 +159,12 @@ import networkhelm.app.shared.generated.resources.files_path
 import networkhelm.app.shared.generated.resources.files_properties
 import networkhelm.app.shared.generated.resources.files_refresh
 import networkhelm.app.shared.generated.resources.files_rename
+import networkhelm.app.shared.generated.resources.files_replace_question
 import networkhelm.app.shared.generated.resources.files_selected_size
 import networkhelm.app.shared.generated.resources.files_send
 import networkhelm.app.shared.generated.resources.files_space
 import networkhelm.app.shared.generated.resources.files_space_free
+import networkhelm.app.shared.generated.resources.files_too_big
 import networkhelm.app.shared.generated.resources.files_up
 import networkhelm.app.shared.generated.resources.files_upload
 import networkhelm.app.shared.generated.resources.files_upload_folder
@@ -199,7 +201,7 @@ internal fun FilesView(
     val scope = rememberCoroutineScope()
     val backend = remember(session, path) { FileBackend(session, path) }
     val exchange = LocalFileExchange.current
-    val clipboard = copyClipboard()
+    val copier = rememberCopier()
     val transfers = remember(session, path) { Transfers(scope) }
     val routerOs = session.device.platform == Platform.RouterOs
     val bulk by backend.bulk.collectAsState()
@@ -375,32 +377,52 @@ internal fun FilesView(
         }
     }
     fun landing() = target().ifEmpty { pack?.uploads.orEmpty() }
+    suspend fun weigh(file: String, size: Long?) {
+        if (size != null && size > transferLimit) throw DeviceException(ErrorCategory.General, getString(Res.string.files_too_big, file, sizeText(size), sizeText(transferLimit)))
+    }
     fun upload(files: List<LocalFile>, into: String) {
         if (into.isNotEmpty()) expanded += into
         for (file in files) {
             transfers.add(file.name, true) {
+                weigh(file.name, file.size)
                 val bytes = file.read()
                 backend.write(listOf(into, file.name).filter { it.isNotEmpty() }.joinToString("/"), bytes)
                 bytes.size.toLong()
             }
         }
     }
+    var replacing by remember { mutableStateOf<Triple<List<LocalFile>, String, String>?>(null) }
+    // outside RouterOS a folder is known only once it has been opened in the tree, so one that has not is listed first
+    fun place(files: List<LocalFile>, into: String) = guarded {
+        val there = (if (remote && into !in loaded) backend.list(into) else tree.children(into)).filter { !it.directory }.map { it.name }
+        val taken = files.map { it.name }.filter { it in there }
+        if (taken.isNotEmpty()) replacing = Triple(files, into, taken.joinToString(", ")) else upload(files, into)
+    }
     var sending by remember { mutableStateOf<Pair<List<LocalFile>, String>?>(null) }
     // the router installs *.auto.npk and reboots, and runs *.auto.rsc, as soon as the file lands
     fun send(files: List<LocalFile>, into: String) {
-        if (files.any { it.name.endsWith(".auto.npk") || it.name.endsWith(".auto.rsc") }) sending = files to into else upload(files, into)
+        if (files.any { it.name.endsWith(".auto.npk") || it.name.endsWith(".auto.rsc") }) sending = files to into else place(files, into)
     }
     fun download(files: List<Entry>) {
         for (file in files.filter { !it.directory }) {
             transfers.add(file.name, false) {
+                weigh(file.name, file.size)
                 val bytes = backend.read(file)
                 if (!exchange.save(file.name, bytes)) throw CancellationException("file save cancelled")
                 bytes.size.toLong()
             }
         }
     }
+    // the first drag over SFTP only opens SSH, and the next one carries the files
     fun dragOut(): DragAndDropTransferData? {
         val files = chosen.filter { !it.directory }.takeIf { it.isNotEmpty() } ?: return null
+        if (!backend.canDrag || files.any { (it.size ?: 0) > transferLimit }) {
+            guarded {
+                for (file in files) weigh(file.name, file.size)
+                backend.channel { }
+            }
+            return null
+        }
         return filesOut(files.map { it.path }) { file -> backend.channel { it.read("/$file") } }
     }
 
@@ -421,7 +443,7 @@ internal fun FilesView(
         editing = TextFieldState("/$root")
     }
     fun copyPaths(files: List<Entry>, names: Boolean = false) {
-        scope.launch { clipboard.writeText(files.joinToString("\n") { if (names) it.name else "/" + it.path }) }
+        copier.copy(files.joinToString("\n") { if (names) it.name else "/" + it.path })
     }
 
     val actions = pack?.actions.orEmpty().filter { canWrite && it.command in schema.commands }
@@ -449,7 +471,7 @@ internal fun FilesView(
         if (row.open && text.isEmpty()) toggle(row) else rowOf(row.entry.parent)?.let { pick(it.entry.path) }
     }
     fun onKey(event: KeyEvent): Boolean {
-        val ctrl = event.isCtrlPressed || event.isMetaPressed
+        val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
         val row = rowOf(state.anchor)
         when {
             event.key == Key.F2 -> beginRename()
@@ -534,7 +556,10 @@ internal fun FilesView(
                         ToolbarButton(stringResource(Res.string.files_download_folder), Lucide.FolderDown, {
                             guarded {
                                 val destination = exchange.pickFolder() ?: return@guarded
-                                for (file in chosen.filter { !it.directory }) destination.write(file.name, backend.read(file))
+                                for (file in chosen.filter { !it.directory }) {
+                                    weigh(file.name, file.size)
+                                    destination.write(file.name, backend.read(file))
+                                }
                             }
                         }, enabled = chosen.any { !it.directory }, iconOnly = compact)
                     }
@@ -659,6 +684,12 @@ internal fun FilesView(
         sending?.let { (files, into) ->
             Confirm(stringResource(Res.string.files_auto_question, files.joinToString(", ") { it.name }), stringResource(Res.string.files_send), onCancel = { sending = null }) {
                 sending = null
+                place(files, into)
+            }
+        }
+        replacing?.let { (files, into, taken) ->
+            Confirm(stringResource(Res.string.files_replace_question, taken), stringResource(Res.string.file_replace), onCancel = { replacing = null }) {
+                replacing = null
                 upload(files, into)
             }
         }
