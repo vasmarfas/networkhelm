@@ -37,6 +37,13 @@ class LuciFormsTest {
     }
 
     @Test
+    fun aMenuFileThatIsNotAJsonObjectHasNoPages() {
+        assertEquals(emptyList<LuciNode>(), menuNodes("luci-app-rdtest", "{ \"admin/services/rdtest\": { \"title\": "))
+        assertEquals(emptyList<LuciNode>(), menuNodes("luci-app-rdtest", "[]"))
+        assertEquals(listOf("admin/services/rdtest"), menuNodes("luci-app-rdtest", "{ \"admin/services/rdtest\": { \"title\": \"RD Test\" } }").map { it.path })
+    }
+
+    @Test
     fun aWidgetOfSeveralIsAList() {
         assertEquals(ValueType.Many(ValueType.Text(), LIST), LuciOption("CBI.NetworkSelect", "network", multiple = true).argument()?.type)
     }

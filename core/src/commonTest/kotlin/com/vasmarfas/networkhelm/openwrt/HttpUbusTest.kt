@@ -24,6 +24,10 @@ class HttpUbusTest {
 
     private val denied = "{\"jsonrpc\":\"2.0\",\"id\":1,\"error\":{\"code\":-32002,\"message\":\"Access denied\"}}"
 
+    private val access = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":[0,{\"access\":true}]}"
+
+    private val done = "{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":[0,{}]}"
+
     private class Server(vararg answers: CannedStream) {
         val opened = mutableListOf<CannedStream>()
         private val answers = ArrayDeque(answers.toList())
@@ -42,14 +46,26 @@ class HttpUbusTest {
         assertTrue(requests[2].contains("\"params\":[\"0a\",\"uci\",\"commit\",{}]"), requests[2])
     }
 
+    // a session that has lapsed is denied the question about itself as well
     @Test
     fun aLapsedSessionIsReplacedOnceAndThenTheCallIsDenied() = runTest {
-        val server = Server(login("0a"), ok(denied), login("0b"), ok("{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":[0,{}]}"), ok(denied), login("0c"), ok(denied))
+        val server = Server(login("0a"), ok(denied), ok(denied), login("0b"), ok(done), ok(denied), ok(denied), login("0c"), ok(denied))
         val ubus = HttpUbus("192.0.2.1", "root", "secret", server::open)
         ubus.call("system", "board")
-        assertTrue(server.opened[3].written.contains("\"0b\""))
+        assertTrue(server.opened[2].written.contains("\"params\":[\"0a\",\"session\",\"access\","), server.opened[2].written.toString())
+        assertTrue(server.opened[4].written.contains("\"params\":[\"0b\",\"system\",\"board\",{}]"))
         assertEquals(UbusStatus.PERMISSION_DENIED, assertFailsWith<UbusException> { ubus.call("network.interface.wan", "up") }.status)
-        assertEquals(7, server.opened.size)
+        assertEquals(9, server.opened.size)
+    }
+
+    @Test
+    fun aCallTheAclDoesNotAllowIsDeniedAndTheSessionWithItsDraftStays() = runTest {
+        val server = Server(login("0a"), ok(denied), ok(access), ok(done))
+        val ubus = HttpUbus("192.0.2.1", "root", "secret", server::open)
+        assertEquals(UbusStatus.PERMISSION_DENIED, assertFailsWith<UbusException> { ubus.call("network.interface.wan", "up") }.status)
+        ubus.call("uci", "changes")
+        assertTrue(server.opened[3].written.contains("\"params\":[\"0a\",\"uci\",\"changes\",{}]"), server.opened[3].written.toString())
+        assertEquals(4, server.opened.size)
     }
 
     @Test
@@ -120,9 +136,26 @@ class HttpUbusTest {
 
     @Test
     fun aSubscriptionTheAclDoesNotAllowIsDenied() = runTest {
-        val server = Server(login("0a"), ok(denied), login("0b"), ok(denied))
+        val server = Server(login("0a"), ok(denied), ok(access))
         val subscription = HttpUbus("192.0.2.1", "root", "secret", server::open).subscribe("log")
         assertEquals(UbusStatus.PERMISSION_DENIED, assertFailsWith<UbusException> { subscription.toList() }.status)
-        assertTrue(server.opened[3].written.contains("Authorization: Bearer 0b\r\n"))
+        assertTrue(server.opened[1].written.contains("Authorization: Bearer 0a\r\n"))
+        assertTrue(server.opened[2].written.contains("\"params\":[\"0a\",\"session\",\"access\","), server.opened[2].written.toString())
+        assertEquals(3, server.opened.size)
+    }
+
+    @Test
+    fun aSubscriptionOfALapsedSessionIsMadeAgainAfterANewLogin() = runTest {
+        val events = CannedStream("HTTP/1.1 200 OK\r\nContent-Type: text/event-stream\r\n\r\nevent: message\ndata: {\"msg\":\"rd-test\"}\n\n")
+        val server = Server(login("0a"), ok(denied), ok(denied), login("0b"), events)
+        val notifications = HttpUbus("192.0.2.1", "root", "secret", server::open).subscribe("log").toList()
+        assertEquals("rd-test", notifications.single()["message"]?.jsonObject?.get("msg")?.jsonPrimitive?.content)
+        assertTrue(events.written.contains("Authorization: Bearer 0b\r\n"))
+    }
+
+    @Test
+    fun anAnswerThatIsNotJsonRpcIsNoUbus() = runTest {
+        val ubus = HttpUbus("192.0.2.1", "root", "secret", Server(ok("<html><body>It works</body></html>"))::open)
+        assertEquals(UbusStatus.NOT_SUPPORTED, assertFailsWith<UbusException> { ubus.call("system", "board") }.status)
     }
 }

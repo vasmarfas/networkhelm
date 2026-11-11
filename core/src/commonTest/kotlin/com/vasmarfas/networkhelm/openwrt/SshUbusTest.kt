@@ -136,6 +136,29 @@ class SshUbusTest {
         )
         lists.run(services, "restart", mapOf("numbers" to "dropbear"))
         assertEquals("{ /etc/init.d/'dropbear' 'restart'; } 2>&1; s=$?; echo; echo \"rd-status \$s\"\n", shell.commands[2])
+        // the shell is shared with every other command, so the listing changes the directory for itself alone
+        assertTrue(shell.commands[0].startsWith("{ (cd /etc/init.d && for n in *; do ") && "; done); echo; ls /etc/rc.d; } 2>&1; " in shell.commands[0], shell.commands[0])
+    }
+
+    @Test
+    fun theKeysOfRootAreWrittenWithAMaskThatDoesNotStayInTheShell() = runTest {
+        val shell = Shell("\nrd-status 0\n", "\nrd-status 0\n")
+        val ssh = Ssh { shell }
+        val empty = JsonObject(emptyMap())
+        val lists = LiveLists(SshUbus(ssh), ShellUci(ssh), OpenWrtFacts(empty, empty, empty, setOf("system"), emptySet(), emptySet(), true))
+        val key = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4f rd-test"
+        lists.add(MenuPath.parse("status/ssh-keys"), mapOf("key" to key))
+        assertEquals("{ (umask 077 && printf '%s' '$key\n' > /etc/dropbear/authorized_keys); } 2>&1; s=$?; echo; echo \"rd-status \$s\"\n", shell.commands[1])
+    }
+
+    @Test
+    fun anImageIsWrittenOverSshByACommandLeftInTheBackground() = runTest {
+        val shell = Shell("{\"valid\":true}\n\nrd-status 0\n", "\nrd-status 0\n")
+        val ssh = Ssh { shell }
+        val empty = JsonObject(emptyMap())
+        val lists = LiveLists(SshUbus(ssh), ShellUci(ssh), OpenWrtFacts(empty, empty, empty, setOf("system"), emptySet(), emptySet(), true))
+        lists.run(MenuPath.parse("status/files"), "upgrade", mapOf("numbers" to "tmp/openwrt-sysupgrade.bin"))
+        assertEquals("{ (sleep 1; sysupgrade '/tmp/openwrt-sysupgrade.bin') >/dev/null 2>&1 & true; } 2>&1; s=$?; echo; echo \"rd-status \$s\"\n", shell.commands[1])
     }
 
     @Test

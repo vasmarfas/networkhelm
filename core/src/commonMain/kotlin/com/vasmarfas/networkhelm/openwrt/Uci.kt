@@ -55,7 +55,13 @@ class RpcdUci(private val ubus: Ubus, private val open: (suspend () -> String)? 
     override suspend fun configs(): List<String> = call("configs")["configs"]?.jsonArray.orEmpty().map { it.jsonPrimitive.content }
 
     override suspend fun sections(config: String): List<UciSection> {
-        val values = call("get", "config" to JsonPrimitive(config))["values"]?.jsonObject.orEmpty()
+        val values = try {
+            call("get", "config" to JsonPrimitive(config))
+        } catch (e: UbusException) {
+            // to a login over /ubus rpcd denies every config its ACL does not name, one that does not exist as well
+            if (open != null || e.status != UbusStatus.PERMISSION_DENIED) throw e
+            throw UbusException(UbusStatus.NOT_FOUND, "the login may not read the config $config")
+        }["values"]?.jsonObject.orEmpty()
         return values.values.map { it.jsonObject }.sortedBy { it[".index"]?.jsonPrimitive?.intOrNull }.map { section ->
             val own = section.filterKeys { !it.startsWith(".") }
             UciSection(

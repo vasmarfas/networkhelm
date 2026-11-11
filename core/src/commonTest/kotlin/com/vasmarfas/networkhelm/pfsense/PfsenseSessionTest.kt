@@ -10,6 +10,9 @@ import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.model.syslogLine
+import com.vasmarfas.networkhelm.transport.ByteStream
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -158,5 +161,28 @@ class PfsenseSessionTest {
     fun theJournalWritesTheCallOfTheApi() {
         assertEquals("POST /api/v2/firewall/alias {\"name\":\"rd_test\"}", pfsenseCall(MenuPath.parse("firewall/alias"), EditKind.Add, emptyList(), mapOf("name" to "rd_test")))
         assertEquals("DELETE /api/v2/firewall/alias?id=3", pfsenseCall(MenuPath.parse("firewall/alias"), EditKind.Remove, listOf("3"), emptyMap()))
+    }
+
+    private class Silent : ByteStream {
+        private val closed = CompletableDeferred<Unit>()
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            closed.await()
+            return -1
+        }
+
+        override suspend fun write(bytes: ByteArray) = Unit
+
+        override fun close() {
+            closed.complete(Unit)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aRouterThatGoesSilentEndsTheRequestInsteadOfHoldingItForever() = runTest {
+        val silent = HttpsPfsense("192.0.2.1", "admin", "rd-test-secret") { Silent() }
+        assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { silent.call("POST", "firewall/apply", emptyMap(), JsonObject(emptyMap())) }.category)
+        assertEquals(240_000, testScheduler.currentTime)
     }
 }

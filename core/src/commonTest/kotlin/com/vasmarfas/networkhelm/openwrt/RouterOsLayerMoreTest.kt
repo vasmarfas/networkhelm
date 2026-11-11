@@ -172,6 +172,63 @@ class RouterOsLayerMoreTest {
     }
 
     @Test
+    fun aRedirectOfFw3ThatRewritesTheSourceIsWrittenAsItIsRead() = runTest {
+        val base = Lists(
+            "firewall/redirect" to listOf(
+                Item("old", mapOf("target" to "SNAT", "dest" to "wan", "src_ip" to "192.0.2.0/24", "src_dip" to "203.0.113.5", "dest_ip" to "198.51.100.7", "dest_port" to "443")),
+            ),
+        )
+        val layer = RouterOsLayer(base)
+        val nat = MenuPath.parse("ip/firewall/nat")
+        val shown = assertNotNull(layer.get(nat, "old", null))
+        assertEquals(
+            listOf("srcnat", "src-nat", "wan", "203.0.113.5", "198.51.100.7", "443"),
+            listOf("chain", "action", "out-interface-list", "to-addresses", "dst-address", "dst-port").map { shown[it] },
+        )
+        layer.set(nat, "old", mapOf("out-interface-list" to "vpn", "to-addresses" to "203.0.113.9", "to-ports" to "1024-2048", "dst-address" to "198.51.100.8", "dst-port" to "80,443"))
+        assertEquals(
+            Triple("firewall/redirect", "old", mapOf<String, String?>("dest" to "vpn", "src_dip" to "203.0.113.9", "src_dport" to "1024-2048", "dest_ip" to "198.51.100.8", "dest_port" to "80 443")),
+            base.changed.single(),
+        )
+    }
+
+    @Test
+    fun aRuleIsSwitchedOffByTheYesOfTheButtons() = runTest {
+        val base = Lists(
+            "firewall/rule" to listOf(Item("ping", mapOf("name" to "Allow-Ping", "src" to "wan", "target" to "ACCEPT"))),
+            "firewall/redirect" to listOf(Item("web", mapOf("target" to "DNAT", "src" to "wan", "src_dport" to "80", "dest_ip" to "192.0.2.5"))),
+            "firewall/nat" to listOf(Item("out", mapOf("target" to "SNAT", "src" to "wan", "snat_ip" to "203.0.113.5"))),
+        )
+        val layer = RouterOsLayer(base)
+        val filter = MenuPath.parse("ip/firewall/filter")
+        val nat = MenuPath.parse("ip/firewall/nat")
+        layer.set(filter, "ping", mapOf("disabled" to "yes"))
+        layer.set(nat, "web", mapOf("disabled" to "yes"))
+        layer.set(nat, "out", mapOf("disabled" to "yes"))
+        layer.set(filter, "ping", mapOf("disabled" to "no"))
+        assertEquals(
+            listOf(
+                Triple("firewall/rule", "ping", mapOf<String, String?>("enabled" to "0")),
+                Triple("firewall/redirect", "web", mapOf<String, String?>("enabled" to "0")),
+                Triple("firewall/nat", "out", mapOf<String, String?>("enabled" to "0")),
+                Triple("firewall/rule", "ping", mapOf<String, String?>("enabled" to null)),
+            ),
+            base.changed.toList(),
+        )
+    }
+
+    @Test
+    fun aNewInterfaceListTakesThePoliciesOfTheDefaults() = runTest {
+        val lists = MenuPath.parse("interface/list")
+        val strict = Lists("firewall/defaults" to listOf(Item("cfg01e63d", mapOf("input" to "REJECT", "output" to "ACCEPT", "forward" to "REJECT", "synflood_protect" to "1"))))
+        RouterOsLayer(strict).add(lists, mapOf("name" to "dmz"))
+        assertEquals("firewall/zone" to mapOf("name" to "dmz", "input" to "REJECT", "output" to "ACCEPT", "forward" to "REJECT"), strict.added.single())
+        val bare = Lists()
+        RouterOsLayer(bare).add(lists, mapOf("name" to "dmz"))
+        assertEquals("firewall/zone" to mapOf("name" to "dmz"), bare.added.single())
+    }
+
+    @Test
     fun theConnectionsAreThoseOfTheirFamily() = runTest {
         val base = Lists(
             "status/connections" to listOf(
@@ -308,6 +365,19 @@ class RouterOsLayerMoreTest {
             }
         }
         assertEquals(emptyList(), missing)
+    }
+
+    @Test
+    fun aSourceTheSessionMayNotReadCountsAsOneTheRouterLacks() = runTest {
+        val lists = Lists("status/devices" to listOf(Item("eth0", mapOf("name" to "eth0", "type" to "Network device", "devtype" to "ethernet"))))
+        val denied = object : DeviceSession by lists {
+            override suspend fun describe(path: MenuPath): MenuSchema =
+                if (path.segments.first() == "sqm") throw DeviceException(ErrorCategory.PermissionDenied, "Permission denied") else lists.describe(path)
+        }
+        assertTrue("queue" in RouterOsLayer(lists).describe(MenuPath.Root).children)
+        val layer = RouterOsLayer(denied)
+        assertEquals(listOf(true, false), listOf("interface", "queue").map { it in layer.describe(MenuPath.Root).children })
+        assertNotNull(layer.get(MenuPath.parse("interface"), "eth0", null))
     }
 
     @Test

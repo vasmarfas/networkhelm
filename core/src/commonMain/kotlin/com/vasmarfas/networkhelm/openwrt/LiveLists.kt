@@ -463,8 +463,8 @@ internal class LiveLists(private val ubus: Ubus, private val uci: Uci, private v
         if (check.text("valid") != "true") throw DeviceException(ErrorCategory.ArgumentValue, "$name is not an image for this router: ${check["tests"] ?: check}")
         val shell = shell
         if (shell != null) {
-            // in the background, as sysupgrade ends dropbear and the shell with it
-            shell.sh("(sleep 1; sysupgrade ${quote(image)}) >/dev/null 2>&1 &")
+            // in the background, as sysupgrade ends dropbear and the shell with it; true keeps & apart from the ; that sh puts after a command
+            shell.sh("(sleep 1; sysupgrade ${quote(image)}) >/dev/null 2>&1 & true")
         } else {
             ubus.call("file", "exec", JsonObject(mapOf("command" to JsonPrimitive("/sbin/sysupgrade"), "params" to JsonArray(listOf(JsonPrimitive(image))))))
         }
@@ -610,7 +610,7 @@ internal class LiveLists(private val ubus: Ubus, private val uci: Uci, private v
         if ("rc" in objects || shell == null) {
             return ubus.call("rc", "list").map { (name, state) -> Item(name, mapOf("name" to name) + state.jsonObject.mapValues { it.value.plain() }) }
         }
-        val printed = shell.sh("cd /etc/init.d && for n in *; do echo \"\$n \$(sed -n 's/^START=//p' \"\$n\" | head -n 1) \$(sed -n 's/^STOP=//p' \"\$n\" | head -n 1)\"; done; echo; ls /etc/rc.d").output
+        val printed = shell.sh("(cd /etc/init.d && for n in *; do echo \"\$n \$(sed -n 's/^START=//p' \"\$n\" | head -n 1) \$(sed -n 's/^STOP=//p' \"\$n\" | head -n 1)\"; done); echo; ls /etc/rc.d").output
         val enabled = printed.substringAfter("\n\n", "").lines().filter { it.startsWith('S') }.map { it.drop(3) }.toSet()
         val running = ubus.call("service", "list").filterValues { service ->
             ((service as? JsonObject)?.get("instances") as? JsonObject)?.values?.any { (it as? JsonObject)?.get("running")?.plain() == "true" } == true
@@ -752,7 +752,7 @@ internal class LiveLists(private val ubus: Ubus, private val uci: Uci, private v
         val text = lines.joinToString("") { "$it\n" }
         val shell = shell
         if (shell != null) {
-            val written = shell.sh("umask 077 && printf '%s' ${quote(text)} > $AUTHORIZED_KEYS")
+            val written = shell.sh("(umask 077 && printf '%s' ${quote(text)} > $AUTHORIZED_KEYS)")
             if (written.exitStatus != 0) throw DeviceException(ErrorCategory.General, written.output.trim())
         } else {
             ubus.call("file", "write", JsonObject(mapOf("path" to JsonPrimitive(AUTHORIZED_KEYS), "data" to JsonPrimitive(text), "mode" to JsonPrimitive(0x180))))

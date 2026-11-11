@@ -1,11 +1,14 @@
 package com.vasmarfas.networkhelm.demo
 
+import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.Capabilities
 import com.vasmarfas.networkhelm.model.DeviceInfo
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.SafeModeKind
+import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.model.duration
+import com.vasmarfas.networkhelm.openwrt.LIST
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.flow
@@ -15,6 +18,11 @@ private const val UPTIME = 12 * 86_400L + 7 * 3_600L + 41 * 60L + 9L
 private val policies = setOf("read", "write")
 
 private val switches = flags("enabled", "disabled", "masq", "mtu_fix", "ignore", "authoritative", "local", "stp", "vlan_filtering", "rebind_protection")
+
+private val verdicts = listOf("input", "output", "forward").map { choice(it, "ACCEPT", "REJECT", "DROP") }
+
+// the session gives a list of UCI as its lines
+private fun many(name: String) = Argument(name, ValueType.Many(ValueType.Text(), LIST))
 
 internal fun openWrtDemo(): DemoSession = demoSession(
     DeviceInfo(Platform.OpenWrt, "demo-ap", "24.10.2", "aarch64_cortex-a53", "Demo AP (mediatek,mt7981)", setOf("luci", "firewall4", "dnsmasq-full", "wireguard-tools"), policies, id = "demo-openwrt"),
@@ -27,8 +35,8 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row(".name=guest", "proto=static", "device=br-guest", "ipaddr=192.168.30.1", "netmask=255.255.255.0", "ipv4-address=192.168.30.1/24", "uptime=12d7h41m")
         row(".name=wg0", "proto=wireguard", "listen_port=51820", "addresses=10.200.0.1/24", "mtu=1420", "ipv4-address=10.200.0.1/24", "uptime=12d7h40m")
     }
-    list("network/device", fields = switches) {
-        row("name=br-lan", "type=bridge", "ports=lan1,lan2,lan3,lan4", "macaddr=00:00:5E:00:53:10", "mtu=1500", "stp=0", "vlan_filtering=0")
+    list("network/device", fields = switches + many("ports")) {
+        row("name=br-lan", "type=bridge", "ports=lan1\nlan2\nlan3\nlan4", "macaddr=00:00:5E:00:53:10", "mtu=1500", "stp=0", "vlan_filtering=0")
         row("name=br-guest", "type=bridge", "ports=", "macaddr=00:00:5E:00:53:11", "mtu=1500", "stp=0", "vlan_filtering=0")
     }
     list("network/route") {
@@ -46,6 +54,19 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("address=203.0.113.64/24", "interface=wan", "device=wan")
         row("address=192.168.30.1/24", "interface=guest", "device=br-guest")
         row("address=10.200.0.1/24", "interface=wg0", "device=wg0")
+    }
+    list("status/devices", writable = false) {
+        row(".id=lo", "name=lo", "type=Network device", "devtype=loopback", "running=true", "mtu=65536", "mac-address=00:00:00:00:00:00", "rx-byte=4119022", "tx-byte=4119022")
+        row(".id=lan1", "name=lan1", "type=Network device", "devtype=dsa", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:10", "rx-byte=812044310", "tx-byte=6190421077")
+        row(".id=lan2", "name=lan2", "type=Network device", "devtype=dsa", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:10", "rx-byte=378176107", "tx-byte=2649698225")
+        row(".id=lan3", "name=lan3", "type=Network device", "devtype=dsa", "running=false", "mtu=1500", "mac-address=00:00:5E:00:53:10", "rx-byte=0", "tx-byte=0")
+        row(".id=lan4", "name=lan4", "type=Network device", "devtype=dsa", "running=false", "mtu=1500", "mac-address=00:00:5E:00:53:10", "rx-byte=0", "tx-byte=0")
+        row(".id=wan", "name=wan", "type=Network device", "devtype=dsa", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:12", "rx-byte=9120044812", "tx-byte=1204883019")
+        row(".id=br-lan", "name=br-lan", "type=bridge", "devtype=bridge", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:10", "rx-byte=1190220417", "tx-byte=8840119302")
+        row(".id=br-guest", "name=br-guest", "type=bridge", "devtype=bridge", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:11", "rx-byte=3204411", "tx-byte=611900")
+        row(".id=phy0-ap0", "name=phy0-ap0", "type=Network device", "devtype=wlan", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:13", "rx-byte=3204411", "tx-byte=611900")
+        row(".id=phy1-ap0", "name=phy1-ap0", "type=Network device", "devtype=wlan", "running=true", "mtu=1500", "mac-address=00:00:5E:00:53:14", "rx-byte=430811354", "tx-byte=90320456")
+        row(".id=wg0", "name=wg0", "type=Network device", "devtype=wireguard", "running=true", "mtu=1420", "rx-byte=90273412", "tx-byte=13002082")
     }
     list("status/neighbors", writable = false) {
         row("address=192.168.1.20", "mac-address=00:00:5E:00:53:20", "interface=br-lan", "flags=REACHABLE")
@@ -92,9 +113,10 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("address=192.168.1.121", "mac-address=00:00:5E:00:53:79", "host-name=esp32-sensor", "expires=5h33m")
     }
 
-    list("firewall/zone", fields = switches + choice("input", "ACCEPT", "REJECT", "DROP") + choice("output", "ACCEPT", "REJECT", "DROP") + choice("forward", "ACCEPT", "REJECT", "DROP")) {
+    settings("firewall/defaults", "input=REJECT", "output=ACCEPT", "forward=REJECT", "synflood_protect=1", fields = verdicts + flags("synflood_protect"))
+    list("firewall/zone", fields = switches + verdicts + many("network")) {
         row(".name=cfg02dc81", "name=lan", "network=lan", "input=ACCEPT", "output=ACCEPT", "forward=ACCEPT")
-        row(".name=cfg03dc81", "name=wan", "network=wan,wan6", "input=REJECT", "output=ACCEPT", "forward=REJECT", "masq=1", "mtu_fix=1")
+        row(".name=cfg03dc81", "name=wan", "network=wan\nwan6", "input=REJECT", "output=ACCEPT", "forward=REJECT", "masq=1", "mtu_fix=1")
         row(".name=guest", "name=guest", "network=guest", "input=REJECT", "output=ACCEPT", "forward=REJECT")
     }
     list("firewall/forwarding") {
@@ -120,7 +142,7 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     }
 
     settings("system/system", "hostname=demo-ap", "timezone=MSK-3", "zonename=Europe/Moscow", "ttylogin=0", "log_size=64", "urandom_seed=0", "conloglevel=8", "cronloglevel=7")
-    settings("system/timeserver", "enabled=1", "enable_server=0", "server=0.openwrt.pool.ntp.org 1.openwrt.pool.ntp.org", fields = switches)
+    settings("system/timeserver", "enabled=1", "enable_server=0", "server=0.openwrt.pool.ntp.org\n1.openwrt.pool.ntp.org", fields = switches + many("server"))
     settings(
         "status/resource",
         "uptime=${duration(UPTIME)}", "date=2026-10-31", "time=12:00:00", "version=OpenWrt 24.10.2", "revision=r28739-d9340319c6", "board-name=Demo AP (mediatek,mt7981)",

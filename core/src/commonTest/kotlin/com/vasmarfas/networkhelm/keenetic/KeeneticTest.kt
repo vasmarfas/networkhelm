@@ -7,9 +7,12 @@ import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.routeros.api.md5
 import com.vasmarfas.networkhelm.transport.AnsweringServer
+import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
 import com.vasmarfas.networkhelm.transport.TrustPolicy
 import com.vasmarfas.networkhelm.transport.httpReply
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -114,5 +117,28 @@ class KeeneticTest {
         val failed = assertFailsWith<DeviceException> { session.count(MenuPath.parse("ip/arp"), null) }
         assertEquals("no such command: arp.", failed.message)
         assertEquals(ErrorCategory.MissingItem, assertFailsWith<DeviceException> { session.count(MenuPath.parse("log"), null) }.category)
+    }
+
+    private class Silent : ByteStream {
+        private val closed = CompletableDeferred<Unit>()
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            closed.await()
+            return -1
+        }
+
+        override suspend fun write(bytes: ByteArray) = Unit
+
+        override fun close() {
+            closed.complete(Unit)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aRouterThatGoesSilentEndsTheRequestInsteadOfHoldingItForever() = runTest {
+        val silent = HttpKeenetic("192.0.2.1", "", "rd-test-token") { Silent() }
+        assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { silent.show("show/system") }.category)
+        assertEquals(60_000, testScheduler.currentTime)
     }
 }

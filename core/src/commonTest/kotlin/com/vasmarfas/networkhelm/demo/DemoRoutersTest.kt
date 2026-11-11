@@ -7,6 +7,7 @@ import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.ValueType
+import com.vasmarfas.networkhelm.openwrt.RouterOsLayer
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.Pack
 import com.vasmarfas.networkhelm.packs.bundledMenu
@@ -27,8 +28,8 @@ import kotlin.test.assertTrue
 
 class DemoRoutersTest {
 
-    // the topology view reads these two itself, no pack lists them
-    private val topologyPaths = setOf("cmr/layout/node", "cmr/layout/link")
+    // no pack lists these: the topology view reads the first two itself, and the unified view of OpenWrt the devices
+    private val readDirectly = setOf("cmr/layout/node", "cmr/layout/link", "status/devices")
 
     private fun router(host: String): DeviceSession = assertNotNull(demoRouter(host))
 
@@ -85,7 +86,7 @@ class DemoRoutersTest {
                     listOfNotNull(shown.monitor?.command?.trimStart('/'), shown.owner?.path) + (shown.links + shown.menu).map { it.path } +
                         shown.actions.map { "$path/${it.command}" } + shown.open?.paths?.values.orEmpty()
                 } + pack.forms.values.flatMap { form -> form.tabs.flatMap { listOfNotNull(it.path, it.monitor?.command?.trimStart('/')) } }
-            }.toSet() + topologyPaths
+            }.toSet() + readDirectly
             val menu = flatten(bundledMenu(platform).items).mapNotNull { it.path }
             // an entry that no pack describes opens as an automatic window, and the child menus of its path are its tabs
             val automatic = menu.filter { it !in packed }
@@ -178,6 +179,18 @@ class DemoRoutersTest {
         assertEquals(ValueType.Flag, openWrt.argument("enabled")?.type)
         val routerOs = router("routeros.demo").describe(MenuPath.parse("ip/address"))
         assertEquals(ValueType.YesNo, routerOs.argument("disabled")?.type)
+    }
+
+    @Test
+    fun theUnifiedViewOfOpenWrtReadsTheListsAndDevicesOfTheDemo() = runTest {
+        val session = router("openwrt.demo")
+        val layer = RouterOsLayer(session)
+        assertEquals(listOf("lan1", "lan2", "lan3", "lan4"), rows(layer, "interface/bridge/port").map { it["interface"] })
+        assertEquals(listOf("cfg03dc81 network wan", "cfg03dc81 network wan6"), rows(layer, "interface/list/member").filter { it["list"] == "wan" }.map { it.id })
+        assertEquals("0.openwrt.pool.ntp.org,1.openwrt.pool.ntp.org", layer.get(MenuPath.parse("system/ntp/client"), null)?.get("servers"))
+        assertTrue("br-lan" in layer.describe(MenuPath.parse("ip/address")).argument("interface")?.choices.orEmpty())
+        layer.add(MenuPath.parse("interface/list"), mapOf("name" to "dmz"))
+        assertEquals(listOf("REJECT", "ACCEPT", "REJECT"), rows(session, "firewall/zone").last().let { zone -> listOf("input", "output", "forward").map { zone[it] } })
     }
 
     @Test

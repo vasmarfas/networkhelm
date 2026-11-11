@@ -9,6 +9,9 @@ import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.ValueType
+import com.vasmarfas.networkhelm.transport.ByteStream
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
@@ -453,5 +456,28 @@ class OpnsenseSessionTest {
         assertNull(item["boottime"])
         val firmware = session.get(MenuPath.parse("system/firmware"), null)
         assertEquals(listOf("26.7", "", "none"), listOf("product_version", "product_check", "status").map { firmware?.get(it) })
+    }
+
+    private class Silent : ByteStream {
+        private val closed = CompletableDeferred<Unit>()
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            closed.await()
+            return -1
+        }
+
+        override suspend fun write(bytes: ByteArray) = Unit
+
+        override fun close() {
+            closed.complete(Unit)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aRouterThatGoesSilentEndsTheRequestInsteadOfHoldingItForever() = runTest {
+        val silent = HttpsOpnsense("192.0.2.1", "rd-test-key", "rd-test-secret") { Silent() }
+        assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { silent.call("POST", "firewall/filter/apply", JsonObject(emptyMap())) }.category)
+        assertEquals(180_000, testScheduler.currentTime)
     }
 }

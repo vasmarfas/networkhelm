@@ -5,6 +5,7 @@ import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.routeros.api.md5
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.HttpResponse
+import com.vasmarfas.networkhelm.transport.closingAfter
 import com.vasmarfas.networkhelm.transport.httpRequest
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -15,10 +16,14 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlin.time.Duration.Companion.minutes
 
 fun interface KeeneticCall {
     suspend fun show(path: String): JsonElement
 }
+
+// the router only shows its state here, which it does at once; the time is for the answer to come over a slow link
+private val REQUEST_TIME = 1.minutes
 
 // the session cookie lasts 300 s without a request; with no user the secret is a KeeneticOS 5.2 access token
 class HttpKeenetic(
@@ -70,7 +75,7 @@ class HttpKeenetic(
             cookie?.let { put("Cookie", it) }
             if (body != null) put("Content-Type", "application/json")
         }
-        return httpRequest(open(), host, method, target, headers, body?.encodeToByteArray() ?: ByteArray(0))
+        return open().closingAfter(REQUEST_TIME) { httpRequest(it, host, method, target, headers, body?.encodeToByteArray() ?: ByteArray(0)) }
     }
 
     // the router names the cookie of the session anew, so whatever it sets is kept

@@ -3,10 +3,16 @@ package com.vasmarfas.networkhelm.openwrt
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.transport.ByteStream
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.cancelAndJoin
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -19,6 +25,7 @@ class SocketUbusWebTest {
     private class Server(private val style: String = "length", private val dropsAfterAnswer: Boolean = false) {
         var opened = 0
         var requests = 0
+        var closed = 0
         private var active = 0
         var peak = 0
 
@@ -54,8 +61,29 @@ class SocketUbusWebTest {
                     return count
                 }
 
-                override fun close() = Unit
+                override fun close() {
+                    closed++
+                }
             }
+        }
+    }
+
+    // as a read of a socket, it is deaf to the cancelling of its coroutine and ends only when the stream is closed
+    private class Silent : ByteStream {
+        private val gone = CompletableDeferred<Unit>()
+        var closed = false
+            private set
+
+        override suspend fun write(bytes: ByteArray) = Unit
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            withContext(NonCancellable) { gone.await() }
+            return -1
+        }
+
+        override fun close() {
+            closed = true
+            gone.complete(Unit)
         }
     }
 
@@ -70,7 +98,30 @@ class SocketUbusWebTest {
             val web = SocketUbusWeb("router") { server.connect() }
             repeat(5) { call -> assertEquals(poll(call), web.post(poll(call)).body.decodeToString()) }
             assertEquals(1, server.opened, style)
+            assertEquals(0, server.closed, style)
         }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aRouterThatGoesSilentEndsTheRequestInsteadOfHoldingItsSlotForever() = runTest {
+        val web = SocketUbusWeb("router") { Silent() }
+        val failure = assertFailsWith<DeviceException> { web.post(poll(0)) }
+        assertEquals(ErrorCategory.ConnectionLost, failure.category)
+        assertTrue(failure !is RequestOutcomeUnknownException)
+        assertEquals(120_000, testScheduler.currentTime)
+        assertFailsWith<RequestOutcomeUnknownException> { web.post(change) }
+        assertEquals(240_000, testScheduler.currentTime)
+    }
+
+    @Test
+    fun aRequestThatIsCancelledClosesItsConnection() = runTest {
+        val silent = Silent()
+        val web = SocketUbusWeb("router") { silent }
+        val request = launch { web.post(poll(0)) }
+        delay(1)
+        request.cancelAndJoin()
+        assertTrue(silent.closed)
     }
 
     @Test

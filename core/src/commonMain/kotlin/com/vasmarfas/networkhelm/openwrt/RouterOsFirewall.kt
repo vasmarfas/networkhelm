@@ -18,7 +18,7 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
             listOf(ZONES),
             { listOf(Argument("name", ValueType.Text())) },
             { (zones) -> zones.map { Item(it.id, mapOf("name" to it["name"].orEmpty())) } },
-            add = { values -> base.add(path(ZONES), mapOf("name" to (values["name"] ?: required("name")), "input" to "ACCEPT", "output" to "ACCEPT", "forward" to "ACCEPT")) },
+            add = { values -> addZone(values["name"] ?: required("name")) },
             remove = { ids -> ids.forEach { removeZone(it) } },
         ),
         "interface/list/member" to LayerFace(
@@ -220,7 +220,7 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
         },
         set = { id, changes ->
             val redirect = rows(REDIRECTS).firstOrNull { it.id == id }
-            if (redirect != null) base.set(path(REDIRECTS), redirect.id, redirectOptions(changes)) else base.set(path(NATS), staticRow(NATS, id).id, natOptions(changes))
+            if (redirect != null) base.set(path(REDIRECTS), redirect.id, redirectOptions(changes, redirect["target"] == "SNAT")) else base.set(path(NATS), staticRow(NATS, id).id, natOptions(changes))
         },
         remove = { ids ->
             val redirects = rows(REDIRECTS).map { it.id }.toSet()
@@ -330,6 +330,12 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
         base.set(path(ZONES), zone.id, mapOf(option to (uciLines(zone[option]) - name).joinToString(LIST).ifEmpty { null }))
     }
 
+    // a new zone takes the policies of the defaults, as LuCI fills them in; one left without a policy has that of the defaults anyway
+    private suspend fun addZone(name: String): String {
+        val defaults = rows(DEFAULTS).firstOrNull()
+        return base.add(path(ZONES), mapOf("name" to name) + listOf("input", "output", "forward").mapNotNull { policy -> defaults?.get(policy)?.let { policy to it } })
+    }
+
     private suspend fun removeZone(id: String) {
         val zone = rows(ZONES).firstOrNull { it.id == id } ?: throw DeviceException(ErrorCategory.MissingItem, "no such interface list $id")
         val name = zone["name"]
@@ -395,7 +401,7 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
         if ("src-port" in values) put("src_port", values["src-port"]?.let(::uciPorts))
         if ("dst-port" in values) put("dest_port", values["dst-port"]?.let(::uciPorts))
         if ("comment" in values) put("name", values["comment"])
-        if ("disabled" in values) put("enabled", if (values["disabled"] == "true") "0" else null)
+        if ("disabled" in values) put("enabled", if (values["disabled"] in Flag) "0" else null)
     }
 
     private fun redirectValues(redirect: Item): Map<String, String> = buildMap {
@@ -413,16 +419,18 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
         put("disabled", "${redirect["enabled"] == "0"}")
     }
 
-    private fun redirectOptions(values: Map<String, String?>): Map<String, String?> = buildMap {
-        if ("in-interface-list" in values) put("src", values["in-interface-list"]?.let(::zone))
+    // a redirect of fw3 with the target SNAT matches the destination and rewrites the source, the other way round from DNAT
+    private fun redirectOptions(values: Map<String, String?>, snat: Boolean = false): Map<String, String?> = buildMap {
+        val (field, option) = if (snat) "out-interface-list" to "dest" else "in-interface-list" to "src"
+        if (field in values) put(option, values[field]?.let(::zone))
         if ("protocol" in values) put("proto", values["protocol"])
         if ("src-address" in values) put("src_ip", values["src-address"])
-        if ("dst-address" in values) put("src_dip", values["dst-address"])
-        if ("dst-port" in values) put("src_dport", values["dst-port"]?.let(::uciPorts))
-        if ("to-addresses" in values) put("dest_ip", values["to-addresses"])
-        if ("to-ports" in values) put("dest_port", values["to-ports"]?.let(::uciPorts))
+        if ("dst-address" in values) put(if (snat) "dest_ip" else "src_dip", values["dst-address"])
+        if ("dst-port" in values) put(if (snat) "dest_port" else "src_dport", values["dst-port"]?.let(::uciPorts))
+        if ("to-addresses" in values) put(if (snat) "src_dip" else "dest_ip", values["to-addresses"])
+        if ("to-ports" in values) put(if (snat) "src_dport" else "dest_port", values["to-ports"]?.let(::uciPorts))
         if ("comment" in values) put("name", values["comment"])
-        if ("disabled" in values) put("enabled", if (values["disabled"] == "true") "0" else null)
+        if ("disabled" in values) put("enabled", if (values["disabled"] in Flag) "0" else null)
     }
 
     private fun natValues(nat: Item): Map<String, String> = buildMap {
@@ -449,7 +457,7 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
         if ("to-addresses" in values) put("snat_ip", values["to-addresses"])
         if ("to-ports" in values) put("snat_port", values["to-ports"]?.let(::uciPorts))
         if ("comment" in values) put("name", values["comment"])
-        if ("disabled" in values) put("enabled", if (values["disabled"] == "true") "0" else null)
+        if ("disabled" in values) put("enabled", if (values["disabled"] in Flag) "0" else null)
     }
 
     private suspend fun staticRow(path: String, id: String?): Item =
@@ -457,6 +465,7 @@ internal class RouterOsFirewall(private val base: DeviceSession, private val row
 
     private companion object {
         const val ZONES = "firewall/zone"
+        const val DEFAULTS = "firewall/defaults"
         const val FORWARDINGS = "firewall/forwarding"
         const val RULES = "firewall/rule"
         const val RULESET = "status/firewall"

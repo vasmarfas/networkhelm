@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.openwrt
 
+import com.vasmarfas.networkhelm.ssh.ExecResult
 import com.vasmarfas.networkhelm.ssh.SshSession
 
 // uci -P commits nothing and sees the console drafts in /tmp/.uci too, so apply writes /etc/config itself
@@ -39,6 +40,7 @@ class ShellUci(private val ssh: SshSession) : Uci {
         batch(
             options.map { (option, value) -> "set $config.$section.$option=${quote(value)}" } +
                 lists.flatMap { (list, values) -> listOf("delete $config.$section.$list") + values.map { "add_list $config.$section.$list=${quote(it)}" } },
+            absent = lists.size,
         )
     }
 
@@ -65,6 +67,8 @@ class ShellUci(private val ssh: SshSession) : Uci {
         run("uci -P $DRAFT revert ${quote(config)}")
     }
 
+    // a /tmp with no room left cuts a file short without a word, so what is written there is compared with a second export
+    // before /etc/config is touched
     override suspend fun apply(rollbackSeconds: Int) {
         run(
             """
@@ -75,11 +79,12 @@ class ShellUci(private val ssh: SshSession) : Uci {
             for c in ${'$'}configs; do
                 [ -s "/tmp/.uci/${'$'}c" ] && { echo "the console of the router has edits of ${'$'}c that are not committed"; exit ${UbusStatus.PERMISSION_DENIED}; }
             done
+            written() { uci -P $DRAFT export "${'$'}1" | sed '1{/^package /d}'; }
             mkdir -p $APPLY
             for c in ${'$'}configs; do
-                cp "/etc/config/${'$'}c" "$APPLY/${'$'}c.old"
-                cp "$DRAFT/${'$'}c" "$APPLY/${'$'}c.draft"
-                uci -P $DRAFT export "${'$'}c" | sed '1{/^package /d}' > "$APPLY/${'$'}c.new"
+                cp "/etc/config/${'$'}c" "$APPLY/${'$'}c.old" && cp "$DRAFT/${'$'}c" "$APPLY/${'$'}c.draft" && written "${'$'}c" > "$APPLY/${'$'}c.new" &&
+                    [ -s "$APPLY/${'$'}c.new" ] && written "${'$'}c" | cmp -s - "$APPLY/${'$'}c.new" ||
+                    { rm -rf $APPLY; echo "the new ${'$'}c could not be written to /tmp, nothing is applied"; exit 1; }
             done
             for c in ${'$'}configs; do
                 cat "$APPLY/${'$'}c.new" > "/etc/config/${'$'}c"
@@ -100,22 +105,29 @@ class ShellUci(private val ssh: SshSession) : Uci {
         run("[ -d $APPLY ] || exit ${UbusStatus.NO_DATA}; kill \$(cat $APPLY/pid) 2>/dev/null; $RESTORE")
     }
 
-    private suspend fun batch(commands: List<String>) {
-        if (commands.isNotEmpty()) run("printf '%s\\n' ${quote(commands.joinToString("\n"))} | uci -P $DRAFT batch")
+    // uci batch ends with 0 whatever became of its commands and names each one that failed only on stderr;
+    // a list is deleted before it is filled anew, so as many deletes may find nothing as there are lists
+    private suspend fun batch(commands: List<String>, absent: Int = 0) {
+        if (commands.isEmpty()) return
+        val result = ssh.exec("mkdir -p $DRAFT; printf '%s\\n' ${quote(commands.joinToString("\n"))} | uci -P $DRAFT batch")
+        val failed = result.error.lines().filter { it.isNotBlank() }
+        if (result.exitStatus != 0 || failed.count { it.endsWith(NO_ENTRY) } > absent || failed.any { !it.endsWith(NO_ENTRY) }) throw failure(result)
     }
 
     private suspend fun run(command: String): String {
         val result = ssh.exec("mkdir -p $DRAFT; $command")
-        if (result.exitStatus != 0) {
-            val printed = (result.output + result.error).trim()
-            val status = when {
-                result.exitStatus == UbusStatus.NO_DATA || result.exitStatus == UbusStatus.PERMISSION_DENIED -> result.exitStatus
-                printed.endsWith("Entry not found") -> UbusStatus.NOT_FOUND
-                else -> UbusStatus.UNKNOWN_ERROR
-            }
-            throw UbusException(status, printed.ifEmpty { "uci exited with ${result.exitStatus}" })
-        }
+        if (result.exitStatus != 0) throw failure(result)
         return result.output
+    }
+
+    private fun failure(result: ExecResult): UbusException {
+        val printed = (result.output + result.error).trim()
+        val status = when {
+            result.exitStatus == UbusStatus.NO_DATA || result.exitStatus == UbusStatus.PERMISSION_DENIED -> result.exitStatus
+            printed.endsWith(NO_ENTRY) -> UbusStatus.NOT_FOUND
+            else -> UbusStatus.UNKNOWN_ERROR
+        }
+        return UbusException(status, printed.ifEmpty { "uci exited with ${result.exitStatus}" })
     }
 
     private class Exported(val type: String, val anonymous: Boolean) {
@@ -126,6 +138,7 @@ class ShellUci(private val ssh: SshSession) : Uci {
     private companion object {
         const val DRAFT = "/tmp/rd-uci"
         const val APPLY = "/tmp/rd-apply"
+        const val NO_ENTRY = "Entry not found"
 
         const val RESTORE = "for old in $APPLY/*.old; do c=\${old##*/}; c=\${c%.old}; cat \"\$old\" > \"/etc/config/\$c\"; " +
             "cp \"$APPLY/\$c.draft\" \"$DRAFT/\$c\"; done; rm -rf $APPLY; reload_config"

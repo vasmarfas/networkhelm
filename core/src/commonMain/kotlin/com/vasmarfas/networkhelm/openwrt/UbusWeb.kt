@@ -9,7 +9,12 @@ import com.vasmarfas.networkhelm.transport.httpExchange
 import com.vasmarfas.networkhelm.transport.httpLines
 import com.vasmarfas.networkhelm.transport.keepsAlive
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -20,6 +25,7 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
+import kotlin.time.Duration.Companion.minutes
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
 import kotlin.time.TimeSource
@@ -68,7 +74,7 @@ class SocketUbusWeb(
 
     private suspend fun exchange(connection: BufferedStream, headers: Map<String, String>, body: ByteArray, reading: Boolean): HttpResponse? {
         val answer = try {
-            httpExchange(connection, host, "POST", "/ubus", headers, body)
+            inTime(connection) { httpExchange(connection, host, "POST", "/ubus", headers, body) }
         } catch (e: Throwable) {
             connection.close()
             if (!reading && e !is CancellationException && e is Exception && (e !is DeviceException || e.category == ErrorCategory.ConnectionLost)) throw RequestOutcomeUnknownException(e)
@@ -87,9 +93,33 @@ class SocketUbusWeb(
         return answer
     }
 
+    // a blocking read ends only when its connection is closed, which the time and a cancelled caller do;
+    // an answered connection stays open for the pool
+    private suspend fun inTime(connection: BufferedStream, request: suspend () -> HttpResponse?): HttpResponse? = coroutineScope {
+        var answered = false
+        val watchdog = launch(start = CoroutineStart.UNDISPATCHED) {
+            try {
+                delay(REQUEST_TIME)
+            } finally {
+                if (!answered) connection.close()
+            }
+        }
+        try {
+            request().also { answered = true }
+        } catch (e: Exception) {
+            ensureActive()
+            throw e
+        } finally {
+            watchdog.cancel()
+        }
+    }
+
     private companion object {
         const val MAX_REQUESTS = 3
         val MAX_IDLE = 15.seconds
+
+        // uhttpd gives a call of ubus 60 seconds (script_timeout), the rest is for the answer to come over a slow link
+        val REQUEST_TIME = 2.minutes
     }
 }
 

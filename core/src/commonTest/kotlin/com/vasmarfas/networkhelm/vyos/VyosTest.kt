@@ -10,9 +10,12 @@ import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.transport.AnsweringServer
+import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
 import com.vasmarfas.networkhelm.transport.TrustPolicy
 import com.vasmarfas.networkhelm.transport.httpReply
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.JsonArray
@@ -274,6 +277,31 @@ class VyosTest {
         assertEquals(ErrorCategory.ArgumentValue to "Commit failed: [ nat ]\nrd-test: translation address is required", failed.category to failed.message)
         val refused = assertFailsWith<DeviceException> { connectVyos(VyosLogin("192.0.2.1", "rd-test-wrong"), trust, server::open) }
         assertEquals(ErrorCategory.PermissionDenied, refused.category)
+    }
+
+    private class Silent : ByteStream {
+        private val closed = CompletableDeferred<Unit>()
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            closed.await()
+            return -1
+        }
+
+        override suspend fun write(bytes: ByteArray) = Unit
+
+        override fun close() {
+            closed.complete(Unit)
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aRouterThatGoesSilentIsWaitedForAsLongAsAReadOrACommitMayTake() = runTest {
+        val silent = HttpsVyos("192.0.2.1", "rd-test-key") { Silent() }
+        assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { silent.call("retrieve", JsonObject(emptyMap())) }.category)
+        assertEquals(120_000, testScheduler.currentTime)
+        assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { silent.call("configure", JsonObject(emptyMap())) }.category)
+        assertEquals(780_000, testScheduler.currentTime)
     }
 
     private companion object {

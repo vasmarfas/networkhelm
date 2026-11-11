@@ -847,11 +847,12 @@ class RouterOsLayer(private val base: DeviceSession) : DeviceSession by base {
         }.also { lacking = it }
     }
 
+    // over /ubus a config that no application of LuCI is installed for is denied to the session, not missing
     private suspend fun has(source: String) = try {
         base.describe(MenuPath.parse(source))
         true
     } catch (e: DeviceException) {
-        if (e.category != ErrorCategory.MissingItem) throw e
+        if (e.category != ErrorCategory.MissingItem && e.category != ErrorCategory.PermissionDenied) throw e
         false
     }
 

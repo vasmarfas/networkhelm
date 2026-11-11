@@ -22,9 +22,11 @@ import com.vasmarfas.networkhelm.routeros.schema.label
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.session.TextStore
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.session.polled
 import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.SshSession
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -270,7 +272,7 @@ class OpenWrtSession(
                     null
                 }
             }
-            kept ?: listOfNotNull(luciPack(app, menu, covered) { maps(forms, it) }).also { packs -> if (name != null) store?.write(name, keptJson.encodeToString(packList, packs)) }
+            kept ?: listOfNotNull(luciPack(app, menu, covered) { maps(forms, it) }).also { packs -> if (name != null) store?.keep(name, keptJson.encodeToString(packList, packs)) }
         }
     }
 
@@ -406,10 +408,16 @@ class OpenWrtSession(
             }
         }
 
-        // the count changes with an edit of this session and seldom from elsewhere
+        // the count changes with an edit of this session and seldom from elsewhere;
+        // a poll that failed is asked again, as a flow that ended with it would never count anew
         override val actions: Flow<Int> = flow {
             while (true) {
-                emit(deviceErrors { uci.changes().size })
+                val pending = try {
+                    deviceErrors { uci.changes().size }
+                } catch (e: DeviceException) {
+                    null
+                }
+                if (pending != null) emit(pending)
                 withTimeoutOrNull(pollInterval * PENDING_ROUNDS) { edits.first() }
             }
         }
@@ -472,5 +480,6 @@ internal fun Throwable.toDeviceException(): Throwable = when (this) {
         message.orEmpty(),
         this,
     )
-    else -> this
+    is DeviceException, is CancellationException, !is Exception -> this
+    else -> DeviceException(ErrorCategory.Api, message ?: this::class.simpleName.orEmpty(), this)
 }

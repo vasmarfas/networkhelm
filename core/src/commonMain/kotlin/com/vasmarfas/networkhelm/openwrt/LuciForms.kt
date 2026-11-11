@@ -3,13 +3,13 @@ package com.vasmarfas.networkhelm.openwrt
 import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.ValueType
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.intOrNull
-import kotlinx.serialization.json.jsonObject
 
 interface LuciForms {
     suspend fun views(): Map<String, List<String>>
@@ -125,8 +125,14 @@ private val markup = Regex("<[^>]+>")
 
 internal val luciJson = Json { ignoreUnknownKeys = true }
 
-internal fun menuNodes(app: String, menu: String): List<LuciNode> =
-    luciJson.parseToJsonElement(menu).jsonObject.mapNotNull { (path, entry) ->
+// LuCI passes over a menu file it cannot read as JSON
+internal fun menuNodes(app: String, menu: String): List<LuciNode> {
+    val entries = try {
+        luciJson.parseToJsonElement(menu) as? JsonObject
+    } catch (e: SerializationException) {
+        null
+    }
+    return entries.orEmpty().mapNotNull { (path, entry) ->
         val node = entry as? JsonObject ?: return@mapNotNull null
         val action = node["action"] as? JsonObject
         val depends = node["depends"] as? JsonObject
@@ -142,6 +148,7 @@ internal fun menuNodes(app: String, menu: String): List<LuciNode> =
             uci = depends?.get("uci"),
         )
     }
+}
 
 internal fun configsOfView(source: String): Set<String> = (mapCall.findAll(source) + ownConfig.findAll(source)).map { it.groupValues[1] }.toSet()
 

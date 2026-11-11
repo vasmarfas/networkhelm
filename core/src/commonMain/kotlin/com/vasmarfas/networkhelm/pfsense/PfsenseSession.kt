@@ -22,6 +22,7 @@ import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.session.polled
 import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.transport.TrustPolicy
+import com.vasmarfas.networkhelm.transport.openTlsTrusted
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
@@ -321,7 +322,7 @@ private fun uptime(text: String): String = Regex("""(\d+) (Day|Hour|Minute|Secon
 class PfsenseLogin(val host: String, val user: String, val secret: String, val port: Int = 443)
 
 suspend fun connectPfsense(login: PfsenseLogin, trust: TrustPolicy): PfsenseSession {
-    val api = HttpsPfsense(login.host, login.port, login.user, login.secret, trust)
+    val api = HttpsPfsense(login.host, login.user, login.secret) { openTlsTrusted(login.host, login.port, trust) }
     val hostname = api.call("GET", "system/hostname", emptyMap(), null) as? JsonObject
     val version = api.call("GET", "system/version", emptyMap(), null) as? JsonObject
     val status = api.call("GET", "status/system", emptyMap(), null) as? JsonObject

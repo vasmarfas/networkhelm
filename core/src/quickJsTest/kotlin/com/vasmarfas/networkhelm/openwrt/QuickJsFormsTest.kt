@@ -4,11 +4,13 @@ import com.vasmarfas.networkhelm.model.DeviceException
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonPrimitive
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
@@ -56,13 +58,47 @@ class QuickJsFormsTest {
     @Test
     fun javascriptAllocationsCannotGrowPastTheRuntimeLimit() = runTest {
         val view = "var values = []; for (var i = 0; i < 1000000; i++) values.push('xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx' + i);"
-        assertFailsWith<Exception> { QuickJsForms(router(view, emptyMap()), null, memoryLimit = 512 * 1024).maps("rdtest/large") }
+        val refused = assertFailsWith<DeviceException> { QuickJsForms(router(view, emptyMap()), null, memoryLimit = 512 * 1024).maps("rdtest/large") }
+        assertContains(refused.message.orEmpty(), "out of memory")
     }
 
     @Test
     fun aPageThatFailsToEvaluateIsLeftWithoutAForm() = runTest {
         val view = "'require view'; return view.extend({load: function() { return null.packages; }});"
         assertEquals(emptyList<LuciMap>(), QuickJsForms(router(view, emptyMap()), null).maps("rdtest/broken"))
+    }
+
+    @Test
+    fun aPageThatDoesNotEndInItsTimeIsLeftWithoutAForm() = runTest {
+        val view = "'require view'; return view.extend({load: function() { while (true) {} }});"
+        assertEquals(emptyList<LuciMap>(), QuickJsForms(router(view, emptyMap()), null, timeLimit = 2_000).maps("rdtest/endless"))
+    }
+
+    @Test
+    fun aPageWhoseSchemaCannotBeReadIsLeftWithoutAForm() = runTest {
+        val view = "'require view'; 'require form'; return view.extend({render: function() { var m = new form.Map('rdtest'); m.section(form.TypedSection, 'rule', { text: 'Rules' }); return m.render(); }});"
+        assertEquals(emptyList<LuciMap>(), QuickJsForms(router(view, emptyMap()), null).maps("rdtest/titled"))
+    }
+
+    @Test
+    fun menusAndViewsTheLoginMayNotReadLeaveNoForms() = runTest {
+        val ubus = object : Ubus {
+            override suspend fun call(obj: String, method: String, args: JsonObject): JsonObject = when ("$obj $method") {
+                "file list" -> JsonObject(mapOf("entries" to JsonArray(listOf(JsonObject(mapOf("name" to JsonPrimitive("luci-base.json")))))))
+                else -> throw UbusException(UbusStatus.PERMISSION_DENIED)
+            }
+
+            override suspend fun objects() = setOf("file", "uci")
+
+            override fun listen(vararg events: String): Flow<JsonObject> = emptyFlow()
+
+            override fun subscribe(obj: String): Flow<JsonObject> = emptyFlow()
+        }
+        val forms = QuickJsForms(ubus, null)
+        assertEquals(emptyList(), forms.menu())
+        assertEquals(emptyMap(), forms.views())
+        assertEquals(emptyList(), forms.maps("network/interfaces"))
+        assertEquals(emptyList(), forms.protocol("dhcp"))
     }
 
     private fun router(view: String, sections: Map<String, Map<String, String>>) = object : Ubus {

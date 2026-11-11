@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -31,18 +32,7 @@ class HttpUbus(private val user: String, private val password: String, private v
     private val lock = Mutex()
     private var session: String? = null
 
-    override suspend fun call(obj: String, method: String, args: JsonObject): JsonObject {
-        val used = session(null)
-        return try {
-            rpc(used, obj, method, args)
-        } catch (lapsed: SessionLapsed) {
-            try {
-                rpc(session(used), obj, method, args)
-            } catch (denied: SessionLapsed) {
-                throw UbusException(UbusStatus.PERMISSION_DENIED, denied.message.orEmpty())
-            }
-        }
-    }
+    override suspend fun call(obj: String, method: String, args: JsonObject): JsonObject = withSession { rpc(it, obj, method, args) }
 
     override suspend fun objects(): Set<String> = post("list", listOf(JsonPrimitive("*")))["result"]?.jsonObject?.keys.orEmpty()
 
@@ -50,17 +40,30 @@ class HttpUbus(private val user: String, private val password: String, private v
         throw UbusException(UbusStatus.NOT_SUPPORTED, "broadcast events of ubus are not sent over HTTP")
     }
 
-    override fun subscribe(obj: String): Flow<JsonObject> = flow {
+    override fun subscribe(obj: String): Flow<JsonObject> = flow { withSession { emitAll(events(obj, it)) } }
+
+    // uhttpd answers a session that has lapsed and one whose ACL lacks the call alike, and the UCI draft belongs to the session,
+    // so a new login is made only once the old session is gone
+    private suspend fun <T> withSession(request: suspend (String) -> T): T {
         val used = session(null)
-        try {
-            emitAll(events(obj, used))
-        } catch (lapsed: SessionLapsed) {
+        return try {
+            request(used)
+        } catch (denied: Denied) {
+            if (lives(used)) throw UbusException(UbusStatus.PERMISSION_DENIED, denied.message.orEmpty())
             try {
-                emitAll(events(obj, session(used)))
-            } catch (denied: SessionLapsed) {
-                throw UbusException(UbusStatus.PERMISSION_DENIED, denied.message.orEmpty())
+                request(session(used))
+            } catch (again: Denied) {
+                throw UbusException(UbusStatus.PERMISSION_DENIED, again.message.orEmpty())
             }
         }
+    }
+
+    // any session that lives may ask session access
+    private suspend fun lives(sid: String) = try {
+        rpc(sid, "session", "access", JsonObject(mapOf("object" to JsonPrimitive("session"), "function" to JsonPrimitive("access"))))
+        true
+    } catch (e: Denied) {
+        false
     }
 
     // a subscription the session may not have gets 200 and a JSON-RPC error in place of the events
@@ -92,7 +95,7 @@ class HttpUbus(private val user: String, private val password: String, private v
         val credentials = JsonObject(mapOf("username" to JsonPrimitive(user), "password" to JsonPrimitive(password)))
         val answer = try {
             rpc(ANONYMOUS, "session", "login", credentials)
-        } catch (e: SessionLapsed) {
+        } catch (e: Denied) {
             throw UbusException(UbusStatus.PERMISSION_DENIED, e.message.orEmpty())
         }
         return answer["ubus_rpc_session"]?.jsonPrimitive?.contentOrNull
@@ -122,7 +125,11 @@ class HttpUbus(private val user: String, private val password: String, private v
             throw lost(e)
         }
         if (response.status != 200) throw UbusException(UbusStatus.NOT_SUPPORTED, "the web server answers /ubus with HTTP ${response.status}")
-        val answer = Json.parseToJsonElement(response.body.decodeToString()).jsonObject
+        val answer = try {
+            Json.parseToJsonElement(response.body.decodeToString()) as? JsonObject
+        } catch (e: SerializationException) {
+            null
+        } ?: throw UbusException(UbusStatus.NOT_SUPPORTED, "the web server answers /ubus with no JSON-RPC")
         answer["error"]?.jsonObject?.let { throw error(it) }
         return answer
     }
@@ -130,7 +137,7 @@ class HttpUbus(private val user: String, private val password: String, private v
     private fun error(error: JsonObject): Exception {
         val message = error["message"]?.jsonPrimitive?.contentOrNull.orEmpty()
         return when (error["code"]?.jsonPrimitive?.intOrNull) {
-            -32001, -32002 -> SessionLapsed(message)
+            -32001, -32002 -> Denied(message)
             -32000 -> UbusException(UbusStatus.NOT_FOUND, message)
             -32003 -> UbusException(UbusStatus.TIMEOUT, message)
             -32601 -> UbusException(UbusStatus.METHOD_NOT_FOUND, message)
@@ -141,7 +148,7 @@ class HttpUbus(private val user: String, private val password: String, private v
 
     private fun lost(e: Throwable) = e as? DeviceException ?: DeviceException(ErrorCategory.ConnectionLost, e.message ?: e::class.simpleName.orEmpty(), e)
 
-    private class SessionLapsed(message: String) : Exception(message)
+    private class Denied(message: String) : Exception(message)
 
     private companion object {
         const val ANONYMOUS = "00000000000000000000000000000000"

@@ -94,7 +94,7 @@ After that connect over API-SSL; the program asks about the fingerprint of the c
 Pick the OpenWrt platform. There are two ways:
 
 - SSH, port 22. It needs the root password or a key. On a freshly flashed router you set the password in LuCI, under System, Administration.
-- ubus over HTTP (port 80) or HTTPS (port 443). It needs LuCI with the ubus module of the web server and rpcd; you log in as root with its password.
+- ubus over HTTP (port 80) or HTTPS (port 443). It needs LuCI with the ubus module of the web server and rpcd; you log in as root with its password. Such a login gets what the ACL of LuCI allows. The windows of DHCP leases, ARP and wireless clients answer "Permission denied", the forms show the options without the types and hints that LuCI gives them, and the parts whose config no installed application of LuCI names are left out of the menu. The ACL file of the [OpenWrt package](server/README.md#directly-on-an-openwrt-router) lifts all of that, and so does a login over SSH.
 
 At the top of the main window you can switch the menu view: "OpenWrt view", "Unified view" (the menus the program has for any router) and "LuCI view".
 

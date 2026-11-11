@@ -21,6 +21,7 @@ import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.session.polled
 import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.transport.TrustPolicy
+import com.vasmarfas.networkhelm.transport.openTlsTrusted
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -497,7 +498,7 @@ private fun body(grid: Grid, values: Map<String, String?>) = JsonObject(mapOf(gr
 class OpnsenseLogin(val host: String, val key: String, val secret: String, val port: Int = 443)
 
 suspend fun connectOpnsense(login: OpnsenseLogin, trust: TrustPolicy): OpnsenseSession {
-    val api = HttpsOpnsense(login.host, login.port, login.key, login.secret, trust)
+    val api = HttpsOpnsense(login.host, login.key, login.secret) { openTlsTrusted(login.host, login.port, trust) }
     val information = api.call("GET", "diagnostics/system/system_information", null) as? JsonObject
         ?: throw DeviceException(ErrorCategory.Api, "System Information of OPNsense answered no object")
     val product = (information["versions"] as? JsonArray)?.firstOrNull()?.let(::flat).orEmpty().removePrefix("OPNsense").trim()

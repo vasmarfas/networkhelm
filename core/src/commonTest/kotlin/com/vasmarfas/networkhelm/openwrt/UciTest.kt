@@ -24,6 +24,21 @@ class UciTest {
     }
 
     @Test
+    fun aConfigTheLoginMayNotReadIsNotThereToIt() = runTest {
+        val ubus = object : Ubus {
+            override suspend fun call(obj: String, method: String, args: JsonObject): JsonObject = throw UbusException(UbusStatus.PERMISSION_DENIED)
+
+            override suspend fun objects() = setOf("uci")
+
+            override fun listen(vararg events: String): Flow<JsonObject> = emptyFlow()
+
+            override fun subscribe(obj: String): Flow<JsonObject> = emptyFlow()
+        }
+        assertEquals(UbusStatus.NOT_FOUND, assertFailsWith<UbusException> { RpcdUci(ubus).sections("sqm") }.status)
+        assertEquals(UbusStatus.PERMISSION_DENIED, assertFailsWith<UbusException> { RpcdUci(ubus).set("sqm", "eth1", mapOf("enabled" to "1"), emptyMap()) }.status)
+    }
+
+    @Test
     fun onlyALapsedSessionIsReplaced() = runTest {
         var known = setOf("s1", "s2")
         var denied = setOf("s1")

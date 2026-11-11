@@ -105,7 +105,9 @@ class ConsoleClientLabTest {
         val rows = assertIs<ListEvent.Snapshot>(events.last()).items
         assertEquals(2500, rows.map { it.id }.toSet().size)
         assertTrue(rows.all { it["list"] == "rd-test-console" && it["address"].orEmpty().startsWith("10.99.") })
-        assertEquals(listOf(ListEvent.Progress(2000, 2500), ListEvent.Progress(2500, 2500)), events.dropLast(1))
+        // a router with the memory for it gives the table at once after its count, another one a portion at a time
+        val portions = listOf(ListEvent.Progress(2000, 2500), ListEvent.Progress(2500, 2500))
+        assertTrue(events.dropLast(1) in listOf(listOf(ListEvent.Progress(0, 2500)), listOf(ListEvent.Progress(0, 2500)) + portions), events.dropLast(1).toString())
         val safe = assertNotNull(session.safeMode)
         assertTrue(safe.enter())
         assertEquals(2500, withTimeout(60.seconds) { session.watch(list, filter).filterIsInstance<ListEvent.Snapshot>().first() }.items.size)

@@ -123,8 +123,14 @@ internal fun packageDatabase(text: String): Map<String, String> = text.split("\n
 }.toMap()
 
 internal suspend fun listFiles(ubus: Ubus, objects: Set<String>, ssh: SshSession?, path: String): List<String> = when {
-    "file" in objects -> ubus.call("file", "list", JsonObject(mapOf("path" to JsonPrimitive(path))))["entries"]?.jsonArray.orEmpty()
-        .mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull }
+    "file" in objects -> try {
+        ubus.call("file", "list", JsonObject(mapOf("path" to JsonPrimitive(path))))["entries"]?.jsonArray.orEmpty()
+            .mapNotNull { it.jsonObject["name"]?.jsonPrimitive?.contentOrNull }
+    } catch (e: UbusException) {
+        // a router without LuCI has no directory of its menus
+        if (e.status != UbusStatus.NOT_FOUND) throw e
+        emptyList()
+    }
     ssh != null -> ssh.exec("ls ${quote(path)} 2>/dev/null").output.lines().filter { it.isNotBlank() }
     else -> emptyList()
 }
