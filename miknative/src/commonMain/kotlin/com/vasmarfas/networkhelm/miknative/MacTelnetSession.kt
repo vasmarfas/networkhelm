@@ -134,7 +134,13 @@ class MacTelnetSession internal constructor(
 
     private fun keepAlive() {
         stateLock.locked {
-            if (state == State.READY && now() - lastSent >= keepAliveMillis) acknowledge(expectedInCounter)
+            if (state == State.READY && now() - lastSent >= keepAliveMillis) {
+                try {
+                    acknowledge(expectedInCounter)
+                } catch (e: Exception) {
+                    fail(e)
+                }
+            }
         }
     }
 

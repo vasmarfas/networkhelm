@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
@@ -139,6 +140,39 @@ class MacTelnetShellsTest {
             ssh.shell("vt102", 80, 24).banner()
             val before = router.acknowledgements
             until { router.acknowledgements >= before + 3 }
+        } finally {
+            ssh.close()
+        }
+    }
+
+    @Test
+    fun aKeepAliveTheNetworkDoesNotTakeEndsTheSessionAndNotItsScope() = runBlocking {
+        val router = router()
+        var down = false
+        val link = object : MacTelnetTransport by router {
+            override fun send(bytes: ByteArray, destination: String, port: Int) {
+                if (down) throw IOException("Network is unreachable")
+                router.send(bytes, destination, port)
+            }
+        }
+        val ssh = connectMacTelnet(
+            destinationMac = serverMac,
+            user = "admin",
+            password = "secret",
+            scope = this,
+            sourceMac = clientMac,
+            transport = link,
+            destinationAddress = "127.0.0.1",
+            timeoutMillis = 5_000L,
+            keepAliveMillis = 50L,
+        )
+        try {
+            val shell = ssh.shell("vt102", 100, 40)
+            shell.banner()
+            until { router.lastTerminalWidth == 100 && router.lastTerminalHeight == 40 }
+            down = true
+            val failure = assertFailsWith<IOException> { withTimeout(2_000L) { shell.read(ByteArray(16), 0, 16) } }
+            assertEquals("Network is unreachable", failure.message)
         } finally {
             ssh.close()
         }

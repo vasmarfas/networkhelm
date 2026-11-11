@@ -39,6 +39,7 @@ import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.Login
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.session.recognize
 import com.vasmarfas.networkhelm.snmp.AuthProtocol
 import com.vasmarfas.networkhelm.snmp.PrivProtocol
@@ -258,18 +259,22 @@ class ConnectState(
 
     init {
         if (services.typedMac) scope.launch { services.storage.read(OWN_MAC)?.let(ownMac::setTextAndPlaceCursorAtEnd) }
-        scope.launch {
-            snapshotFlow { address.text.toString() }.collect { text ->
-                val isMac = isMacAddress(text.trim())
-                if (isMac && services.connectMacTelnet != null) {
-                    kind = DeviceKind.RouterOs
-                    protocol = Access.MacTelnet
-                } else if (protocol == Access.MacTelnet && !isMac) {
-                    protocol = firstOpen(DeviceKind.RouterOs)
+    }
+
+    // the scope of the form lives as long as the app, so what follows the fields runs in the effect of the screen and ends with it
+    suspend fun follow() {
+        coroutineScope {
+            launch {
+                snapshotFlow { address.text.toString() }.collect { text ->
+                    val isMac = isMacAddress(text.trim())
+                    if (isMac && services.connectMacTelnet != null) {
+                        kind = DeviceKind.RouterOs
+                        protocol = Access.MacTelnet
+                    } else if (protocol == Access.MacTelnet && !isMac) {
+                        protocol = firstOpen(DeviceKind.RouterOs)
+                    }
                 }
             }
-        }
-        scope.launch {
             snapshotFlow { protocol }.collect { chosen ->
                 if (chosen == Access.Snmp) {
                     if (password.text.isEmpty()) {
@@ -287,6 +292,10 @@ class ConnectState(
 
     private var attempt: Job? = null
     private var declined = false
+
+    // the address and the user whose secrets the form has seen in the store: a secret of another router may be one
+    // the store failed to give, so an unticked box takes none of them out
+    private var recalled: Pair<String, String>? = null
 
     fun fill(router: SavedRouter): Job {
         address.setTextAndPlaceCursorAtEnd(router.address)
@@ -308,6 +317,7 @@ class ConnectState(
         protocolPicked = true
         encoding = router.encoding
         remember = false
+        recalled = null
         problem = null
         return scope.launch {
             secretly { secrets ->
@@ -321,6 +331,7 @@ class ConnectState(
                     if (storedPassphrase != null) passphrase.setTextAndPlaceCursorAtEnd(storedPassphrase)
                     if (storedPrivacy != null) privacy.setTextAndPlaceCursorAtEnd(storedPrivacy)
                     remember = stored != null || storedKey != null
+                    recalled = router.address to router.user
                 }
             }
         }
@@ -465,32 +476,42 @@ class ConnectState(
                 val nativePort = if (jump == null || routerOs == null) null else jump.tunnel(host, 8291)
                 val openWrt = access.openWrt
                 fun loginWith(password: String) = routerOs?.let { RouterOsLogin(toHost, name, password, it, toPort, encoding, chosen?.second, byAgent, sshPort, phrase, webPort, nativePort) }
-                val login = loginWith(secret)
-                val session = when {
-                    access == Access.MacTelnet -> {
-                        val connector = services.connectMacTelnet
-                            ?: throw DeviceException(ErrorCategory.Unsupported, "MAC-Telnet")
-                        connector(typed, name, secret, if (services.typedMac) ownMac.text.toString().trim() else selectedInterface.ifEmpty { null }, encoding, scope + Dispatchers.Default)
+                suspend fun openWith(password: String): DeviceSession {
+                    val login = loginWith(password)
+                    return when {
+                        access == Access.MacTelnet -> {
+                            val connector = services.connectMacTelnet
+                                ?: throw DeviceException(ErrorCategory.Unsupported, "MAC-Telnet")
+                            connector(typed, name, password, if (services.typedMac) ownMac.text.toString().trim() else selectedInterface.ifEmpty { null }, encoding, scope + Dispatchers.Default)
+                        }
+                        access == Access.Tcp8291 -> {
+                            val connector = services.connectTcp8291
+                                ?: throw DeviceException(ErrorCategory.Unsupported, "TCP 8291")
+                            connector(toHost, toPort, name, password, encoding, scope + Dispatchers.Default)
+                        }
+                        login != null -> services.connect(login, reach, scope + Dispatchers.Default)
+                        openWrt != null -> services.connectOpenWrt(OpenWrtLogin(toHost, name, password, openWrt, toPort, chosen?.second, byAgent, sshPort, phrase), reach)
+                        else -> services.connectLogin(other(access, toHost, toPort, name, password, chosen?.second, byAgent, phrase, snmp), reach)
                     }
-                    access == Access.Tcp8291 -> {
-                        val connector = services.connectTcp8291
-                            ?: throw DeviceException(ErrorCategory.Unsupported, "TCP 8291")
-                        connector(toHost, toPort, name, secret, encoding, scope + Dispatchers.Default)
-                    }
-                    login != null -> services.connect(login, reach, scope + Dispatchers.Default)
-                    openWrt != null -> services.connectOpenWrt(OpenWrtLogin(toHost, name, secret, openWrt, toPort, chosen?.second, byAgent, sshPort, phrase), reach)
-                    else -> services.connectLogin(other(access, toHost, toPort, name, secret, chosen?.second, byAgent, phrase, snmp), reach)
                 }
-                if (access == Access.MacTelnet && services.typedMac) services.storage.write(OWN_MAC, ownMac.text.toString().trim())
+                val first = openWith(secret)
+                if (access == Access.MacTelnet && services.typedMac) services.storage.keep(OWN_MAC, ownMac.text.toString().trim())
                 val renewed = try {
-                    val new = if (session.passwordExpired) renew(session, secret) else null
+                    val new = if (first.passwordExpired) renew(first, secret) else null
                     remembered(typed, name, new ?: secret, chosen, phrase, hidden)
-                    new
+                    // the form has the password the router now takes, also when the login with it does not get through
+                    new?.also(password::setTextAndPlaceCursorAtEnd)
                 } catch (e: Throwable) {
-                    session.close()
+                    first.close()
                     throw e
                 }
-                onConnected(jump?.let { JumpedSession(session, it) } ?: session, typed, (renewed?.let { loginWith(it) } ?: login).takeIf { jump == null })
+                // a session logs in again with the password it was opened with: for its console over the WinBox port and MAC-Telnet,
+                // for SSH beside the API and after a break of the link, so one opened with the old password gives way to a new one
+                val session = if (renewed == null) first else {
+                    first.close()
+                    openWith(renewed)
+                }
+                onConnected(jump?.let { JumpedSession(session, it) } ?: session, typed, loginWith(renewed ?: secret).takeIf { jump == null })
             } catch (e: CancellationException) {
                 jump?.close()
                 throw e
@@ -583,16 +604,14 @@ class ConnectState(
             problem = Problem.Address
             return
         }
-        try {
+        keeping {
             saved.save(router)
             remembered(router.address, router.user, password.text.toString(), key, passphrase.text.toString().takeIf { keyEncrypted }, snmpPrivacy)
-        } catch (e: IllegalStateException) {
-            problem = Problem.SavedList(saved.failure?.message ?: e.message.orEmpty())
         }
     }
 
     suspend fun remove(router: SavedRouter) {
-        try {
+        keeping {
             saved.remove(router)
             secretly { secrets ->
                 secrets.delete(passwordKey(router.address, router.user))
@@ -600,8 +619,17 @@ class ConnectState(
                 secrets.delete(sshPassphraseKey(router.address, router.user))
                 secrets.delete(snmpPrivacyKey(router.address, router.user))
             }
-        } catch (e: IllegalStateException) {
-            problem = Problem.SavedList(saved.failure?.message ?: e.message.orEmpty())
+        }
+    }
+
+    // a list whose file is not read or not written stays as it was, and the screen tells why in the words of the system
+    private suspend fun keeping(block: suspend () -> Unit) {
+        try {
+            block()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            problem = Problem.SavedList(saved.failure?.message ?: e.message ?: e.toString())
         }
     }
 
@@ -633,7 +661,7 @@ class ConnectState(
         var taken = 0
         var skipped = 0
         val sessions = mutableListOf<WinBoxSession>()
-        try {
+        keeping {
             for (file in files) {
                 val bytes = contents(file) ?: continue
                 val book = try {
@@ -670,12 +698,10 @@ class ConnectState(
                     val kind = cell("protocol")?.let { name -> Access.entries.firstOrNull { it.name.equals(name, ignoreCase = true) } }
                     val known = saved.routers.value.firstOrNull { it.address == address && it.user == user } ?: SavedRouter(address, user)
                     saved.save(known.copy(protocol = kind ?: known.protocol, group = cell("group") ?: known.group, comment = cell("comment") ?: known.comment))
-                    cell("password")?.let { secret -> secretly { secrets -> secrets.put(passwordKey(address, user), secret) } }
+                    cell("password")?.takeIf { it.isNotEmpty() }?.let { secret -> secretly { secrets -> secrets.put(passwordKey(address, user), secret) } }
                     taken++
                 }
             }
-        } catch (e: IllegalStateException) {
-            problem = Problem.SavedList(saved.failure?.message ?: e.message.orEmpty())
         }
         if (sessions.isNotEmpty()) {
             winBox = winBoxBook(sessions)
@@ -695,7 +721,7 @@ class ConnectState(
     suspend fun importWinBox(book: WinBoxBook) {
         winBox = null
         var taken = 0
-        try {
+        keeping {
             for (row in book.rows.filter { it.ticked }) {
                 val router = row.router
                 val known = saved.routers.value.firstOrNull { it.address == router.address && it.user == router.user }
@@ -703,8 +729,6 @@ class ConnectState(
                 if (book.passwords && row.session.password.isNotEmpty()) secretly { secrets -> secrets.put(passwordKey(router.address, router.user), row.session.password) }
                 taken++
             }
-        } catch (e: IllegalStateException) {
-            problem = Problem.SavedList(saved.failure?.message ?: e.message.orEmpty())
         }
         imported = taken to book.rows.size - taken + book.unusable
     }
@@ -738,6 +762,12 @@ class ConnectState(
         } catch (e: BookFormatException) {
             problem = Problem.BookInvalid
             return
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            // a platform without the cipher of a book, as iOS and Android before 8.0, says so with an exception of its own
+            problem = Problem.BookFile(e.message.orEmpty())
+            return
         }
         if (plain == null) {
             problem = Problem.BookPassword
@@ -749,12 +779,10 @@ class ConnectState(
             problem = Problem.BookInvalid
             return
         }
-        try {
+        keeping {
             for (router in contents.routers) saved.save(router)
             secretly { secrets -> for ((key, value) in contents.passwords) secrets.put(key, value) }
             imported = contents.routers.size to 0
-        } catch (e: IllegalStateException) {
-            problem = Problem.SavedList(saved.failure?.message ?: e.message.orEmpty())
         }
     }
 
@@ -772,10 +800,12 @@ class ConnectState(
         val sshKey = sshKeyKey(address, user)
         val phraseKey = sshPassphraseKey(address, user)
         val privacyKey = snmpPrivacyKey(address, user)
-        if (remember) secrets.put(passwordKey, password) else secrets.delete(passwordKey)
-        if (remember && key != null) secrets.put(sshKey, key.first + ":" + Base64.encode(key.second)) else secrets.delete(sshKey)
-        if (remember && key != null && phrase != null) secrets.put(phraseKey, phrase) else secrets.delete(phraseKey)
-        if (remember && privacy != null) secrets.put(privacyKey, privacy) else secrets.delete(privacyKey)
+        val seen = recalled == address to user
+        if (remember) secrets.put(passwordKey, password) else if (seen) secrets.delete(passwordKey)
+        if (remember && key != null) secrets.put(sshKey, key.first + ":" + Base64.encode(key.second)) else if (seen) secrets.delete(sshKey)
+        if (remember && key != null && phrase != null) secrets.put(phraseKey, phrase) else if (seen) secrets.delete(phraseKey)
+        if (remember && privacy != null) secrets.put(privacyKey, privacy) else if (seen) secrets.delete(privacyKey)
+        if (remember) recalled = address to user
     }
 
     private fun sshKeyOf(stored: String) = stored.substringBeforeLast(':') to Base64.decode(stored.substringAfterLast(':'))

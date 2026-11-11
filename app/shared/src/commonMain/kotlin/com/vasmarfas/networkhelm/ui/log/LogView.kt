@@ -52,6 +52,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -94,8 +95,7 @@ import com.vasmarfas.networkhelm.ui.kit.ListScrollBar
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.MenuPanel
 import com.vasmarfas.networkhelm.ui.kit.arrow
-import com.vasmarfas.networkhelm.ui.kit.copyClipboard
-import com.vasmarfas.networkhelm.ui.kit.writeText
+import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.main.WindowTab
 import com.vasmarfas.networkhelm.ui.table.TableLayout
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
@@ -133,8 +133,9 @@ import kotlin.time.Duration.Companion.seconds
 private sealed interface Line {
     val key: String
 
-    class Day(val date: String) : Line {
-        override val key: String = "day:$date"
+    // a router that lost its clock and found it again writes the same day twice, so a heading is told by the row under it
+    class Day(val date: String, row: String) : Line {
+        override val key: String = "day:$date:$row"
     }
 
     class Entry(val row: LogRow) : Line {
@@ -153,7 +154,7 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
     val saved = remember(layoutKey) { tables[layoutKey]?.log }
     val state = remember(path) { LogState().also { created -> saved?.let(created::restore) } }
     val scope = rememberCoroutineScope()
-    val clipboard = copyClipboard()
+    val copier = rememberCopier()
     val exchange = LocalFileExchange.current
     val windows = LocalLogWindows.current
     var refresh by remember { mutableIntStateOf(0) }
@@ -215,7 +216,7 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
                 for (row in rows) {
                     val date = row.last.stamp?.date
                     if (date != null && date != day) {
-                        add(Line.Day(date))
+                        add(Line.Day(date, row.key))
                         day = date
                     }
                     add(Line.Entry(row))
@@ -350,7 +351,7 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
         CopyKind.Json -> from.asJson()
     }
     fun copy(copied: String) {
-        if (copied.isNotEmpty()) scope.launch { clipboard.writeText(copied) }
+        if (copied.isNotEmpty()) copier.copy(copied)
     }
     fun save(kind: CopyKind) {
         val name = if (kind == CopyKind.Csv) "log.csv" else "log.txt"
@@ -394,7 +395,8 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
 
     fun onKey(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
-        val ctrl = event.isCtrlPressed || event.isMetaPressed
+        // AltGr comes as Ctrl with Alt on Windows, and it types letters
+        val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
         val shift = event.isShiftPressed
         val page = (list.layoutInfo.visibleItemsInfo.size - 1).coerceAtLeast(1)
         when {

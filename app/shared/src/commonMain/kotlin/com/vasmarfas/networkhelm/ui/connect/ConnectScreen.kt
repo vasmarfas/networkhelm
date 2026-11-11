@@ -295,6 +295,7 @@ fun ConnectScreen(
     onConnected: (DeviceSession, String, RouterOsLogin?) -> Unit,
 ) {
     val state = remember { ConnectState(services, saved, scope, questions) }
+    LaunchedEffect(state) { state.follow() }
     LaunchedEffect(state, probe) { if (probe) state.probe() }
     DisposableEffect(state) { onDispose { state.renewing?.skip() } }
     val ui = rememberCoroutineScope()
@@ -305,11 +306,13 @@ fun ConnectScreen(
     val store = LocalAppSettings.current
     val settings = LocalSettings.current
     val split = remember { SplitState().apply { first = settings.connectSplit?.dp } }
-    // the bar between the form and the lists is kept in the settings once it rests
-    LaunchedEffect(split) {
+    // the bar between the form and the lists is kept in the settings once it rests; the app reads them after its first frame,
+    // so the bar takes its place from them again once they are read
+    LaunchedEffect(split, store?.loaded) {
+        split.first = settings.connectSplit?.dp
         snapshotFlow { split.first }.drop(1).collectLatest { height ->
             delay(400)
-            store?.change { it.copy(connectSplit = height?.value) }
+            store?.arrange { it.copy(connectSplit = height?.value) }
         }
     }
     BoxWithConstraints(Modifier.fillMaxSize().background(palette.workspace).fileDrop { files -> ui.launch { state.openFiles(files, onConnected) } }, contentAlignment = Alignment.TopCenter) {
@@ -342,7 +345,7 @@ fun ConnectScreen(
                 onImport = { ui.launch { state.import(exchange.pick()) } },
                 onExport = { state.sealing = Sealing.Export },
                 beside = beside,
-                onPlace = if (wide) ({ ui.launch { store?.change { it.copy(listsBelow = !settings.listsBelow) } } }) else null,
+                onPlace = if (wide) ({ ui.launch { store?.arrange { it.copy(listsBelow = !settings.listsBelow) } } }) else null,
                 modifier = modifier.then(card),
             )
         }

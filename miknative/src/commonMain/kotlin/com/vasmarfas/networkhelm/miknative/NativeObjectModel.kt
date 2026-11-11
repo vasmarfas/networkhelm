@@ -109,7 +109,7 @@ private const val BOARD_FAMILY = 0x17
 private const val INFO_CAPABILITIES = 0x28
 private const val CAPABILITY_MASK = 0x6D
 
-class NativeObjectModel(private val connection: NativeConnection, private val owned: Boolean = true) : NativeObjects {
+class NativeObjectModel(private val connection: NativeConnection, private val owned: Boolean = true, private val time: TimeSource = TimeSource.Monotonic) : NativeObjects {
 
     private val lock = Mutex()
     // the numbers a read was asked for and the table did not have, as the all and the nothing of a field, are not asked for again until the table is read anew
@@ -138,16 +138,17 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
             )
             var last: TimeMark? = null
             var counted = false
-            var ended = false
+            var ended: TimeMark? = null
             // after the end the read waits out the group of removals; a router that marks nothing is read up to the number the console gave
-            fun done() = !ended && !counted && items.size >= expected
+            fun done() = ended == null && !counted && items.size >= expected
             try {
                 source.send(spec.handler, *subscription)
                 var credits = DUMP_CREDITS
                 var longest = Duration.ZERO
                 while (!done()) {
+                    // the wait for the removals runs from the end itself: the events of a table that keeps changing do not put it off
                     val wait = when {
-                        ended -> DUMP_SETTLE
+                        ended != null -> DUMP_SETTLE - ended.elapsedNow()
                         last == null -> DUMP_FIRST
                         else -> maxOf(DUMP_QUIET, longest * QUIET_GAPS)
                     }
@@ -155,11 +156,11 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
                     // a router that does not subscribe this window leaves it to getall
                     message.refusal()?.let { if (last == null) return@alone null else throw it }
                     if (message.number(ROW_COUNT) != null) counted = true
-                    if (message.number(STATE_END) == NO_ELEMENT) ended = true
+                    if (ended == null && message.number(STATE_END) == NO_ELEMENT) ended = time.markNow()
                     val objects = message.messages(RECORDS).orEmpty()
                     if (objects.isEmpty()) continue
                     last?.let { longest = maxOf(longest, it.elapsedNow()) }
-                    last = TimeSource.Monotonic.markNow()
+                    last = time.markNow()
                     // an event about a record the read already has brings the change of a moment later, the next read sees it
                     val fresh = ArrayList<M2Message>(objects.size)
                     for (record in objects) {
@@ -190,7 +191,7 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
                     source.close()
                 }
             }
-            if (ended) return@alone items.values.toList()
+            if (ended != null) return@alone items.values.toList()
             val end = items.keys.maxOrNull() ?: return@alone null
             val tail = records(spec.handler, null, spec.whole, end, spec.mask ?: GET_ALL_FLAGS).orEmpty().filter { (it.number(ELEMENT_ID) ?: end) > end }
             if (tail.isNotEmpty()) page(kept(spec, tail, items))
@@ -513,22 +514,21 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
             val opened = source.exchange(RESOURCES, M2Value.U8(OPEN_RESOURCE), RESOURCE_NAME to M2Value.Text(name))
             if (opened.refusal() != null) return null
             val handle = opened.number(ELEMENT_ID) ?: return null
-            val size = opened.number(RESOURCE_SIZE)?.takeIf { it <= RESOURCE_MOST }?.toInt() ?: return null
-            val data = ByteArray(size)
-            var at = 0
+            // a size of 64 bits may read as a negative number; the memory is taken as the parts come, not by the size the router names
+            val size = opened.number(RESOURCE_SIZE)?.takeIf { it in 0..RESOURCE_MOST }?.toInt() ?: return null
+            val data = ByteSink()
             var ended = false
             try {
-                while (at < size && !ended) {
-                    val part = source.request(RESOURCES, M2Value.U8(READ_RESOURCE), ELEMENT_ID to M2Value.U32(handle), RESOURCE_SIZE to M2Value.U32(minOf(RESOURCE_PART, size - at).toLong()))
-                    val bytes = part.raw(RESOURCE_DATA)?.takeIf { it.size <= size - at } ?: return null
-                    bytes.copyInto(data, at)
-                    at += bytes.size
+                while (data.size < size && !ended) {
+                    val part = source.request(RESOURCES, M2Value.U8(READ_RESOURCE), ELEMENT_ID to M2Value.U32(handle), RESOURCE_SIZE to M2Value.U32(minOf(RESOURCE_PART, size - data.size).toLong()))
+                    val bytes = part.raw(RESOURCE_DATA)?.takeIf { it.size <= size - data.size } ?: return null
+                    data.write(bytes)
                     ended = (part[RESOURCE_END] as? M2Value.Bool)?.value == true || bytes.isEmpty()
                 }
             } finally {
                 if (!ended) withContext(NonCancellable) { source.exchange(RESOURCES, M2Value.U8(CLOSE_RESOURCE), ELEMENT_ID to M2Value.U32(handle)) }
             }
-            return data.takeIf { at == size }
+            return if (data.size == size) data.toByteArray() else null
         } finally {
             source.close()
         }
@@ -631,7 +631,7 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
             val id = record.number(ELEMENT_ID) ?: return@mapNotNull null
             id to ref.keys.mapNotNull { key -> record.text(key)?.takeIf { it.isNotEmpty() } }.joinToString(ref.separator)
         }.toMap()
-        lock.withLock { kept[ref] = Triple(TimeSource.Monotonic.markNow(), fresh, wanted) }
+        lock.withLock { kept[ref] = Triple(time.markNow(), fresh, wanted) }
         return fresh
     }
 }
@@ -836,12 +836,22 @@ private fun number(field: PackNativeField, number: Long, named: Map<Long, String
         "clockdate" -> calendar(number)
         "dateandtime" -> calendar(number) + " " + clock(number, always = true)
         "timezone" -> offset(number)
-        "interval", "age" -> duration(if (scale == null) number else number / scale)
+        "interval", "age" -> if (scale == null) duration(number) else interval(number, scale)
         "fixedpoint", "decimal", "bigdecimal" -> scaled(number, scale)
         "integer" -> (if (number > Int.MAX_VALUE) number - (1L shl 32) else number).toString()
         else -> number.toString()
     }
     return written + field.postfix.orEmpty()
+}
+
+// the part of a second that the scale of a field keeps stands behind the seconds in milliseconds, as the console writes 1s500ms
+private fun interval(number: Long, scale: Int): String {
+    val millis = number % scale * 1_000 / scale
+    return when {
+        millis == 0L -> duration(number / scale)
+        number < scale -> "${millis}ms"
+        else -> duration(number / scale) + "${millis}ms"
+    }
 }
 
 private fun scaled(number: Long, scale: Int?): String {

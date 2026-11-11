@@ -1,10 +1,14 @@
 package com.vasmarfas.networkhelm.miknative
 
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.transport.ByteStream
 
 internal const val TAG_ENCRYPTED = 0x06
 private const val TAG_NEXT = 0xFF
 private const val CHUNK = 0xFF
+// a record takes 64 KiB at most and a frame holds a few of them; without a limit chunks that never end fill the memory
+private const val FRAME_MOST = 16 shl 20
 
 internal class Frame(val tag: Int, val payload: ByteArray)
 
@@ -37,6 +41,7 @@ internal class FrameReader(private val stream: ByteStream) {
             if (!readFully(header, 2, tag < 0)) return null
             val length = header[0].toInt() and 0xFF
             if (tag < 0) tag = header[1].toInt() and 0xFF
+            if (payload.size + length > FRAME_MOST) throw DeviceException(ErrorCategory.ConnectionLost, "a frame of the router is longer than $FRAME_MOST bytes")
             val chunk = ByteArray(length)
             readFully(chunk, length, false)
             payload.write(chunk)

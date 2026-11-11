@@ -122,7 +122,12 @@ private fun numberOf(field: PackNativeField, text: String, resolved: Map<Long, S
     val number = named(field, text, resolved)?.takeIf { field.kind != "set" } ?: when (field.kind) {
         "enm" -> named(field, text, resolved) ?: number(field, text.removeSuffix(field.postfix.orEmpty()), resolved)
         "set" -> bits(field, text)
-        "interval", "age" -> interval(field, text).let { seconds -> seconds * (field.scale?.takeIf { it > 1 } ?: 1) }
+        "interval", "age" -> {
+            val scale = field.scale?.takeIf { it > 1 } ?: 1
+            val steps = interval(field, text) * scale
+            if (steps % 1_000 != 0L) throw rejected(field, "does not take \"$text\": its step is ${1_000 / scale}ms")
+            steps / 1_000
+        }
         "clocktime" -> clock(field, text)
         "clockdate" -> epochDay(field, text.take(10)) * DAY_SECONDS
         "dateandtime" -> dateTime(field, text)
@@ -158,16 +163,16 @@ private fun bits(field: PackNativeField, text: String): Long = listed(text).fold
 private val routerOs = Regex("""(?:(\d+)w)?(?:(\d+)d)?(?:(\d+)h)?(?:(\d+)m(?!s))?(?:(\d+)s)?(?:(\d+)ms)?""")
 private val winBox = Regex("""(?:(\d+)d\s*)?(\d+):(\d{2}):(\d{2})""")
 
-// 1w2d3h4m5s as the console writes an interval, or 1d 02:03:04 as WinBox does, or seconds
+// 1w2d3h4m5s6ms as the console writes an interval, or 1d 02:03:04 as WinBox does, or seconds; counted in milliseconds
 private fun interval(field: PackNativeField, text: String): Long {
     val word = text.trim()
-    word.toLongOrNull()?.let { return it }
+    word.toLongOrNull()?.let { return it * 1_000 }
     winBox.matchEntire(word)?.destructured?.let { (days, hours, minutes, seconds) ->
-        return (days.toLongOrNull() ?: 0) * DAY_SECONDS + hours.toLong() * 3_600 + minutes.toLong() * 60 + seconds.toLong()
+        return ((days.toLongOrNull() ?: 0) * DAY_SECONDS + hours.toLong() * 3_600 + minutes.toLong() * 60 + seconds.toLong()) * 1_000
     }
     val parts = routerOs.matchEntire(word)?.takeIf { word.isNotEmpty() }?.destructured?.toList()?.map { it.toLongOrNull() ?: 0L }
         ?: throw rejected(field, "takes a time like 1d 02:03:04 or 1w2d3h, not \"$text\"")
-    return parts[0] * 604_800 + parts[1] * DAY_SECONDS + parts[2] * 3_600 + parts[3] * 60 + parts[4]
+    return (parts[0] * 604_800 + parts[1] * DAY_SECONDS + parts[2] * 3_600 + parts[3] * 60 + parts[4]) * 1_000 + parts[5]
 }
 
 private fun clock(field: PackNativeField, text: String): Long {

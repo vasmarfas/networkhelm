@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.ui.table
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.snapshotFlow
 import com.vasmarfas.networkhelm.app.Storage
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.ui.log.LogLayout
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
@@ -49,7 +50,7 @@ class TableLayouts(private val storage: Storage) {
         }
         snapshotFlow { layouts.toMap() }.drop(1).collectLatest { current ->
             delay(500)
-            storage.write(FILE, json.encodeToString(serializer, current))
+            storage.keep(FILE, json.encodeToString(serializer, current))
         }
     }
 

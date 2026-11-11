@@ -10,17 +10,14 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
 import com.vasmarfas.networkhelm.model.MenuPath
-import com.vasmarfas.networkhelm.ui.kit.copyClipboard
-import com.vasmarfas.networkhelm.ui.kit.writeText
+import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.workspace.WindowState
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
 import kotlin.time.Duration.Companion.seconds
 
 @Stable
@@ -54,8 +51,7 @@ val LocalLogWindows = staticCompositionLocalOf<LogWindows?> { null }
 
 @Composable
 internal fun LogEntryView(entry: LogEntryWindow, window: WindowState, windows: LogWindows) {
-    val clipboard = copyClipboard()
-    val scope = rememberCoroutineScope()
+    val copier = rememberCopier()
     val tick by produceState(0) {
         while (true) {
             delay(15.seconds)
@@ -72,7 +68,7 @@ internal fun LogEntryView(entry: LogEntryWindow, window: WindowState, windows: L
             now,
             onPrevious = if (entry.index > 0) ({ entry.index-- }) else null,
             onNext = if (entry.index < entry.rows.lastIndex) ({ entry.index++ }) else null,
-            onCopy = { text -> scope.launch { clipboard.writeText(text) } },
+            onCopy = { copier.copy(it) },
             modifier = Modifier.fillMaxSize(),
             onShow = { windows.show(entry.path, row.first.id) },
         )

@@ -12,10 +12,9 @@ internal class StreamKeys(val send: DirectionKeys, val receive: DirectionKeys)
 
 private const val SEND_LABEL = "On the client side, this is the send key; on the server side, it is the receive key."
 private const val RECEIVE_LABEL = "On the client side, this is the receive key; on the server side, it is the send key."
-private const val PEER_LABEL = "This is for peer challenge"
-private const val AUTHER_LABEL = "This is for auther challenge"
-private const val SHORT_CHALLENGE = 33
-private const val LONG_CHALLENGE = 49
+private const val CHALLENGE_SIZE = 49
+private const val UNKNOWN_NAME_SIZE = 33
+internal const val WRONG_LOGIN = "wrong user name or password"
 
 internal fun sha256(vararg parts: ByteArray): ByteArray = sha256Of(parts.fold(ByteArray(0)) { all, part -> all + part })
 
@@ -36,12 +35,8 @@ internal fun streamKeys(secret: ByteArray, server: Boolean): StreamKeys {
     )
 }
 
-// SHA-1 over a secret, 40 zero bytes, a label and 40 bytes of 0xF2, cut to 16 bytes: the seed of a key and the proof of the short login
-internal fun labelled(secret: ByteArray, label: String): ByteArray =
-    sha1(secret + ByteArray(40) + label.encodeToByteArray() + ByteArray(40) { 0xF2.toByte() }).copyOf(16)
-
 private fun keyMaterial(secret: ByteArray, label: String): ByteArray {
-    val seed = labelled(secret, label)
+    val seed = sha1(secret + ByteArray(40) + label.encodeToByteArray() + ByteArray(40) { 0xF2.toByte() }).copyOf(16)
     val prk = hmacSha1(ByteArray(64), seed)
     val out = ByteSink()
     var block = ByteArray(0)
@@ -90,23 +85,11 @@ internal class EcSrp5Client(
 
     fun hello(): ByteArray = user.encodeToByteArray() + byteArrayOf(0) + publicKey
 
-    fun confirm(challenge: ByteArray): ByteArray = when (challenge.size) {
-        SHORT_CHALLENGE -> confirmShort(challenge)
-        LONG_CHALLENGE -> confirmLong(challenge)
-        else -> throw DeviceException(ErrorCategory.Unsupported, "unexpected EC-SRP5 challenge of ${challenge.size} bytes")
-    }
-
-    // the answer without a salt: no mask, the key of the router times the verifier, and both sides prove it with a SHA-1 of the shared secret and the key of the other
-    private fun confirmShort(challenge: ByteArray): ByteArray {
-        val serverKey = WCurve.lift(Fe.fromBytes(challenge.copyOfRange(0, 32)), challenge[32].toInt() != 0) ?: throw unusable()
-        shared = WCurve.montgomeryX(WCurve.multiply(serverKey, passwordVerifier(account, password, ByteArray(0))) ?: throw unusable())
-        val sharedNumber = shared.withoutLeadingZeros()
-        secret = sharedNumber
-        expected = labelled(sharedNumber + publicKey, AUTHER_LABEL)
-        return labelled(sharedNumber + challenge, PEER_LABEL)
-    }
-
-    private fun confirmLong(challenge: ByteArray): ByteArray {
+    // a router answers a name it does not know with 33 bytes, a key without a salt; they get no proof,
+    // which would let whoever sent them try passwords offline
+    fun confirm(challenge: ByteArray): ByteArray {
+        if (challenge.size == UNKNOWN_NAME_SIZE) throw DeviceException(ErrorCategory.PermissionDenied, WRONG_LOGIN)
+        if (challenge.size != CHALLENGE_SIZE) throw DeviceException(ErrorCategory.Unsupported, "unexpected EC-SRP5 challenge of ${challenge.size} bytes")
         val serverX = challenge.copyOfRange(0, 32)
         val salt = challenge.copyOfRange(33, 49)
         val verifier = passwordVerifier(account, password, salt)

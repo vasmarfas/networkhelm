@@ -40,6 +40,12 @@ private const val TARGET_PASSWORD = 8
 private const val LOGOUT = 0xFE0014L
 private const val LINK_KEY = 0xFF0003L
 
+// a login the router ended without an answer, which is not the answer that refuses it
+private const val TOO_MANY = "too many concurrent logins"
+
+private class LoginDropped(message: String = "the router closed the connection during login", cause: Throwable? = null) :
+    DeviceException(ErrorCategory.PermissionDenied, message, cause)
+
 private class Registry(
     val sources: Map<Int, Channel<M2Message>> = emptyMap(),
     val last: Int = FIRST_SOURCE - 1,
@@ -170,25 +176,24 @@ class NativeConnection private constructor(
     }
 
     companion object {
-        // the router refuses a login while too many are in progress and drops sessions over its limit of 100
-        // by closing the connection, so a refusal is tried again before it is believed
+        // a router with too many logins at once says so or closes the connection, and such a login is tried again;
+        // a refusal of the name or the password is believed at once: a wrong password is tried once
         suspend fun open(host: String, user: String, password: String, scope: CoroutineScope, port: Int = DEFAULT_PORT): NativeConnection {
-            var refusal: DeviceException? = null
+            var dropped: LoginDropped? = null
             repeat(LOGIN_ATTEMPTS) { attempt ->
                 if (attempt > 0) delay(100L shl attempt)
                 val stream = openTcp(host, port)
                 try {
                     return open(stream, user, password, scope)
-                } catch (e: DeviceException) {
+                } catch (e: LoginDropped) {
                     stream.close()
-                    if (e.category != ErrorCategory.PermissionDenied) throw e
-                    refusal = e
+                    dropped = e
                 } catch (e: Exception) {
                     stream.close()
                     throw e
                 }
             }
-            throw checkNotNull(refusal)
+            throw checkNotNull(dropped)
         }
 
         suspend fun open(
@@ -206,7 +211,7 @@ class NativeConnection private constructor(
             } catch (e: DeviceException) {
                 throw e
             } catch (e: Exception) {
-                throw DeviceException(ErrorCategory.PermissionDenied, "the router closed the connection during login", e)
+                throw LoginDropped(cause = e)
             }
             return NativeConnection(stream, frames, SecureChannel(keys), scope)
         }
@@ -255,12 +260,15 @@ class NativeConnection private constructor(
             if (challenge.tag != TAG_ENCRYPTED) throw DeviceException(ErrorCategory.Unsupported, "the router does not speak EC-SRP5")
             stream.write(encodeFrame(TAG_ENCRYPTED, srp.confirm(challenge.payload)))
             val confirmation = frames.nextOrRefuse()
-            if (!srp.verify(confirmation.payload)) throw DeviceException(ErrorCategory.PermissionDenied, "wrong user name or password")
+            if (!srp.verify(confirmation.payload)) {
+                // the router refuses in words, and its limit of logins is the one refusal that the next try may not meet
+                if (TOO_MANY in confirmation.payload.decodeToString()) throw LoginDropped(TOO_MANY)
+                throw DeviceException(ErrorCategory.PermissionDenied, WRONG_LOGIN)
+            }
             return srp.keys()
         }
 
-        private suspend fun FrameReader.nextOrRefuse(): Frame =
-            next() ?: throw DeviceException(ErrorCategory.PermissionDenied, "the router closed the connection during login")
+        private suspend fun FrameReader.nextOrRefuse(): Frame = next() ?: throw LoginDropped()
     }
 }
 

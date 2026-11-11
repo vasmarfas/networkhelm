@@ -87,6 +87,12 @@ class HttpTest {
     }
 
     @Test
+    fun aNegativeLengthOfTheBodyOrOfAChunkIsAnErrorOfTheAnswer() = runTest {
+        assertFailsWith<DeviceException> { answer("HTTP/1.1 200 OK\r\nContent-Length: -2\r\n\r\n{}") }
+        assertFailsWith<DeviceException> { answer("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n-2\r\n{}\r\n0\r\n\r\n") }
+    }
+
+    @Test
     fun linesOfAnEndlessAnswerComeOneByOne() = runTest {
         val stream = CannedStream("HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n15\r\nevent: message\ndata: \r\n9\r\n{\"n\":1}\n\n\r\n0\r\n\r\n")
         val lines = httpLines({ stream }, "192.0.2.1", "/ubus/subscribe/log", mapOf("Authorization" to "Bearer 0f")).toList()

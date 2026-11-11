@@ -1,7 +1,12 @@
 package com.vasmarfas.networkhelm.ui.connect
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsActions
@@ -43,8 +48,10 @@ import com.vasmarfas.networkhelm.app.LocalAppSettings
 import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.app.MemorySecrets
 import com.vasmarfas.networkhelm.app.MemoryStorage
+import com.vasmarfas.networkhelm.app.RefusingStorage
 import com.vasmarfas.networkhelm.app.SavedRouter
 import com.vasmarfas.networkhelm.app.SavedRouters
+import com.vasmarfas.networkhelm.app.Secrets
 import com.vasmarfas.networkhelm.app.Services
 import com.vasmarfas.networkhelm.app.passwordKey
 import com.vasmarfas.networkhelm.app.snmpPrivacyKey
@@ -80,11 +87,13 @@ import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.winbox.WinBoxSession
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.job
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.io.IOException
@@ -239,6 +248,32 @@ class ConnectScreenTest {
         onNodeWithTag("import").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Imported: 1, skipped: 0")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(listOf(SavedRouter("192.0.2.24", "rd-test", Access.Api, "Лаборатория", "new", ApiEncoding.Windows1251, via = "192.0.2.1")), saved.routers.value)
+    }
+
+    @Test
+    fun anEmptyPasswordCellOfACsvLeavesTheStoredPasswordAsItIs() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val saved = SavedRouters(storage)
+        val secrets = MemorySecrets()
+        runBlocking {
+            saved.save(SavedRouter("192.0.2.25", "rd-test"))
+            secrets.put(passwordKey("192.0.2.25", "rd-test"), "rd-test-stored")
+        }
+        val services = Services(storage, MemoryTrustStore(), null, secrets) { _, _, _ -> router }
+        val exchange = object : FileExchange {
+            override suspend fun pick() = listOf(LocalFile("routers.csv") { "address,user,password,comment\n192.0.2.25,rd-test,,new\n".encodeToByteArray() })
+            override suspend fun save(name: String, bytes: ByteArray) = false
+        }
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+            }
+        }
+        onNodeWithTag("import").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Imported: 1, skipped: 0")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals("new", saved.routers.value.single().comment)
+        assertEquals("rd-test-stored", runBlocking { secrets.get(passwordKey("192.0.2.25", "rd-test")) })
     }
 
     private fun SkikoComposeUiTest.pickWinBox(saved: SavedRouters, secrets: MemorySecrets, sessions: List<WinBoxSession>, compact: Boolean = false) {
@@ -481,6 +516,63 @@ class ConnectScreenTest {
     }
 
     @Test
+    fun aStoredPasswordTheStoreDidNotGiveStaysInItAfterALoginWithATypedOne() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val saved = SavedRouters(storage)
+        val kept = MemorySecrets()
+        val secrets = object : Secrets by kept {
+            override suspend fun get(key: String): String? = throw IllegalStateException("the keyring is locked")
+        }
+        runBlocking {
+            saved.save(SavedRouter("192.0.2.49", "rd-test", Access.ApiSsl))
+            kept.put(passwordKey("192.0.2.49", "rd-test"), "rd-test-stored")
+        }
+        var login: RouterOsLogin? = null
+        val services = Services(storage, MemoryTrustStore(), null, secrets) { given, _, _ ->
+            login = given
+            router
+        }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.49")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("192.0.2.49").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The password store did not answer: the keyring is locked")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("password").performTextInput("rd-test-typed")
+        onNodeWithText("Connect").performClick()
+        waitUntil(timeoutMillis = 5_000) { login != null }
+        waitForIdle()
+        assertEquals("rd-test-typed", login?.password)
+        assertEquals("rd-test-stored", runBlocking { kept.get(passwordKey("192.0.2.49", "rd-test")) })
+    }
+
+    @Test
+    fun aStoredPasswordThatWasReadLeavesTheStoreOnceItsBoxIsUnticked() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val saved = SavedRouters(storage)
+        val secrets = MemorySecrets()
+        runBlocking {
+            saved.save(SavedRouter("192.0.2.50", "rd-test", Access.ApiSsl))
+            secrets.put(passwordKey("192.0.2.50", "rd-test"), "rd-test-stored")
+        }
+        var login: RouterOsLogin? = null
+        val services = Services(storage, MemoryTrustStore(), null, secrets) { given, _, _ ->
+            login = given
+            router
+        }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.50")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("192.0.2.50").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasSetTextAction() and hasText("rd-test-stored")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Remember the password").performClick()
+        onNodeWithText("Connect").performClick()
+        waitUntil(timeoutMillis = 5_000) { login != null }
+        waitForIdle()
+        assertEquals("rd-test-stored", login?.password)
+        assertNull(runBlocking { secrets.get(passwordKey("192.0.2.50", "rd-test")) })
+    }
+
+    @Test
     fun theListsStandBesideAWideFormAndUnderItKeepTheirPlaceAsTheFormGrows() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
@@ -521,6 +613,31 @@ class ConnectScreenTest {
     }
 
     @Test
+    fun theBarUnderTheFormTakesItsPlaceFromTheSettingsThatAreReadAfterTheFirstFrame() = runDesktopComposeUiTest(900, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        runBlocking { AppSettings(storage).change { it.copy(connectSplit = 140f) } }
+        val settings = AppSettings(storage)
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        var screen by mutableIntStateOf(0)
+        setContent {
+            CompositionLocalProvider(LocalSettings provides settings.current, LocalAppSettings provides settings) {
+                NetworkHelmTheme { key(screen) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } } }
+            }
+        }
+        fun bar() = onNodeWithTag("split-bar").fetchSemanticsNode().boundsInRoot.top
+        val before = bar()
+        runBlocking { settings.load() }
+        waitUntil(timeoutMillis = 5_000) { bar() != before }
+        waitForIdle()
+        val after = bar()
+        // a screen that opens once the settings are read stands as the one that waited for them
+        runOnIdle { screen++ }
+        waitForIdle()
+        assertEquals(after, bar())
+    }
+
+    @Test
     fun aRemovedRouterTakesItsButtonAndPasswordWithIt() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
@@ -538,6 +655,37 @@ class ConnectScreenTest {
         waitUntil(timeoutMillis = 5_000) { saved.routers.value.isEmpty() }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Remove")).fetchSemanticsNodes().isEmpty() }
         waitUntil(timeoutMillis = 5_000) { runBlocking { secrets.get(passwordKey("192.0.2.46", "rd-test")) } == null }
+    }
+
+    @Test
+    fun aSavedListThatCannotBeWrittenIsToldAsTheProblemAndStaysAsItWas() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = RefusingStorage(SavedRouters.FILE)
+        val saved = SavedRouters(storage)
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        onNodeWithTag("address").performTextInput("192.0.2.51")
+        onNodeWithText("Save").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("routers.json is used by another process", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(saved.routers.value.isEmpty())
+    }
+
+    @Test
+    fun theListsMoveUnderTheFormThoughTheSettingsCannotBeWritten() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = RefusingStorage("settings.json")
+        val settings = AppSettings(storage)
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        setContent {
+            CompositionLocalProvider(LocalSettings provides settings.current, LocalAppSettings provides settings) {
+                NetworkHelmTheme { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } }
+            }
+        }
+        onNodeWithTag("lists-place").performClick()
+        waitUntil(timeoutMillis = 5_000) { storage.refusals == 1 }
+        waitForIdle()
+        assertTrue(settings.current.listsBelow)
+        onNodeWithTag("split-bar").assertExists()
     }
 
     @Test
@@ -1242,5 +1390,22 @@ class ConnectScreenTest {
         onNodeWithText("Connect").assertIsDisplayed()
         onNodeWithText("Saved").assertIsDisplayed()
         picture("connect-tall-window")
+    }
+
+    @Test
+    fun aScreenThatIsLeftLeavesNothingRunningInTheScopeItWasGiven() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val services = Services(MemoryStorage(), MemoryTrustStore(), null, connectMacTelnet = { _, _, _, _, _, _ -> router })
+        var shown by mutableStateOf(true)
+        var given: CoroutineScope? = null
+        setContent {
+            val scope = rememberCoroutineScope().also { given = it }
+            NetworkHelmTheme { if (shown) ConnectScreen(services, SavedRouters(services.storage), scope) { _, _, _ -> } }
+        }
+        onNodeWithTag("address").performTextInput("00:11:22:33:44:55")
+        waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }
+        runOnIdle { shown = false }
+        waitForIdle()
+        assertEquals(0, checkNotNull(given).coroutineContext.job.children.count())
     }
 }

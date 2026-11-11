@@ -111,7 +111,7 @@ private suspend fun readHead(source: BufferedStream, first: String): Pair<Int, M
 
 private fun body(source: BufferedStream, fields: Map<String, String>): ByteStream = when {
     fields["transfer-encoding"]?.contains("chunked") == true -> ChunkedBody(source)
-    else -> fields["content-length"]?.toLongOrNull()?.let { SizedBody(source, it) } ?: source
+    else -> fields["content-length"]?.toLongOrNull()?.takeIf { it >= 0 }?.let { SizedBody(source, it) } ?: source
 }
 
 private class SizedBody(private val source: BufferedStream, private var left: Long) : ByteStream {
@@ -134,7 +134,7 @@ private class ChunkedBody(private val source: BufferedStream) : ByteStream {
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         if (ended) return -1
         if (left == 0) {
-            val size = source.readLine(MAX_HTTP_LINE_BYTES)?.substringBefore(';')?.trim()?.toIntOrNull(16) ?: throw cut()
+            val size = source.readLine(MAX_HTTP_LINE_BYTES)?.substringBefore(';')?.trim()?.toIntOrNull(16)?.takeIf { it >= 0 } ?: throw cut()
             if (size == 0) {
                 ended = true
                 return -1

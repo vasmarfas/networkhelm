@@ -40,73 +40,8 @@ internal class EcSrp5Server(private val user: String, password: String, private 
     fun keys() = streamKeys(sha256(shared.withoutLeadingZeros()), server = true)
 }
 
-internal class ShortEcSrp5Server(private val user: String, password: String, private val ephemeral: U256 = U256.fromBytes(secureRandomBytes(32))) {
-    private val verifierPoint = checkNotNull(WCurve.multiply(WCurve.generator, passwordVerifier(user, password, ByteArray(0))))
-    private val publicPoint = checkNotNull(WCurve.multiply(WCurve.generator, ephemeral))
-    private val publicKey = WCurve.montgomeryX(publicPoint) + byteArrayOf(if (publicPoint.y.isOdd) 1 else 0)
-    private var shared = ByteArray(0)
-    private var clientKey = ByteArray(0)
-
-    fun challenge(hello: ByteArray): ByteArray {
-        val end = hello.indexOf(0)
-        assertEquals(user, hello.decodeToString(0, end))
-        clientKey = hello.copyOfRange(end + 1, hello.size)
-        shared = WCurve.montgomeryX(checkNotNull(WCurve.multiply(verifierPoint, ephemeral))).withoutLeadingZeros()
-        return publicKey
-    }
-
-    fun confirm(proof: ByteArray): ByteArray? =
-        if (proof.contentEquals(labelled(shared + publicKey, "This is for peer challenge"))) labelled(shared + clientKey, "This is for auther challenge") else null
-
-    fun keys() = streamKeys(shared, server = true)
-}
-
 class EcSrp5Test {
     private val salt = ByteArray(16) { (it * 3 + 1).toByte() }
-
-    @Test
-    fun theShortLoginIsProvedByBothSidesWithTheKeyOfTheOtherAndKeepsTheSecretWhole() {
-        val client = EcSrp5Client("admin", "secret")
-        val server = ShortEcSrp5Server("admin", "secret")
-        val challenge = server.challenge(client.hello())
-        assertEquals(33, challenge.size)
-        val proof = client.confirm(challenge)
-        assertEquals(16, proof.size)
-        val answer = checkNotNull(server.confirm(proof))
-        assertEquals(16, answer.size)
-        assertTrue(client.verify(answer))
-        val clientKeys = client.keys()
-        val serverKeys = server.keys()
-        assertContentEquals(clientKeys.send.aes, serverKeys.receive.aes)
-        assertContentEquals(clientKeys.receive.mac, serverKeys.send.mac)
-    }
-
-    @Test
-    fun theShortLoginHashesTheSharedXWithoutItsLeadingZeros() {
-        val client = EcSrp5Client("admin", "secret")
-        val server = ShortEcSrp5Server("admin", "secret", U256.of(90))
-        val answer = checkNotNull(server.confirm(client.confirm(server.challenge(client.hello()))))
-        assertTrue(client.verify(answer))
-        assertContentEquals(client.keys().send.aes, server.keys().receive.aes)
-    }
-
-    @Test
-    fun aWrongPasswordGivesNoShortConfirmation() {
-        val client = EcSrp5Client("admin", "guess")
-        val server = ShortEcSrp5Server("admin", "secret")
-        assertEquals(null, server.confirm(client.confirm(server.challenge(client.hello()))))
-        assertFalse(client.verify(ByteArray(16)))
-    }
-
-    @Test
-    fun theProofsOfTheShortLoginAreSha1OfTheSecretAndAKeyBetweenFixedPadding() {
-        val shared = ByteArray(32) { it.toByte() }
-        val key = ByteArray(33) { (100 + it).toByte() }
-        assertEquals("d1c656a07c9b6eb251d6ed0351a7d303", hexOf(labelled(shared + key, "This is for peer challenge")))
-        assertEquals("0ef3555eb1aa466278d4f8171db9db52", hexOf(labelled(shared + key, "This is for auther challenge")))
-    }
-
-    private fun hexOf(bytes: ByteArray) = bytes.joinToString("") { (it.toInt() and 0xFF).toString(16).padStart(2, '0') }
 
     @Test
     fun clientAndRouterAgreeOnConfirmationsAndKeys() {
@@ -159,6 +94,15 @@ class EcSrp5Test {
             val error = assertFailsWith<DeviceException> { EcSrp5Client("admin", "x").confirm(ByteArray(size)) }
             assertEquals(ErrorCategory.Unsupported, error.category, "size $size")
         }
+    }
+
+    @Test
+    fun aKeyWithoutASaltIsTheAnswerToANameTheRouterDoesNotKnowAndGetsNoProof() {
+        val client = EcSrp5Client("admin", "secret")
+        val key = EcSrp5Server("admin", "secret", salt).challenge(client.hello()).copyOf(33)
+        val refusal = assertFailsWith<DeviceException> { client.confirm(key) }
+        assertEquals(ErrorCategory.PermissionDenied to "wrong user name or password", refusal.category to refusal.message)
+        assertEquals(ErrorCategory.Unsupported, assertFailsWith<DeviceException> { client.confirm(key.copyOf(40)) }.category)
     }
 
     @Test

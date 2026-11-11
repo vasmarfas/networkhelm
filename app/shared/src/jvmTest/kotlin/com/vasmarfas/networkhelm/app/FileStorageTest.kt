@@ -36,6 +36,20 @@ class FileStorageTest {
     }
 
     @Test
+    fun aReplacementRefusedWhileAnotherProgramHoldsTheFileIsTriedAgain() = runTest {
+        val directory = createTempDirectory("networkhelm-storage").toFile()
+        var held = 2
+        val storage = FileStorage(directory) { temporary, target ->
+            if (held-- > 0) throw IOException("the file is used by another process")
+            replaceFile(temporary, target)
+        }
+        storage.write("settings.json", "old")
+        storage.write("settings.json", "new")
+        assertEquals("new", storage.read("settings.json"))
+        assertEquals(listOf("settings.json"), directory.list().orEmpty().sorted())
+    }
+
+    @Test
     fun aFailedReplacementKeepsTheOldFileAndTheSavedRoutersUnchanged() = runTest {
         val directory = createTempDirectory("networkhelm-storage").toFile()
         val original = FileStorage(directory)

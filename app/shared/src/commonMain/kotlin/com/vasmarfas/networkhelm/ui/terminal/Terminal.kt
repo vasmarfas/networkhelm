@@ -280,8 +280,12 @@ private fun SnippetEditor(snippets: Snippets, onClose: () -> Unit) {
                         try {
                             snippets.save(kept)
                             onClose()
+                        } catch (e: CancellationException) {
+                            throw e
                         } catch (e: IllegalStateException) {
                             failure = unreadable
+                        } catch (e: Exception) {
+                            failure = e.message ?: e.toString()
                         }
                     }
                 }, primary = true)

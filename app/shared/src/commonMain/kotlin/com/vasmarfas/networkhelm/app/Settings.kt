@@ -8,6 +8,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.ui.table.CommentMode
 import com.vasmarfas.networkhelm.ui.theme.BundledThemes
 import com.vasmarfas.networkhelm.ui.theme.DefaultAccent
@@ -96,6 +97,12 @@ class AppSettings(private val storage: Storage) {
     suspend fun change(edit: (Settings) -> Settings) {
         use(edit(current))
         storage.write(SETTINGS, json.encodeToString(Settings.serializer(), current))
+    }
+
+    // a part of a screen is moved at once; settings that could not be written go to the file whole with the next change that is
+    suspend fun arrange(edit: (Settings) -> Settings) {
+        use(edit(current))
+        storage.keep(SETTINGS, json.encodeToString(Settings.serializer(), current))
     }
 
     // the language goes to the platform before the shell reads the new settings, so that it composes in it

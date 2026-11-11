@@ -1,5 +1,7 @@
 package com.vasmarfas.networkhelm.miknative
 
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.transport.ByteStream
 import kotlinx.coroutines.test.runTest
 import kotlin.test.Test
@@ -16,6 +18,21 @@ internal class MemoryStream(private val bytes: ByteArray, private val piece: Int
         val count = minOf(length, piece, bytes.size - position)
         bytes.copyInto(buffer, offset, position, position + count)
         position += count
+        return count
+    }
+
+    override suspend fun write(bytes: ByteArray) = Unit
+
+    override fun close() = Unit
+}
+
+// whole chunks one after another, so the frame they make has no end while the bytes last
+private class WholeChunks(private var left: Int) : ByteStream {
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        if (left == 0) return -1
+        val count = minOf(length, left)
+        buffer.fill(-1, offset, offset + count)
+        left -= count
         return count
     }
 
@@ -57,5 +74,11 @@ class FramesTest {
     fun aFrameCutShortIsAnError() = runTest {
         val bytes = encodeFrame(6, ByteArray(300))
         assertFailsWith<FrameEndedException> { FrameReader(MemoryStream(bytes.copyOf(bytes.size - 3))).next() }
+    }
+
+    @Test
+    fun aFrameThatGrowsPastSixteenMebibytesIsGivenUp() = runTest {
+        val error = assertFailsWith<DeviceException> { FrameReader(WholeChunks(17 shl 20)).next() }
+        assertEquals(ErrorCategory.ConnectionLost, error.category)
     }
 }

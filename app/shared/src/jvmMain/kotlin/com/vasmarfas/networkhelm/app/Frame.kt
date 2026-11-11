@@ -21,6 +21,7 @@ import androidx.compose.ui.window.FrameWindowScope
 import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.subpixels
 import kotlinx.coroutines.delay
@@ -76,7 +77,7 @@ fun rememberFrameState(storage: Storage): WindowState {
             val (at, of) = floating ?: return@collectLatest
             delay(500)
             val frame = SavedFrame(at.x.value, at.y.value, of.width.value, of.height.value, placement == WindowPlacement.Maximized)
-            storage.write(FRAME, AppSettings.json.encodeToString(SavedFrame.serializer(), frame))
+            storage.keep(FRAME, AppSettings.json.encodeToString(SavedFrame.serializer(), frame))
         }
     }
     return state

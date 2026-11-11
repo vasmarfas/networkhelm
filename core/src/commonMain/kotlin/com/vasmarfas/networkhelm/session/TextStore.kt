@@ -8,8 +8,8 @@ interface TextStore {
     suspend fun write(name: String, text: String)
 }
 
-// a session keeps there what it can make again, so a store that cannot be written now costs only the next connect its time
-internal suspend fun TextStore.keep(name: String, text: String) {
+// for what is written whole again with its next change or made again at the next connect: a store that refuses it now loses only this one
+suspend fun TextStore.keep(name: String, text: String) {
     try {
         write(name, text)
     } catch (e: CancellationException) {

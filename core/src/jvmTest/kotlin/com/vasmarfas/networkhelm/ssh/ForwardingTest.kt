@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ssh
 
 import com.vasmarfas.networkhelm.transport.ByteStream
+import com.vasmarfas.networkhelm.transport.TcpListener
 import com.vasmarfas.networkhelm.transport.listenTcp
 import com.vasmarfas.networkhelm.transport.openTcp
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +10,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import java.io.IOException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -33,6 +35,20 @@ class ForwardingTest {
             read += count
         }
         return buffer.copyOf(read).decodeToString()
+    }
+
+    @Test
+    fun aListenerThatFailsEndsTheTunnelAndTellsWhy() = runBlocking {
+        val broken = object : TcpListener {
+            override val port = 0
+
+            override suspend fun accept(): ByteStream = throw IOException("too many open files")
+
+            override fun close() = Unit
+        }
+        val forwarding = Forwarding(Direct(), broken, "127.0.0.1", 80)
+        forwarding.serve()
+        assertEquals("too many open files", forwarding.refused.value)
     }
 
     @Test

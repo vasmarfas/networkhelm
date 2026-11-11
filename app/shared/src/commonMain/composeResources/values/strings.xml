@@ -74,7 +74,7 @@
     <string name="error_tcp_8291_unsupported">TCP 8291 is not supported on this platform.</string>
     <string name="error_no_rest">The router has no REST: it came with RouterOS 7.1. Connect over API-SSL or API.</string>
     <string name="error_other">Could not connect to %1$s: %2$s</string>
-    <string name="error_saved_list">The list of saved routers could not be read and is left as it is: %1$s</string>
+    <string name="error_saved_list">The list of saved routers could not be read or written and is left as it is: %1$s</string>
     <string name="error_rejected">The connection was cancelled.</string>
 
     <string name="trust_new_tls">%1$s presented a certificate this client has not seen. Compare the fingerprint with the one the device shows (/certificate print on RouterOS).</string>

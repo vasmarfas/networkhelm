@@ -9,8 +9,10 @@ import com.vasmarfas.networkhelm.packs.PackNativeField
 import com.vasmarfas.networkhelm.packs.PackNativeRef
 import com.vasmarfas.networkhelm.session.RouterFacts
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.test.testTimeSource
 import kotlinx.coroutines.withTimeout
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
@@ -67,7 +69,8 @@ private class RouteRouter(private val pages: List<List<M2Message>>, private val 
 
 // a window that gives its first state to a subscription two records a message, the first [dumped] of them and then the removals,
 // the [early] removals before them, and reads by getall from the record the cursor names; a [counted] one says the number of rows,
-// marks the end of the first state and sends the removals after it
+// marks the end of the first state and sends the removals after it, and then the [later] records one every quarter of a second,
+// as a table that keeps changing does
 private class SubscribedRouter(
     private val records: List<M2Message>,
     private val dumped: Int = records.size,
@@ -75,6 +78,7 @@ private class SubscribedRouter(
     private val first: Boolean = true,
     private val early: List<Long> = emptyList(),
     private val counted: Boolean = false,
+    private val later: List<M2Message> = emptyList(),
 ) {
     val asked = ArrayList<M2Message>()
 
@@ -91,6 +95,10 @@ private class SubscribedRouter(
                     }
                     send(event(0xFF000B to M2Value.U32(0xFFFFFFFF)))
                     if (gone.isNotEmpty()) send(event(0xFE0002 to M2Value.Messages(removals(gone)), 0xFE0019 to M2Value.U32((records.size - gone.size).toLong())))
+                    for (record in later) {
+                        delay(250)
+                        send(event(0xFE0002 to M2Value.Messages(listOf(record))))
+                    }
                 } else {
                     (removals(early) + records.take(dumped) + removals(gone)).chunked(2).forEach { send(event(0xFE0002 to M2Value.Messages(it))) }
                 }
@@ -141,8 +149,9 @@ private class PatchyRouter(
     }
 }
 
-// serves the files of the web interface in parts of at most [part] bytes, marking the part that ends a file only when [marks]
-private class FileRouter(private val files: Map<String, ByteArray>, private val part: Int, private val marks: Boolean) {
+// serves the files of the web interface in parts of at most [part] bytes, marking the part that ends a file only when [marks],
+// and names [size] for the size of each when it is given one
+private class FileRouter(private val files: Map<String, ByteArray>, private val part: Int, private val marks: Boolean, private val size: M2Value? = null) {
     val closed = ArrayList<Long>()
     private val open = HashMap<Long, Pair<ByteArray, Int>>()
     private var next = 1L
@@ -154,7 +163,7 @@ private class FileRouter(private val files: Map<String, ByteArray>, private val 
                 val data = files[message.text(1)] ?: return reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0006))
                 val handle = next++
                 open[handle] = data to 0
-                reply(message, 0xFE0001 to M2Value.U32(handle), 2 to M2Value.U32(data.size.toLong()))
+                reply(message, 0xFE0001 to M2Value.U32(handle), 2 to (size ?: M2Value.U32(data.size.toLong())))
             }
             4L -> {
                 val handle = checkNotNull(message.number(0xFE0001))
@@ -178,8 +187,8 @@ class NativeObjectModelTest {
 
     private val description = ByteArray(150_000) { (it % 251).toByte() }
 
-    private fun files(marks: Boolean, block: suspend CoroutineScope.(NativeObjectModel, FileRouter) -> Unit) = runTest {
-        val router = FileRouter(mapOf("roteros-aa.jg.gz" to description), 61_440, marks)
+    private fun files(marks: Boolean, size: M2Value? = null, block: suspend CoroutineScope.(NativeObjectModel, FileRouter) -> Unit) = runTest {
+        val router = FileRouter(mapOf("roteros-aa.jg.gz" to description), 61_440, marks, size)
         val (client, server) = pipe()
         val fake = FakeRouter(this, server, "admin", "secret") { with(router) { handle(it) } }
         val connection = NativeConnection.open(client, "admin", "secret", this)
@@ -202,6 +211,11 @@ class NativeObjectModelTest {
     fun aFileReadToItsSizeWithoutTheMarkOfItsEndIsClosed() = files(marks = false) { model, router ->
         assertContentEquals(description, model.resource("roteros-aa.jg.gz"))
         assertEquals(listOf(1L), router.closed)
+    }
+
+    @Test
+    fun aFileWhoseSizeHasTheHighBitUpIsNotRead() = files(marks = true, size = M2Value.U64(Long.MIN_VALUE)) { model, _ ->
+        assertNull(model.resource("roteros-aa.jg.gz"))
     }
 
     private fun asked(router: SystemRouter, block: suspend CoroutineScope.(RouterFacts?) -> Unit) = runTest {
@@ -417,6 +431,7 @@ class NativeObjectModelTest {
         }
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     private fun dumped(router: SubscribedRouter, expected: Int, block: suspend CoroutineScope.(List<Item>?, List<List<Item>>) -> Unit) = runTest {
         val (client, server) = pipe()
         val fake = FakeRouter(this, server, "admin", "secret") { with(router) { handle(it) } }
@@ -424,7 +439,7 @@ class NativeObjectModelTest {
         try {
             val pages = ArrayList<List<Item>>()
             val spec = PackNative(listOf(167, DEVICES), listOf(PackNativeField("identity", 0x2009, "string")))
-            val items = withTimeout(30_000) { NativeObjectModel(connection).dump(spec, expected) { pages += it } }
+            val items = withTimeout(30_000) { NativeObjectModel(connection, time = testTimeSource).dump(spec, expected) { pages += it } }
             block(items, pages)
         } finally {
             connection.close()
@@ -467,6 +482,15 @@ class NativeObjectModelTest {
             assertEquals(listOf("d1", "d3", "d4"), items?.map { it["identity"] })
             withTimeout(5_000) { while (UNSUBSCRIBE !in commands(router)) delay(10) }
             assertEquals(listOf(SUBSCRIBE, UNSUBSCRIBE), commands(router))
+        }
+    }
+
+    @Test
+    fun aTableThatKeepsChangingIsReadForTheTimeOfTheRemovalsAfterItsEndAndNoLonger() {
+        val router = SubscribedRouter((1L..4L).map { device(it, "d$it") }, counted = true, later = (5L..8L).map { device(it, "d$it") })
+        dumped(router, 4) { items, _ ->
+            assertEquals((1..6).map { "d$it" }, items?.map { it["identity"] })
+            withTimeout(5_000) { while (UNSUBSCRIBE !in commands(router)) delay(10) }
         }
     }
 
@@ -593,6 +617,9 @@ class NativeObjectModelTest {
         assertEquals("stable", write(PackNativeField("channel", 1, "enm", names = mapOf(3L to "stable")), M2Value.U8(3)))
         assertEquals("4d2h37m32s", write(PackNativeField("uptime", 1, "interval"), M2Value.U32(355_052)))
         assertEquals("1d", write(PackNativeField("age", 1, "interval", scale = 1000), M2Value.U32(86_400_000)))
+        assertEquals("500ms", write(PackNativeField("timeout", 1, "interval", scale = 1000), M2Value.U32(500)))
+        assertEquals("1m1s500ms", write(PackNativeField("timeout", 1, "interval", scale = 1000), M2Value.U32(61_500)))
+        assertEquals("2s50ms", write(PackNativeField("timeout", 1, "interval", scale = 100), M2Value.U32(205)))
         assertEquals("1.5", write(PackNativeField("level", 1, "fixedpoint", scale = 10), M2Value.U32(15)))
         assertEquals("-0.05", write(PackNativeField("level", 1, "fixedpoint", scale = 100), M2Value.U32(-5)))
         assertEquals("true", write(PackNativeField("flag", 1, "bool"), M2Value.Bool(true)))

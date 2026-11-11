@@ -74,7 +74,7 @@
     <string name="error_tcp_8291_unsupported">TCP 8291 не поддерживается на этой платформе.</string>
     <string name="error_no_rest">У роутера нет REST: он появился в RouterOS 7.1. Подключитесь по API-SSL или API.</string>
     <string name="error_other">Не удалось подключиться к %1$s: %2$s</string>
-    <string name="error_saved_list">Список сохранённых роутеров не прочитан и оставлен как есть: %1$s</string>
+    <string name="error_saved_list">Список сохранённых роутеров не удалось прочитать или записать, он оставлен как есть: %1$s</string>
     <string name="error_rejected">Подключение отменено.</string>
 
     <string name="trust_new_tls">%1$s предъявил сертификат, которого этот клиент ещё не видел. Сверьте отпечаток с тем, что показывает устройство (на RouterOS — /certificate print).</string>

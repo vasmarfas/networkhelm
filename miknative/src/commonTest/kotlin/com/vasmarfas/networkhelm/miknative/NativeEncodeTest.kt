@@ -68,6 +68,19 @@ class NativeEncodeTest {
     }
 
     @Test
+    fun aPartOfASecondGoesOutInTheStepsOfTheFieldAndReadsBackAsTyped() {
+        val millis = field("interval", "u", scale = 1000)
+        val hundredths = field("interval", "u", scale = 100)
+        assertEquals(M2Value.U32(500), value(millis, "500ms"))
+        assertEquals(M2Value.U32(1_500), value(millis, "1s500ms"))
+        assertEquals(M2Value.U32(6_005), value(hundredths, "1m50ms"))
+        for ((field, typed) in listOf(millis to "500ms", millis to "1s500ms", hundredths to "1m50ms")) assertEquals(typed, shown(field, typed))
+        for ((field, typed) in listOf(field("interval", "u") to "500ms", hundredths to "5ms")) {
+            assertEquals(ErrorCategory.ArgumentValue, assertFailsWith<DeviceException>(typed) { encoded(field, typed, null) }.category)
+        }
+    }
+
+    @Test
     fun anOptionalFieldCarriesItsFlagAndAnEmptyValueLowersTheFlagAlone() {
         val optional = field("string", "s", flag = 0x20)
         assertEquals(listOf(0x20 to M2Value.Bool(true), 0x10 to M2Value.Text("a")), encoded(optional, "a", null))

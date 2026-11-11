@@ -3,6 +3,8 @@ package com.vasmarfas.networkhelm.ui.log
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -119,7 +121,7 @@ class LogViewTest {
 
     private fun SkikoComposeUiTest.opened(
         session: DeviceSession,
-        clip: FakeClipboard = FakeClipboard(),
+        clip: Clipboard = FakeClipboard(),
         compact: Boolean = false,
         dark: Boolean = true,
         theme: ThemeFile = Modern,
@@ -140,7 +142,7 @@ class LogViewTest {
 
     private fun SkikoComposeUiTest.opened(
         rows: List<Item> = log,
-        clip: FakeClipboard = FakeClipboard(),
+        clip: Clipboard = FakeClipboard(),
         compact: Boolean = false,
         dark: Boolean = true,
         theme: ThemeFile = Modern,
@@ -222,6 +224,45 @@ class LogViewTest {
         onAllNodes(hasText("Copy messages")).onFirst().performClick()
         waitUntil(timeoutMillis = 5_000) { runBlocking { clip.readText() }.orEmpty().lines().size == 7 }
         assertEquals(log.joinToString("\n") { it["message"].orEmpty() }, runBlocking { clip.readText() })
+    }
+
+    private class HeldClipboard : Clipboard {
+        var refused = 0
+
+        override suspend fun getClipEntry(): ClipEntry? = null
+
+        override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+            refused++
+            throw IllegalStateException("cannot open system clipboard")
+        }
+    }
+
+    @Test
+    fun aClipboardHeldByAnotherProgramLeavesTheLogAndTheWindowOfALineOpen() = runDesktopComposeUiTest(1100, 640) {
+        val clip = HeldClipboard()
+        val tab = opened(clip = clip)
+        inList(failure).performClick()
+        press(Key.C, ctrl = true)
+        waitUntil(timeoutMillis = 5_000) { clip.refused == 1 }
+        press(Key.Enter, ctrl = true)
+        waitUntil(timeoutMillis = 5_000) { tab.logEntries.size == 1 }
+        val id = tab.logEntries.keys.single()
+        waitUntil(timeoutMillis = 5_000) { present("log-entry-$id") }
+        inWindow(id, "log-copy-line").performClick()
+        waitUntil(timeoutMillis = 5_000) { clip.refused == 2 }
+        waitForIdle()
+        assertTrue(present("log-list") && present("log-entry-$id"))
+    }
+
+    @Test
+    fun aLetterTypedWithAltGrIsNotTakenForItsShortcut() = runDesktopComposeUiTest(1100, 640) {
+        opened()
+        onNodeWithTag("log-list").performSemanticsAction(SemanticsActions.RequestFocus)
+        onNodeWithTag("log-list").performKeyInput { withKeyDown(Key.CtrlLeft) { withKeyDown(Key.AltRight) { pressKey(Key.A) } } }
+        waitForIdle()
+        assertEquals(0, texts("7 selected"))
+        press(Key.A, ctrl = true)
+        waitUntil(timeoutMillis = 5_000) { texts("7 selected") > 0 }
     }
 
     private fun SkikoComposeUiTest.panelOn() = onNodeWithTag("log-details-toggle").performClick()
@@ -410,6 +451,20 @@ class LogViewTest {
         waitForIdle()
         assertEquals(0, listed("the line 2 of those that came later"))
         assertTrue(listed("the oldest line of the buffer") > 0)
+    }
+
+    @Test
+    fun aDayThatComesAgainAfterAnotherOneHasAHeadingOfItsOwn() = runDesktopComposeUiTest(1100, 640) {
+        opened(
+            listOf(
+                line("*1", "2026-10-27 08:59:50", "system,info", "router rebooted"),
+                line("*2", "1970-01-02 00:00:12", "interface,info", "ether1 link up (speed 1G, full duplex)"),
+                line("*3", "2026-10-27 09:00:20", "system,info", "the clock is set by ntp"),
+            ),
+        )
+        assertEquals(2, listed("2026-10-27"))
+        assertEquals(1, listed("1970-01-02"))
+        assertEquals("3 lines", drawn("log-count"))
     }
 
     @Test

@@ -30,7 +30,9 @@ class Forwarding(private val ssh: SshSession, private val listener: TcpListener,
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                if (stopped.value) break else throw e
+                // a listener that takes no more connections ends the tunnel for new ones and tells why
+                if (!stopped.value) failure.value = e.message ?: e::class.simpleName
+                break
             }
             launch { carry(local) }
         }
