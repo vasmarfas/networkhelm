@@ -85,12 +85,14 @@ import androidx.compose.ui.unit.dp
 import com.composeunstyled.Text
 import com.composeunstyled.UnstyledDropdownMenu
 import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.packs.PackPath
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.atMostEvery
 import com.vasmarfas.networkhelm.session.rows
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
+import com.vasmarfas.networkhelm.ui.kit.AgainOnReturn
 import com.vasmarfas.networkhelm.ui.kit.ListScrollBar
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.MenuPanel
@@ -159,9 +161,19 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
     val windows = LocalLogWindows.current
     var refresh by remember { mutableIntStateOf(0) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var lost by remember(session, path, refresh) { mutableStateOf(false) }
     val arrived by remember(session, path, refresh) {
-        session.watch(path).rows().drop(1).atMostEvery(150.milliseconds).catch { (it as? DeviceException)?.let { e -> problem = e.message } }
+        session.watch(path).rows().drop(1).atMostEvery(150.milliseconds).catch {
+            (it as? DeviceException)?.let { e ->
+                problem = e.message
+                lost = e.category == ErrorCategory.ConnectionLost
+            }
+        }
     }.collectAsState(null)
+    AgainOnReturn(lost) {
+        problem = null
+        refresh++
+    }
     val clock by produceState(localClock(), session) {
         while (true) {
             value = readClock(session)

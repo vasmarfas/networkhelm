@@ -586,8 +586,10 @@ class MainScreenLabTest {
                 val tab = RouterTab(session, host, bundledPacks().values, storage, TableLayouts(storage))
                 setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
                 tab.open(MenuEntry("Address Lists", path.toString()))
-                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("192.0.2.10")).fetchSemanticsNodes().isNotEmpty() }
+                // the lab router keeps more addresses than the window shows, and the new one is found by the filter of the window
+                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasTestTag("find")).fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithTag("find").performTextInput("rd-test-list")
+                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("192.0.2.10")).fetchSemanticsNodes().isNotEmpty() }
                 waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("1 item") or hasText("1 of ", substring = true)).fetchSemanticsNodes().isNotEmpty() }
                 onNodeWithText("192.0.2.10").performClick()
                 onNodeWithText("Disable").performClick()
@@ -1176,6 +1178,8 @@ class MainScreenLabTest {
             setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh) { channel, modifier -> BossTerminal(channel, modifier) } } }
             waitUntil(timeoutMillis = 25_000) { "] > " in Regex("\u001b\\[[0-9;?]*[A-Za-z]").replace(ssh.output, "") }
             val heard = ssh.output.length
+            // the first terminal of a run is not in focus yet when its prompt comes
+            onRoot().performClick()
             onRoot().performKeyInput {
                 keyDown(Key.D)
                 keyUp(Key.D)

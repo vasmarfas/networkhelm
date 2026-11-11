@@ -141,6 +141,7 @@ import com.vasmarfas.networkhelm.ui.chart.inMilliseconds
 import com.vasmarfas.networkhelm.ui.chart.kibiCount
 import com.vasmarfas.networkhelm.ui.chart.limit
 import com.vasmarfas.networkhelm.ui.files.FilesView
+import com.vasmarfas.networkhelm.ui.kit.AgainOnReturn
 import com.vasmarfas.networkhelm.ui.kit.Button
 import com.vasmarfas.networkhelm.ui.kit.Checkbox
 import com.vasmarfas.networkhelm.ui.kit.CountPill
@@ -457,13 +458,21 @@ private fun ListView(
     val recalled = "$name|$filter"
     // a watch that broke off sends no more rows, whatever it had sent before
     var failed by remember(session, path, refresh) { mutableStateOf(false) }
+    var lost by remember(session, path, refresh) { mutableStateOf(false) }
     val arrived = remember(session, path, refresh) {
         session.watch(path, filter).onEach { reading = it as? ListEvent.Progress }.rowsSoFar().drop(1).atMostEvery(150.milliseconds).flowOn(Dispatchers.Default).catch {
             reading = null
             failed = true
-            (it as? DeviceException)?.let { e -> problem = e.message }
+            (it as? DeviceException)?.let { e ->
+                problem = e.message
+                lost = e.category == ErrorCategory.ConnectionLost && e.message != LINK_LOST
+            }
         }
     }.collectAsState(recall?.rows?.get(recalled)).value
+    AgainOnReturn(lost) {
+        problem = null
+        refresh++
+    }
     if (arrived != null && reading == null && arrived.size <= RECALLED_ROWS) SideEffect { recall?.rows?.set(recalled, arrived) }
     val rows = arrived.orEmpty().heldWhile(paused)
     val saved = remember(name) { tables[name] }
@@ -505,8 +514,11 @@ private fun ListView(
     val copier = rememberCopier()
     var pointed by remember { mutableStateOf<Pair<String, String>?>(null) }
     val join = pack?.join
-    val joined = remember(session, join) {
-        if (join == null) flowOf(emptyList()) else session.watch(MenuPath.parse(join)).rows().atMostEvery(150.milliseconds).flowOn(Dispatchers.Default).catch { }
+    val joined = remember(session, join, refresh) {
+        if (join == null) flowOf(emptyList()) else session.watch(MenuPath.parse(join)).rows().atMostEvery(150.milliseconds).flowOn(Dispatchers.Default).catch {
+            // the values of the join stand still once their watch has ended: one that lost its connection is asked again with the list
+            if ((it as? DeviceException)?.category == ErrorCategory.ConnectionLost && it.message != LINK_LOST) lost = true
+        }
     }.collectAsState(emptyList()).value.heldWhile(paused)
     val monitor = pack?.monitor
     // the counters and the monitor of a window stop while the app is out of sight
