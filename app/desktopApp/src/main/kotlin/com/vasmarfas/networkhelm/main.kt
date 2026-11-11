@@ -14,6 +14,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.vasmarfas.networkhelm.app.ClearTypeLayer
 import com.vasmarfas.networkhelm.app.ResizeEdges
 import com.vasmarfas.networkhelm.app.WorkspaceBackground
 import com.vasmarfas.networkhelm.app.desktopServices
@@ -59,6 +60,7 @@ private fun startApplication() = application {
                 title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
                 icon = appIcon(),
             ) {
+                ClearTypeLayer()
                 WorkspaceBackground()
                 TitleBar(Modifier.newFullscreenControls()) {
                     ShellTheme(shell) { TitleBarContent(shell, Modifier.align(Alignment.Start), Modifier.clientRegion("routers")) }
@@ -79,6 +81,7 @@ private fun startApplication() = application {
                         title = name,
                         icon = appIcon(),
                     ) {
+                        ClearTypeLayer()
                         TitleBar(Modifier.newFullscreenControls()) {
                             ShellTheme(shell) { TitleBarName(name, Modifier.align(Alignment.CenterHorizontally)) }
                         }

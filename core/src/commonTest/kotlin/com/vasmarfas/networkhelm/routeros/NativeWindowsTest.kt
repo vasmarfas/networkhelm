@@ -280,6 +280,22 @@ class NativeWindowsTest {
     }
 
     @Test
+    fun theChannelOfTheSessionItselfIsTakenAgainAsSoonAsTheSessionHasItBack() = runTest {
+        var down = 3
+        val side = object : NativeSide {
+            override val sessionPort = 18291
+
+            override suspend fun open(port: Int): NativeObjects {
+                if (down-- > 0) throw DeviceException(ErrorCategory.ConnectionLost, "lost")
+                return Script(rows(row("*1", "paired")))
+            }
+        }
+        val windows = native(side, time = testTimeSource)
+        repeat(3) { assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { windows.count(spec) }.category) }
+        assertEquals(1, windows.count(spec))
+    }
+
+    @Test
     fun aPortThatAFirewallClosedCountsAsAServiceThatIsOff() = runTest {
         val windows = native(NativeSide { throw IllegalStateException("Connection refused: getsockopt") })
         assertEquals(null, windows.facts())

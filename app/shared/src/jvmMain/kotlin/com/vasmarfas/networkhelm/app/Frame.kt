@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.width
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.ui.Alignment
@@ -21,16 +22,21 @@ import androidx.compose.ui.window.WindowPlacement
 import androidx.compose.ui.window.WindowPosition
 import androidx.compose.ui.window.WindowState
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import com.vasmarfas.networkhelm.ui.theme.subpixels
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.drop
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
+import org.jetbrains.skia.PixelGeometry
+import org.jetbrains.skiko.SkiaLayer
 import java.awt.Color
+import java.awt.Container
 import java.awt.GraphicsEnvironment
 import java.awt.HeadlessException
 import java.awt.Rectangle
+import java.lang.reflect.Field
 
 private const val FRAME = "window.json"
 
@@ -92,6 +98,34 @@ fun FrameWindowScope.WorkspaceBackground() {
     LaunchedEffect(window, color) {
         window.background = Color(color)
         window.contentPane.background = Color(color)
+    }
+}
+
+// ClearType needs a surface that knows the order of the subpixels, which Compose leaves unknown in the layer of a window; the layer takes the
+// order of Windows before the window shows its first frame. A Skiko without that field, or a runtime that keeps a final field final, leaves the text grey
+@Composable
+fun FrameWindowScope.ClearTypeLayer() {
+    SideEffect { window.takeSubpixels(subpixels) }
+}
+
+private val layerGeometry: Field? = try {
+    SkiaLayer::class.java.getDeclaredField("pixelGeometry").apply { isAccessible = true }
+} catch (e: NoSuchFieldException) {
+    null
+}
+
+internal fun Container.takeSubpixels(geometry: PixelGeometry) {
+    if (geometry == PixelGeometry.UNKNOWN) return
+    val field = layerGeometry ?: return
+    for (component in components) {
+        when (component) {
+            is SkiaLayer -> try {
+                field.set(component, geometry)
+            } catch (e: IllegalAccessException) {
+                return
+            }
+            is Container -> component.takeSubpixels(geometry)
+        }
     }
 }
 

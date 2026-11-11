@@ -251,6 +251,8 @@ class ConsoleClient internal constructor(
             } catch (e: Exception) {
                 currentCoroutineContext().ensureActive()
             }
+            // a connection that is still down costs the router nothing to try again, and the transport spaces the logins that reach it
+            if (!alive()) wait = ROUND_MILLIS
         }
     }
 

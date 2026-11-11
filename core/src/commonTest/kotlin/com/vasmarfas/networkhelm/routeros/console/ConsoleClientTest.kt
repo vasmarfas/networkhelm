@@ -18,6 +18,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -643,6 +644,30 @@ class ConsoleClientTest {
         up = true
         client.status.first { it == LinkState.Up }
         assertEquals(2, consoles.size)
+        client.close()
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aConnectionThatStaysDownIsTriedEverySecondSoItIsBackWithTheNetwork() = runTest {
+        var up = true
+        var tries = 0
+        val client = ConsoleClient(1, alive = { up }) {
+            if (!up) {
+                tries++
+                error("failed to connect after 10000ms")
+            }
+            FakeConsole { "{\"name\":\"CHR\"}" }.also { consoles += it }
+        }
+        client.warm(backgroundScope)
+        client.call(listOf("/system/identity/print"))
+        up = false
+        client.status.first { it == LinkState.Reconnecting }
+        advanceTimeBy(20_000)
+        assertTrue(tries >= 15, "$tries tries in 20 s")
+        up = true
+        advanceTimeBy(1_500)
+        assertEquals(LinkState.Up, client.status.first())
         client.close()
     }
 

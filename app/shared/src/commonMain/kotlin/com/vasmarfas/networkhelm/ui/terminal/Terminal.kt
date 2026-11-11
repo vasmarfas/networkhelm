@@ -76,6 +76,7 @@ import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.form_ok
 import networkhelm.app.shared.generated.resources.link_closed
+import networkhelm.app.shared.generated.resources.link_lost
 import networkhelm.app.shared.generated.resources.list_cancel
 import networkhelm.app.shared.generated.resources.list_remove
 import networkhelm.app.shared.generated.resources.snippets_add
@@ -130,7 +131,7 @@ fun TerminalView(ssh: SshSession, startup: String? = null, terminal: @Composable
         result == null -> Note(stringResource(Res.string.terminal_opening))
         result.isFailure -> {
             val e = result.exceptionOrNull()
-            Failure(stringResource(Res.string.terminal_failed, e?.let(::sshFailure)?.let { stringResource(it) } ?: e?.message.orEmpty()), reopen)
+            Failure(stringResource(Res.string.terminal_failed, e?.let { sshFailure(it, ssh.canForward) }?.let { stringResource(it) } ?: e?.message.orEmpty()), reopen)
         }
         cut -> Failure(stringResource(Res.string.link_closed), reopen)
         snippets == null -> key(result.getOrThrow()) { terminal(result.getOrThrow(), Modifier.fillMaxSize()) }
@@ -178,10 +179,13 @@ fun TelnetView(ssh: SshSession, terminal: @Composable (ShellChannel, Modifier) -
     }
 }
 
-internal fun sshFailure(e: Throwable): StringResource? {
-    if (e is DeviceException && e.category == ErrorCategory.PermissionDenied) return Res.string.ssh_denied
+// only SSH opens a connection of its own, and only it forwards ports: the console of the WinBox port and of MAC-Telnet goes over the connection of the session and fails with it
+internal fun sshFailure(e: Throwable, own: Boolean = true): StringResource? {
     val causes = generateSequence(e) { it.cause }.mapNotNull { it::class.simpleName }.toList()
+    val unreached = "ConnectException" in causes || "SocketTimeoutException" in causes
     return when {
+        !own -> Res.string.link_lost.takeIf { unreached || e is DeviceException && e.category == ErrorCategory.ConnectionLost }
+        e is DeviceException && e.category == ErrorCategory.PermissionDenied -> Res.string.ssh_denied
         "ConnectException" in causes -> Res.string.ssh_refused
         "SocketTimeoutException" in causes -> Res.string.ssh_timeout
         else -> null

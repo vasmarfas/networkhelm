@@ -430,8 +430,10 @@ internal class NativeWindows(
                     if (first && it.rows.isEmpty() && held() > 0) throw DeviceException(ErrorCategory.Unsupported, "the object model has no lines where the console has some")
                 }
             } catch (e: DeviceException) {
-                // a channel that dropped under a read is opened again a few times, a log the object model cannot give, or a channel that cannot be opened, is left to the console
-                if (e.category != ErrorCategory.ConnectionLost || run == null || ++retries > LINES_RETRIES) break
+                // a channel that dropped under a read is opened again a few times, a log the object model cannot give, or a channel that cannot be opened, is left to the console;
+                // the channel of the session itself goes down with the console, so it waits for the connection to come back
+                val waits = run == null && side?.sessionPort != null && e.category == ErrorCategory.ConnectionLost
+                if (!waits && (e.category != ErrorCategory.ConnectionLost || run == null || ++retries > LINES_RETRIES)) break
                 run = null
                 delay(every)
                 continue
@@ -581,7 +583,8 @@ internal class NativeWindows(
     private suspend fun objects(): NativeObjects = lock.withLock {
         opened ?: run {
             if (closed) throw gone()
-            val fresh = backoff.opening(::open)
+            // a side over the connection of the session logs in nowhere, and that connection spaces its own logins
+            val fresh = if (side?.sessionPort != null) open() else backoff.opening(::open)
             if (closed) {
                 fresh.close()
                 throw gone()

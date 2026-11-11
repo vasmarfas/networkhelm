@@ -393,6 +393,22 @@ class LayoutTest {
     }
 
     @Test
+    fun aWindowThatAButtonOfAGroupedEntryOpensLeavesTheEntryOnlyInItsGroup() {
+        val scanner = Pack(
+            menu = listOf("Wireless", "CAPsMAN", "CAPs Scanner"),
+            window = PackWindow("CAPs Scanner", listOf(PackTab("CAPs Scanner", "native/88/153/q4"))),
+            paths = mapOf("native/88/153/q4" to PackPath(columns = listOf("address"))),
+            hidden = true,
+        )
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(schemas = capsManRouter, made = listOf(capsMan(listOf("Wireless", "CAPsMAN")), scanner)), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        runBlocking { tab.loadMenu(bundledMenu()) }
+        val top = tab.menu.orEmpty()
+        assertTrue(top.none { it.title == "CAPsMAN" })
+        assertEquals(listOf("native/88/154"), top.single { it.title == "Wireless" }.items.filter { it.title == "CAPsMAN" }.map { it.path })
+    }
+
+    @Test
     fun anEntryTheRoutersDescriptionKeepsAtTheTopLevelStays() {
         val storage = MemoryStorage()
         val tab = RouterTab(FakeRouter(schemas = capsManRouter, made = listOf(capsMan(listOf("CAPsMAN")))), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))

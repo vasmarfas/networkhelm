@@ -13,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
+import com.vasmarfas.networkhelm.app.ClearTypeLayer
 import com.vasmarfas.networkhelm.app.WorkspaceBackground
 import com.vasmarfas.networkhelm.app.desktopServices
 import com.vasmarfas.networkhelm.app.quit
@@ -50,6 +51,7 @@ private fun startApplication() = application {
         title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
         icon = appIcon(),
     ) {
+        ClearTypeLayer()
         ShellTheme(shell, relocalize = false) { WorkspaceBackground() }
         CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
             MenuLook(shell) { App(shell) }
@@ -63,6 +65,7 @@ private fun startApplication() = application {
                 title = "${window.spec.title} — ${window.tab.session.device.identity}",
                 icon = appIcon(),
             ) {
+                ClearTypeLayer()
                 ShellTheme(shell) {
                     WorkspaceBackground()
                     MenuLook(shell) {

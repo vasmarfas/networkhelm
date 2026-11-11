@@ -300,7 +300,7 @@
     <string name="files_failed">Не удалось передать файл: %1$s</string>
     <string name="files_no_ftp">Файлы передаются на компьютер и обратно по SFTP, а RouterOS пускает в него только группу пользователей с правом ftp.</string>
     <string name="files_auto_question">Пакет *.auto.npk роутер ставит сразу после загрузки и перезагружается, скрипт *.auto.rsc сразу выполняет. Отправить %1$s?</string>
-    <string name="terminal_opening">Открываю консоль по SSH…</string>
+    <string name="terminal_opening">Открываю консоль…</string>
     <string name="telnet_address">Адрес</string>
     <string name="telnet_connect">Подключиться</string>
     <string name="terminal_failed">Не удалось открыть консоль: %1$s</string>

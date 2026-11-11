@@ -175,6 +175,24 @@ class TerminalTest {
     }
 
     @Test
+    fun aConsoleOverTheConnectionOfTheSessionThatCannotOpenTellsTheLostConnectionAndNotSsh() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val closed = ServerSocket(0, 1, InetAddress.getLoopbackAddress()).use { it.localPort }
+        val tab = tab(object : SshSession by SocketSsh(closed) {
+            override val canForward = false
+        })
+        setContent {
+            NetworkHelmTheme(dark = true) {
+                CompositionLocalProvider(LocalTerminal provides { shell, modifier -> Reading(shell, modifier) }) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("New Terminal")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("New Terminal").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Could not open the console", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Could not open the console: The connection to the router is lost, reconnecting…").assertExists()
+    }
+
+    @Test
     fun theTelnetWindowAsksForAnAddressAndRunsTheTelnetClientOfTheRouterInAConsole() = runDesktopComposeUiTest(1100, 700) {
         Locale.setDefault(Locale.ENGLISH)
         val ssh = Ssh()

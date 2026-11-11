@@ -101,6 +101,15 @@ class BackoffTest {
     }
 
     @Test
+    fun anOpenThatDidNotReachTheRouterHoldsBackNoNextOne() = runTest {
+        val reaching = Backoff(time) { it is DeviceException }
+        repeat(5) { runCatching { reaching.opening { attempts++.also { error("network is unreachable") } } } }
+        assertEquals(5, attempts)
+        repeat(3) { runCatching { reaching.opening { attempts++.also { throw DeviceException(ErrorCategory.PermissionDenied, "refused") } } } }
+        assertEquals(7, attempts)
+    }
+
+    @Test
     fun aCancelledOpenIsNotAFailure() = runTest {
         assertFailsWith<CancellationException> { backoff.opening { throw CancellationException("cancelled") } }
         assertEquals(Duration.ZERO, waited())

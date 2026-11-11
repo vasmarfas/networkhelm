@@ -108,6 +108,21 @@ class NativeLogWindowsTest {
     }
 
     @Test
+    fun theLogOverTheConnectionOfTheSessionWaitsForItToComeBackInsteadOfGoingToTheConsole() = runTest {
+        val objects = Followed({ fresh(1..3) })
+        var down = 3
+        val side = object : NativeSide {
+            override val sessionPort = 18291
+
+            override suspend fun open(port: Int): NativeObjects {
+                if (down-- > 0) throw DeviceException(ErrorCategory.ConnectionLost, "the connection to the router is lost")
+                return objects
+            }
+        }
+        assertEquals(listOf(ListEvent.Snapshot(lines(1..3))), collected(NativeWindows(side, { 8291 }, 1.seconds), { 0 }, 6))
+    }
+
+    @Test
     fun theConsoleTakesOverWhenALaterReadFailsAndTheLinesShownAreReplaced() = runTest {
         val objects = Followed({ fresh(1..3) }, refused(ErrorCategory.Unsupported))
         assertEquals(listOf(ListEvent.Snapshot(lines(1..3)), ListEvent.Snapshot(listOf(onConsole))), collected(windows(objects), { 0 }, 3))

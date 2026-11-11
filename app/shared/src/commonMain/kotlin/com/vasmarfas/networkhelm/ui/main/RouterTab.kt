@@ -787,9 +787,10 @@ class RouterTab(
         return base.device.platform == Platform.RouterOs && name !in base.device.packages
     }
 
-    // the router's description may put an entry of the bundled top level into a group, as CAPsMAN under Wireless, and it stands only there
+    // the router's description may put an entry of the bundled top level into a group, as CAPsMAN under Wireless, and it stands only there;
+    // a window its buttons open, as CAPs Scanner, stands under it and makes no group of it
     private fun movedInto(made: List<Pack>): Set<String> {
-        val places = made.map { it.menu }
+        val places = made.filterNot { it.hidden }.map { it.menu }
         val groups = places.filter { it.size > 1 }.flatMap { it.dropLast(1) }.toSet()
         return places.filter { it.size > 1 }.map { it.last() }.toSet() - places.filter { it.size == 1 }.map { it.first() }.toSet() - groups
     }

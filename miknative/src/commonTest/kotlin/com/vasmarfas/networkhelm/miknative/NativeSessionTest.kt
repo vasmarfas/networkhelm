@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.miknative
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -273,6 +274,43 @@ class NativeSessionTest {
             assertEquals(2, routers.size)
             ssh.close()
             assertEquals(ErrorCategory.ConnectionLost, assertFailsWith<DeviceException> { ssh.shell("xterm", 80, 24) }.category)
+            assertEquals(2, routers.size)
+        } finally {
+            ssh.close()
+            routers.forEach { it.close() }
+        }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aConnectionTheNetworkDoesNotLetThroughIsTriedAtEveryCallAndToldAsTheLinkLost() = runTest {
+        val routers = ArrayList<FakeRouter>()
+        var down = false
+        var tries = 0
+        val ssh = NativeSsh.open(
+            {
+                tries++
+                if (down) error("Network is unreachable")
+                val (client, server) = pipe()
+                routers += FakeRouter(this, server, "admin", "secret", consoleRouter())
+                NativeConnection.open(client, "admin", "secret", this)
+            },
+            "secret",
+            testTimeSource,
+        )
+        try {
+            assertEquals("banner> ", ssh.shell("xterm", 80, 24).readText(8))
+            down = true
+            routers.single().close()
+            delay(100)
+            repeat(10) {
+                val error = assertFailsWith<DeviceException> { ssh.side(18291).open(18291) }
+                assertEquals(ErrorCategory.ConnectionLost, error.category)
+                assertEquals(LINK_LOST, error.message)
+            }
+            assertEquals(11, tries)
+            down = false
+            assertEquals("banner> ", ssh.shell("xterm", 80, 24).readText(8))
             assertEquals(2, routers.size)
         } finally {
             ssh.close()

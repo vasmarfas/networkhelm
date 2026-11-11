@@ -10,8 +10,13 @@ import kotlin.time.TimeSource
 private val FIRST_WAIT = 5.seconds
 private val STEADY = 2.minutes
 
-// each login costs the router a key exchange, so the first failure is retried at once and the next ones at growing intervals
-class Backoff(private val time: TimeSource = TimeSource.Monotonic, private val longest: Duration = 5.minutes) {
+// each login costs the router a key exchange, so the first failure is retried at once and the next ones at growing intervals;
+// an open that failed before it reached the router cost it nothing and holds back no next one
+class Backoff(
+    private val time: TimeSource = TimeSource.Monotonic,
+    private val longest: Duration = 5.minutes,
+    private val reached: (Exception) -> Boolean = { true },
+) {
     private var failures = 0
     private var since: TimeMark? = null
     private var waiting: Pair<TimeMark, Throwable>? = null
@@ -23,7 +28,7 @@ class Backoff(private val time: TimeSource = TimeSource.Monotonic, private val l
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            failed(e)
+            if (reached(e)) failed(e)
             throw e
         }
         since = time.markNow()

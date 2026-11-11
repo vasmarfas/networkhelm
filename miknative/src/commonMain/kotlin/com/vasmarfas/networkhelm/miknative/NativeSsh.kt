@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.miknative
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.session.Backoff
 import com.vasmarfas.networkhelm.session.NativeObjects
 import com.vasmarfas.networkhelm.session.NativeSide
@@ -10,6 +11,7 @@ import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.transport.ByteStream
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -60,7 +62,16 @@ class NativeSsh private constructor(
     private suspend fun live(): NativeConnection = lock.withLock {
         if (!connection.alive && !closed) {
             backoff.lost(DeviceException(ErrorCategory.ConnectionLost, "the router closed the connection"))
-            connection = backoff.opening(open)
+            connection = try {
+                backoff.opening(open)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: DeviceException) {
+                throw e
+            } catch (e: Exception) {
+                // a connection the network does not let through is the link lost for the console, the files and the windows alike
+                throw DeviceException(ErrorCategory.ConnectionLost, LINK_LOST, e)
+            }
         }
         if (closed) {
             connection.close()
@@ -73,8 +84,9 @@ class NativeSsh private constructor(
 
     companion object {
         suspend fun open(open: suspend () -> NativeConnection, password: String, time: TimeSource = TimeSource.Monotonic): NativeSsh {
-            // the console is the session itself, so after a reboot of the router it has to be back within half a minute
-            val backoff = Backoff(time, 30.seconds)
+            // the console is the session itself, so after a reboot of the router it has to be back within half a minute;
+            // only an open that got as far as the login costs the router anything
+            val backoff = Backoff(time, 30.seconds) { it is DeviceException }
             return NativeSsh(backoff.opening(open), password, open, backoff)
         }
     }

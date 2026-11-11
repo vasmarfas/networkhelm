@@ -300,7 +300,7 @@
     <string name="files_failed">File transfer failed: %1$s</string>
     <string name="files_no_ftp">Files go to the computer and back over SFTP, which RouterOS opens only to a user group with the ftp policy.</string>
     <string name="files_auto_question">The router installs a package named *.auto.npk and reboots, and runs a script named *.auto.rsc, as soon as the file arrives. Send %1$s?</string>
-    <string name="terminal_opening">Opening the console over SSH…</string>
+    <string name="terminal_opening">Opening the console…</string>
     <string name="telnet_address">Address</string>
     <string name="telnet_connect">Connect</string>
     <string name="terminal_failed">Could not open the console: %1$s</string>
