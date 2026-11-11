@@ -53,7 +53,8 @@ private fun mergedPath(have: PackPath, said: PackPath, form: String?) = have.cop
     readonly = (have.readonly + said.readonly).distinct(),
     form = form,
     actions = have.actions + said.actions.filter { action -> have.actions.none { it.command == action.command } },
-    links = have.links + said.links.filter { link -> have.links.none { it.path == link.path } },
+    // a link of the router with the title of a bundled one is that button, and the bundled one knows where it goes
+    links = have.links + said.links.filter { link -> have.links.none { it.path == link.path || it.title == link.title } },
     menu = have.menu + said.menu.filter { item -> have.menu.none { it.title == item.title && it.path == item.path } },
     labels = have.labels + said.labels,
     flags = said.flags.ifEmpty { have.flags },

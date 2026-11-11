@@ -6,6 +6,7 @@ import com.vasmarfas.networkhelm.packs.PackAction
 import com.vasmarfas.networkhelm.packs.PackDerived
 import com.vasmarfas.networkhelm.packs.PackForm
 import com.vasmarfas.networkhelm.packs.PackFormTab
+import com.vasmarfas.networkhelm.packs.PackLink
 import com.vasmarfas.networkhelm.packs.PackPath
 import com.vasmarfas.networkhelm.packs.PackTab
 import com.vasmarfas.networkhelm.packs.PackWindow
@@ -82,6 +83,14 @@ class UiOverlayTest {
         val path = routerFirst(listOf(have), listOf(said)).single().paths.getValue("ip/gadget")
         assertEquals(listOf("channel", "mode", "ip-version"), path.autoset)
         assertEquals(listOf(".state"), path.derived.keys.toList())
+    }
+
+    @Test
+    fun aLinkOfTheRouterWithTheTitleOfABundledOneGivesWayToIt() {
+        val have = pack(listOf("A"), PackPath(links = listOf(PackLink("Check For Updates", "system/package/update"), PackLink("Check Installation", "system/check-installation"))))
+        val said = pack(listOf("A"), PackPath(links = listOf(PackLink("Check For Updates", "ip/gadget"), PackLink("Log", "log"))))
+        val links = routerFirst(listOf(have), listOf(said)).single().paths.getValue("ip/gadget").links
+        assertEquals(listOf("system/package/update", "system/check-installation", "log"), links.map { it.path })
     }
 
     @Test

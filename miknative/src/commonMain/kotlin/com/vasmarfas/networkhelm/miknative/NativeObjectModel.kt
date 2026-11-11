@@ -77,6 +77,8 @@ private const val KIBI = 1024
 private val NAMES_FRESH = 30.seconds
 private val FACT_WAIT = 3.seconds
 private val PROBE_WAIT = 4.seconds
+// a query nobody started may leave its poll unanswered, while a handler the router lacks refuses at once
+private val QUERY_PROBE_WAIT = 500.milliseconds
 private val LOG_WAIT = 300.milliseconds
 private val DUMP_FIRST = 2.seconds
 private val DUMP_QUIET = 200.milliseconds
@@ -208,12 +210,13 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
         }
     }
 
-    // a handler the router ignores keeps a read waiting for its whole timeout: the window is not there, and the channel stays while the router answers elsewhere
+    // a handler the router ignores keeps a read waiting for its whole timeout: the window is not there, and the channel stays while the router answers elsewhere.
+    // A query that says nothing to a poll before it is started is a window all the same, as WinBox shows it
     override suspend fun answers(spec: PackNative): Boolean {
+        val query = spec.query
         var answered = false
         try {
-            withTimeoutOrNull(PROBE_WAIT) {
-                val query = spec.query
+            withTimeoutOrNull(if (query == null) PROBE_WAIT else QUERY_PROBE_WAIT) {
                 if (query == null) read(spec, 1) else probed(spec, query)
                 answered = true
             }
@@ -221,6 +224,7 @@ class NativeObjectModel(private val connection: NativeConnection, private val ow
             if (e.category == ErrorCategory.ConnectionLost) throw e
             return e.keepsWindow()
         }
+        if (!answered && query != null) return true
         if (!answered && asked(SYSTEM_INFO, M2Value.U8(INFO_COMMAND)) == null) throw DeviceException(ErrorCategory.ConnectionLost, "the router did not answer")
         return answered
     }

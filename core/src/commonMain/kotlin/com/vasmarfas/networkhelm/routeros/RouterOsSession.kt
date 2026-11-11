@@ -182,7 +182,7 @@ class RouterOsSession(
         val state = "${device.id.orEmpty()} ${device.version} ${device.packages.sorted()} ${uiState(files)} ${encodeUiPacks(bundled).hashCode()} $UI_PACKS $natively $facts"
         val name = "ui-packs-${state.hashCode().toUInt().toString(16)}.json"
         val mirrorsName = "ui-mirrors-${state.hashCode().toUInt().toString(16)}.json"
-        val verdictsName = "ui-verdicts-${state.hashCode().toUInt().toString(16)}.json"
+        val verdictsName = "ui-verdicts-$UI_VERDICTS-${state.hashCode().toUInt().toString(16)}.json"
         suspend fun standing(all: List<Pack>, inherited: Map<String, PackNative>): List<Pack> {
             val known = store?.read(verdictsName)?.let(::decodeVerdicts)
             var checked = false
@@ -604,7 +604,9 @@ class RouterOsSession(
     private fun item(attributes: Map<String, String>) = Item(attributes[".id"].orEmpty(), attributes - service)
 
     private companion object {
-        const val UI_PACKS = 18
+        const val UI_PACKS = 19
+        // the way the windows are checked: the verdicts kept before it changed are made again
+        const val UI_VERDICTS = 2
         const val TOUCHED_KEPT = 16
 
         // a smaller table the console reads at once in less time than the check of the mirror takes

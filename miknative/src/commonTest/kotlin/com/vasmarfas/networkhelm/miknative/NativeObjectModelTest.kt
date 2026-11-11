@@ -121,13 +121,22 @@ private class SystemRouter(private val word: Long?) {
 }
 
 // answers the system info and the holders it is told to, and says nothing to the rest, as a router does to a handler of hardware it has not
-private class PatchyRouter(private val holders: Set<List<Long>>, private val silent: Boolean = false) {
+private class PatchyRouter(
+    private val holders: Set<List<Long>>,
+    private val silent: Boolean = false,
+    private val off: Set<List<Long>> = emptySet(),
+    private val absent: Set<List<Long>> = emptySet(),
+) {
     suspend fun FakeRouter.handle(message: M2Message) {
         if (silent) return
         val handler = checkNotNull(message.numbers(M2Key.To)).toList().takeLast(2)
         when (message.number(M2Key.Command)) {
             7L -> if (handler == listOf(13L, 4L)) reply(message, 0x15 to M2Value.Text("CHR"))
-            GET_SINGLETON -> if (handler in holders) reply(message, 0x1 to M2Value.U32(1))
+            GET_SINGLETON -> when (handler) {
+                in holders -> reply(message, 0x1 to M2Value.U32(1))
+                in off -> reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0006), M2Key.Error to M2Value.Text("dude is disabled"))
+                in absent -> reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0002))
+            }
         }
     }
 }
@@ -239,6 +248,12 @@ class NativeObjectModelTest {
         assertFalse(model.answers(ignored))
         assertEquals(ErrorCategory.Unsupported, assertFailsWith<DeviceException> { model.read(ignored) }.category)
         assertEquals(listOf("1s"), model.read(uptime)?.map { it["uptime"] })
+    }
+
+    @Test
+    fun aHandlerThatRefusesOutrightIsNoWindowWhetherItsServiceIsOffOrTheRouterLacksIt() = patchy(PatchyRouter(emptySet(), off = setOf(listOf(103L, 3L)), absent = setOf(listOf(24L, 29L)))) { model ->
+        assertFalse(model.answers(PackNative(listOf(103, 3), listOf(PackNativeField("enabled", 0x1, "bool")), single = true)))
+        assertFalse(model.answers(PackNative(listOf(24, 29), listOf(PackNativeField("name", 0x1, "string")), single = true)))
     }
 
     @Test

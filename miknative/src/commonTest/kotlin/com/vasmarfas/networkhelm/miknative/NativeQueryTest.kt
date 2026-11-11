@@ -38,6 +38,7 @@ private class Router(
     var arrives: Boolean = false,
     var holds: Boolean = false,
     var state: List<Pair<Int, M2Value>> = listOf(1 to M2Value.Text("checked")),
+    var unanswered: Long? = null,
 ) {
     val asked = ArrayList<M2Message>()
     private var served = 0
@@ -59,6 +60,7 @@ private class Router(
         val command = message.number(M2Key.Command) ?: return
         asked += message
         when {
+            command == unanswered -> Unit
             command == missing -> reply(message, M2Key.ErrorCode to M2Value.U32(0xFE0003))
             command == GET_ALL && message.numbers(M2Key.To)?.toList()?.takeLast(2) == listOf(20L, 0L) ->
                 reply(message, 0xFE0002 to M2Value.Messages(listOf(M2Message.of(ID to M2Value.U8(5), 1 to M2Value.Text("ether1")))))
@@ -318,6 +320,11 @@ class NativeQueryTest {
         assertTrue(model.answers(query()))
         router.missing = GET_ALL
         assertFalse(model.answers(query()))
+    }
+
+    @Test
+    fun aQueryThatSaysNothingToAPollBeforeItIsStartedIsAWindow() = session(Router(unanswered = GET_ALL)) { model, _ ->
+        assertTrue(model.answers(query()))
     }
 
     @Test
