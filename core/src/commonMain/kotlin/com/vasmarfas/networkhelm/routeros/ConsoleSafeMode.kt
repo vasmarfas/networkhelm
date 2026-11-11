@@ -42,6 +42,8 @@ internal class ConsoleSafeMode(
     }
 
     override suspend fun enter(): Boolean = lock.withLock {
+        // a second console is asked whether to take the mode from the first, and its silence would read as the mode not held
+        if (held.value) return@withLock true
         val channel = try {
             ssh.shell("xterm", COLUMNS, ROWS)
         } catch (e: CancellationException) {

@@ -10,6 +10,7 @@ import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.routeros.api.BigTables
 import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
+import com.vasmarfas.networkhelm.routeros.api.outliving
 import com.vasmarfas.networkhelm.routeros.api.rounds
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.closingAfter
@@ -18,11 +19,14 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
-import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withPermit
+import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -46,6 +50,9 @@ class RestClient(
 
     private val requests = Semaphore(4)
     private val tables = BigTables()
+
+    // every request is a connection of its own, so the link is what the last request found
+    private val link = MutableStateFlow(LinkState.Up)
 
     override suspend fun call(words: List<String>): ApiResult = read(words) { _, _ -> }
 
@@ -77,22 +84,32 @@ class RestClient(
         } catch (e: CancellationException) {
             throw e
         } catch (e: DeviceException) {
+            if (e.category == ErrorCategory.ConnectionLost) down()
             throw e
         } catch (e: Exception) {
+            down()
             throw ApiConnectionClosedException(e.message ?: "REST request failed", e)
         }
+        link.update { if (it == LinkState.Closed) it else LinkState.Up }
         val text = response.body.decodeToString()
         when {
             response.status == 401 -> throw DeviceException(ErrorCategory.PermissionDenied, message(text))
             response.status == 404 -> throw ApiTrapException(0, message(text))
             response.status >= 400 -> throw ApiTrapException(null, message(text))
         }
-        return when (val json = if (text.isBlank()) JsonArray(emptyList()) else Json.parseToJsonElement(text)) {
+        val json = try {
+            if (text.isBlank()) JsonArray(emptyList()) else Json.parseToJsonElement(text)
+        } catch (e: SerializationException) {
+            throw DeviceException(ErrorCategory.Api, "the router answered with something other than JSON: ${text.take(200)}", e)
+        }
+        return when (json) {
             is JsonArray -> ApiResult(json.map { strings(it.jsonObject) }, emptyMap())
             is JsonObject -> ApiResult(emptyList(), strings(json))
             else -> throw DeviceException(ErrorCategory.Api, "unexpected REST answer: $text")
         }
     }
+
+    private fun down() = link.update { if (it == LinkState.Closed) it else LinkState.Reconnecting }
 
     override fun command(words: List<String>, sent: CompletableDeferred<Unit>?): Flow<ApiReply> = flow {
         if (words.first().endsWith("/listen")) throw ApiTrapException(null, "listen is not available over REST")
@@ -101,11 +118,20 @@ class RestClient(
         if (stream == null) call(words).rows.forEach { emit(ApiReply("!re", it, null)) } else emitAll(stream)
     }
 
-    override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = flow { block(this@RestClient) }
+    // an answer cut off comes as an error of the device, and for a watch it is the same lost link as a request that did not get through
+    override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = outliving(link) {
+        try {
+            block(this@RestClient)
+        } catch (e: DeviceException) {
+            throw if (e.category == ErrorCategory.ConnectionLost) ApiConnectionClosedException(e.message.orEmpty(), e) else e
+        }
+    }
 
-    override val status: Flow<LinkState> = flowOf(LinkState.Up)
+    override val status: Flow<LinkState> = link.asStateFlow()
 
-    override fun close() = Unit
+    override fun close() {
+        link.value = LinkState.Closed
+    }
 
     private fun arguments(words: List<String>) = buildJsonObject {
         val query = words.filter { it.startsWith("?") }.map { it.substring(1) }

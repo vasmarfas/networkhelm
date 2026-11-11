@@ -264,6 +264,14 @@ class ConsoleFilesTest {
     }
 
     @Test
+    fun aNameTheEncodingOfTheRouterHasNoCodeForIsRefusedAsAValue() = runTest {
+        val cyrillic = ConsoleFiles(router, Dialect.Serialize, ApiEncoding.Windows1251)
+        assertEquals(ErrorCategory.ArgumentValue, assertFailsWith<DeviceException> { cyrillic.write("/\u4E2D.txt", ByteArray(1)) }.category)
+        assertEquals(ErrorCategory.ArgumentValue, assertFailsWith<DeviceException> { cyrillic.read("/\u4E2D.txt") }.category)
+        assertTrue(router.scripts.isEmpty())
+    }
+
+    @Test
     fun theTextOfTheRouterIsWhatTheErrorSays() = runTest {
         assertEquals("no such item (4)", assertFailsWith<DeviceException> { files.read("/none") }.message)
     }

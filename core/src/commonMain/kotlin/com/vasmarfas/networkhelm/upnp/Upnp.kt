@@ -5,8 +5,14 @@ import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.routeros.api.md5
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.UdpLink
+import com.vasmarfas.networkhelm.transport.closingAfter
 import com.vasmarfas.networkhelm.transport.httpRequest
 import kotlin.random.Random
+import kotlin.time.Duration.Companion.seconds
+
+// a description and an answer to an action are a few kilobytes that a device on the local network gives at once
+private val REQUEST_TIME = 10.seconds
+private const val ANSWER_MOST = 1024 * 1024
 
 class Description(val name: String, val manufacturer: String, val model: String, val description: String, val controls: Map<String, String>)
 
@@ -46,12 +52,15 @@ class UpnpClient(
     }
 
     private suspend fun request(method: String, path: String, headers: Map<String, String>, body: ByteArray): Pair<Int, ByteArray> {
-        val first = httpRequest(open(host, port), authority, method, path, headers, body)
+        val first = asked(method, path, headers, body)
         val challenge = first.headers["www-authenticate"]?.takeIf { first.status == 401 && it.startsWith("Digest", ignoreCase = true) && user.isNotEmpty() }
             ?: return first.status to first.body
-        val again = httpRequest(open(host, port), authority, method, path, headers + ("Authorization" to digest(challenge, method, path)), body)
+        val again = asked(method, path, headers + ("Authorization" to digest(challenge, method, path)), body)
         return again.status to again.body
     }
+
+    private suspend fun asked(method: String, path: String, headers: Map<String, String>, body: ByteArray) =
+        open(host, port).closingAfter(REQUEST_TIME) { httpRequest(it, authority, method, path, headers, body, ANSWER_MOST) }
 
     private fun digest(challenge: String, method: String, path: String): String {
         val fields = Regex("""(\w+)=(?:"([^"]*)"|([^,\s]*))""").findAll(challenge).associate { it.groupValues[1].lowercase() to (it.groupValues[2].ifEmpty { it.groupValues[3] }) }

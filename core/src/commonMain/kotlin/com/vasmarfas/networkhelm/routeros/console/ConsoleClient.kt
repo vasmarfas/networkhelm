@@ -12,12 +12,14 @@ import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.routeros.api.BigTables
 import com.vasmarfas.networkhelm.routeros.api.RouterOsClient
 import com.vasmarfas.networkhelm.routeros.api.RouterOsLink
+import com.vasmarfas.networkhelm.routeros.api.outliving
 import com.vasmarfas.networkhelm.routeros.api.rounds
 import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.channels.ClosedReceiveChannelException
 import kotlinx.coroutines.currentCoroutineContext
@@ -36,6 +38,7 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.serialization.SerializationException
 import kotlin.random.Random
@@ -100,34 +103,42 @@ class ConsoleClient internal constructor(
 
         override suspend fun enter(): Boolean = mode.withLock {
             if (held.value != null) return@withLock true
-            val console = acquire()
-            val taken = try {
-                console.safe()
-            } catch (e: Throwable) {
-                release(console, false)
-                throw e
+            // a heavy line counts the consoles it takes by the mode, so none starts while a console has left the pool and does not hold the mode yet
+            heavyLine.withLock {
+                val console = acquire()
+                val taken = try {
+                    console.safe()
+                } catch (e: Throwable) {
+                    release(console, false)
+                    throw e
+                }
+                // a busy console takes the Ctrl+X later, and what went into it then would be rolled back when it is closed
+                if (taken) held.value = console else release(console, false)
+                taken
             }
-            // a busy console takes the Ctrl+X later, and what went into it then would be rolled back when it is closed
-            if (taken) held.value = console else release(console, false)
-            taken
         }
 
+        // the console leaves the mode under the line of its changes: one that waited for the line finds the mode left and goes to the pool
         override suspend fun commit() = mode.withLock {
             val console = held.value ?: return@withLock
-            var released = false
-            try {
-                heldLine.withLock { console.safe() }
-                released = true
-            } finally {
-                held.value = null
-                release(console, released)
+            heldLine.withLock {
+                var released = false
+                try {
+                    console.safe()
+                    released = true
+                } finally {
+                    held.value = null
+                    release(console, released)
+                }
             }
         }
 
         override suspend fun rollback() = mode.withLock {
             val console = held.value ?: return@withLock
-            held.value = null
-            heldLine.withLock { release(console, false) }
+            heldLine.withLock {
+                held.value = null
+                release(console, false)
+            }
         }
     }
 
@@ -202,19 +213,7 @@ class ConsoleClient internal constructor(
     }
 
     // a watch outlives a lost console, as it does a lost connection of the API
-    override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = flow {
-        var wait = ROUND_MILLIS
-        while (true) {
-            try {
-                block(this@ConsoleClient)
-                return@flow
-            } catch (e: ApiConnectionClosedException) {
-                if (link.value == LinkState.Closed) throw e
-                delay(wait)
-                wait = minOf(wait * 2, LONGEST_WAIT_MILLIS)
-            }
-        }
-    }
+    override fun <T> each(block: suspend FlowCollector<T>.(RouterOsLink) -> Unit): Flow<T> = outliving(link) { block(this@ConsoleClient) }
 
     fun warm(scope: CoroutineScope) {
         repeat(size - 1) {
@@ -279,14 +278,16 @@ class ConsoleClient internal constructor(
                 throw DeviceException(ErrorCategory.ArgumentValue, e.message.orEmpty(), e)
             }
         }
-        val holder = held.value
-        if (call.changes && holder != null) {
-            return heldLine.withLock {
-                try {
-                    ask(holder, call)
-                } catch (e: ApiConnectionClosedException) {
-                    forget(holder)
-                    throw e
+        while (call.changes) {
+            val holder = held.value ?: break
+            heldLine.withLock {
+                if (held.value === holder) {
+                    return try {
+                        ask(holder, call)
+                    } catch (e: ApiConnectionClosedException) {
+                        forget(holder)
+                        throw e
+                    }
                 }
             }
         }
@@ -338,8 +339,10 @@ class ConsoleClient internal constructor(
                 release(console, healthy)
             }
         } finally {
-            // with no console of inspections left, what still waits is asked alone
-            if (!done) sharing.withLock { leaders--; if (leaders == 0) waiting.toList().also { waiting.clear() } else emptyList() }.forEach { it.answer.complete(null) }
+            // with no console of inspections left, what still waits is asked alone; a leader cut off steps down all the same
+            if (!done) {
+                withContext(NonCancellable) { sharing.withLock { leaders--; if (leaders == 0) waiting.toList().also { waiting.clear() } else emptyList() } }.forEach { it.answer.complete(null) }
+            }
         }
     }
 
@@ -415,9 +418,10 @@ class ConsoleClient internal constructor(
 
     private fun result(call: ConsoleCall, text: String): ApiResult = when (call.reply) {
         Reply.Rows -> {
+            val rows = parse(text)
             val menu = call.menu
             if (call.heavy && call.plain && menu != null && plainAddsNothing(text)) refused.update { it + (menu to it[menu].orEmpty() + PLAIN) }
-            ApiResult(asked(call, parse(text)), emptyMap())
+            ApiResult(asked(call, rows), emptyMap())
         }
         Reply.Records -> {
             val printed = records(text)

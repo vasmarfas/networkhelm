@@ -37,6 +37,7 @@ import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.NativeSide
 import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.session.TextStore
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.session.rounds
 import com.vasmarfas.networkhelm.ssh.SshService
 import com.vasmarfas.networkhelm.ssh.SshSession
@@ -66,7 +67,6 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
-import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.combine
@@ -125,12 +125,12 @@ class RouterOsSession(
     private val mirrors = (client as? ConsoleClient)?.let { console ->
         MenuMirrors(nativeWindows, console.dialect == Dialect.Classic, { key -> inspect?.recalled(key) ?: released[key] }) { key, rows ->
             inspect?.remember(key, rows)
-            release?.let { store -> releasing.withLock { store.write(releaseName, encodeAgreements(decodeAgreements(store.read(releaseName)) + (key to rows))) } }
+            release?.let { store -> releasing.withLock { store.keep(releaseName, encodeAgreements(decodeAgreements(store.read(releaseName)) + (key to rows))) } }
         }
     }
 
-    // the menus just changed, so that their lists are read again at once
-    private val touched = MutableSharedFlow<String>(extraBufferCapacity = TOUCHED_KEPT)
+    // how many times each menu was changed, so that its list is read again at once, also after a change that fell into a read of it
+    private val touched = MutableStateFlow(emptyMap<String, Int>())
 
     private val printing = PrintSchema(client)
     private val schema: suspend (MenuPath) -> MenuSchema = inspect?.let { it::describe } ?: printing::describe
@@ -188,13 +188,13 @@ class RouterOsSession(
             var checked = false
             val alive = nativeWindows.alive(all, known) { fresh ->
                 checked = true
-                store?.write(verdictsName, encodeVerdicts(fresh))
+                store?.keep(verdictsName, encodeVerdicts(fresh))
             }
             // the windows stand as a check made before found them, and are checked again beside the reads for the next connect
             if (known != null && !checked) {
                 scope?.launch {
                     try {
-                        nativeWindows.recheck(all)?.let { store.write(verdictsName, encodeVerdicts(it)) }
+                        nativeWindows.recheck(all)?.let { store.keep(verdictsName, encodeVerdicts(it)) }
                     } catch (e: DeviceException) {
                         // a channel that cannot be asked now leaves the check made before to the next connect
                     }
@@ -219,8 +219,8 @@ class RouterOsSession(
         val known = uiKnownPaths(bundledMenu().items, bundled)
         val inherited = if (natively) uiInheritedMirrors(entries, source, known) else emptyMap()
         (routerFirst(bundled, uiPacks(entries, source, known, natively, facts, bundled)) + if (natively) uiQueries(entries, facts) else emptyList()).also {
-            store?.write(name, encodeUiPacks(it))
-            store?.write(mirrorsName, encodeUiMirrors(inherited))
+            store?.keep(name, encodeUiPacks(it))
+            store?.keep(mirrorsName, encodeUiMirrors(inherited))
         }.let { standing(it, inherited) }
     }
 
@@ -275,7 +275,7 @@ class RouterOsSession(
         inspect?.forgetNames()
         client.call(listOf(path.apiCommand("add")) + values.words()).done["ret"]
             ?: throw DeviceException(ErrorCategory.Api, "${path.apiCommand("add")} answered without an id")
-    }.also { touched.tryEmit(path.toString()) }
+    }.also { touch(path) }
 
     override suspend fun set(path: MenuPath, id: String?, changes: Map<String, String?>) = changing {
         nativeSpec(path)?.let { return@changing nativeWindows.change(it, id, changes) }
@@ -284,7 +284,7 @@ class RouterOsSession(
         val values = changes.mapNotNull { (name, value) -> value?.let { name to it } }.toMap()
         if (values.isNotEmpty()) client.call(listOf(path.apiCommand("set")) + target + values.words())
         changes.filterValues { it == null }.keys.forEach { client.call(listOf(path.apiCommand("unset")) + target + "=value-name=$it") }
-    }.also { touched.tryEmit(path.toString()) }
+    }.also { touch(path) }
 
     override suspend fun remove(path: MenuPath, ids: List<String>) {
         changing {
@@ -292,7 +292,7 @@ class RouterOsSession(
             inspect?.forgetNames()
             for (part in ids.chunked(REMOVED_AT_ONCE)) client.call(path.apiCommand("remove"), "=.id=" + part.joinToString(","))
         }
-        touched.tryEmit(path.toString())
+        touch(path)
     }
 
     override suspend fun move(path: MenuPath, ids: List<String>, before: String?) {
@@ -300,8 +300,10 @@ class RouterOsSession(
             nativeSpec(path)?.let { return@changing nativeWindows.move(it, ids, before) }
             client.call(listOfNotNull(path.apiCommand("move"), "=numbers=" + ids.joinToString(","), before?.let { "=destination=$it" }))
         }
-        touched.tryEmit(path.toString())
+        touch(path)
     }
+
+    private fun touch(path: MenuPath) = touched.update { it + (path.toString() to (it[path.toString()] ?: 0) + 1) }
 
     override fun run(path: MenuPath, command: String, arguments: Map<String, String>): Flow<Item> =
         if (nativeWindows.stands(path)) {
@@ -388,8 +390,10 @@ class RouterOsSession(
                 val least = if (path == LOG) pollInterval * 5 else nativeWindows.refresh(path) ?: pollInterval
                 var wait = least
                 val menu = path.toString()
+                var seen = touched.value[menu]
                 while (true) {
-                    withTimeoutOrNull(wait) { touched.first { it == menu } }
+                    withTimeoutOrNull(wait) { touched.first { it[menu] != seen } }
+                    seen = touched.value[menu]
                     val asked = TimeSource.Monotonic.markNow()
                     // a round that rows going under the print broke leaves the list as it was until the next one
                     val fresh = try {
@@ -416,8 +420,9 @@ class RouterOsSession(
     ): List<Map<String, String>> {
         val words = print(path, properties) + query
         val menu = path.toString()
+        // the classic console prints the whole table whatever rows it is asked for, so checking a window against it costs more than the read
         val mirror = nativeMirrors[menu]?.takeIf {
-            client is ConsoleClient && properties == null && query.isEmpty() && menu !in mirrorsRefused.value && (sizes.value[menu] ?: MIRRORED_LEAST) > MIRRORED_LEAST / 2
+            client is ConsoleClient && client.dialect == Dialect.Serialize && properties == null && query.isEmpty() && menu !in mirrorsRefused.value && (sizes.value[menu] ?: MIRRORED_LEAST) > MIRRORED_LEAST / 2
         }
         val console: suspend () -> List<Map<String, String>> = { api.table(words) { read, total -> progress(read, total, emptyList()) } }
         // a table that had more rows than its window shows is left to the console until it has fewer
@@ -518,6 +523,7 @@ class RouterOsSession(
         private val lost = MutableStateFlow(false)
         private val left = MutableStateFlow(false)
         private val history = MenuPath.parse("system/history")
+        private val entering = Mutex()
         private var beat: Job? = null
 
         init {
@@ -563,10 +569,13 @@ class RouterOsSession(
             }
         }
 
-        override suspend fun enter(): Boolean = deviceErrors {
-            (client.call("/safe-mode/take").done["ret"] == "true").also { taken ->
-                held.value = taken
-                if (taken) beat = scope?.launch { client.command(BEAT).catch { }.collect { } }
+        override suspend fun enter(): Boolean = entering.withLock {
+            if (held.value) return@withLock true
+            deviceErrors {
+                (client.call("/safe-mode/take").done["ret"] == "true").also { taken ->
+                    held.value = taken
+                    if (taken) beat = scope?.launch { client.command(BEAT).catch { }.collect { } }
+                }
             }
         }
 
@@ -610,7 +619,6 @@ class RouterOsSession(
         const val UI_PACKS = 19
         // the way the windows are checked: the verdicts kept before it changed are made again
         const val UI_VERDICTS = 2
-        const val TOUCHED_KEPT = 16
 
         // a smaller table the console reads at once in less time than the check of the mirror takes
         const val MIRRORED_LEAST = 2_000

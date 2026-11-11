@@ -2,11 +2,14 @@ package com.vasmarfas.networkhelm.routeros.rest
 
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.CannedStream
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -23,8 +26,9 @@ class RestClientTest {
     private val streams = ArrayDeque<CannedStream>()
     private val client = RestClient("192.0.2.1", "admin", "secret") { streams.removeFirst() }
 
-    private fun answer(status: Int, json: String) =
-        CannedStream("HTTP/1.1 $status X\r\nContent-Length: ${json.encodeToByteArray().size}\r\n\r\n$json").also { streams += it }
+    private fun canned(status: Int, json: String) = CannedStream("HTTP/1.1 $status X\r\nContent-Length: ${json.encodeToByteArray().size}\r\n\r\n$json")
+
+    private fun answer(status: Int, json: String) = canned(status, json).also { streams += it }
 
     @Test
     fun wordsBecomeAPostWithJsonArguments() = runTest {
@@ -149,6 +153,34 @@ class RestClientTest {
         answer(401, """{"error":401,"message":"Unauthorized"}""")
         assertEquals("failure: already have such entry", assertFailsWith<ApiTrapException> { client.call(listOf("/ip/address/add")) }.message)
         assertEquals(ErrorCategory.PermissionDenied, assertFailsWith<DeviceException> { client.call(listOf("/system/identity/print")) }.category)
+    }
+
+    @Test
+    fun anAnswerThatIsNotJsonIsAnErrorOfTheDevice() = runTest {
+        answer(200, "<html>Sign in to the network</html>")
+        assertEquals(ErrorCategory.Api, assertFailsWith<DeviceException> { client.call(listOf("/ip/address/add")) }.category)
+    }
+
+    @Test
+    fun aWatchAsksAgainAfterARequestTheLinkFailedAndTheLinkIsDownUntilOneGetsThrough() = runTest {
+        var requests = 0
+        val flaky = RestClient("192.0.2.1", "admin", "secret") {
+            when (requests++) {
+                0 -> error("connection refused")
+                1 -> CannedStream("")
+                else -> canned(200, """[{"name":"lab"}]""")
+            }
+        }
+        val links = mutableListOf<LinkState>()
+        val seen = flaky.each<String> { link ->
+            links += flaky.status.first()
+            emit(link.call(listOf("/system/identity/print")).rows.single().getValue("name"))
+        }.toList()
+        assertEquals(listOf("lab"), seen)
+        assertEquals(listOf(LinkState.Up, LinkState.Reconnecting, LinkState.Reconnecting), links)
+        assertEquals(LinkState.Up, flaky.status.first())
+        flaky.close()
+        assertFailsWith<ApiConnectionClosedException> { flaky.each<String> { throw ApiConnectionClosedException("closed") }.toList() }
     }
 
     @Test

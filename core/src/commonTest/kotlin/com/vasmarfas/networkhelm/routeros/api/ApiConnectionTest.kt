@@ -1,5 +1,7 @@
 package com.vasmarfas.networkhelm.routeros.api
 
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
@@ -132,6 +134,13 @@ class ApiConnectionTest {
         router.reply("!fatal", "session terminated on request")
         val error = assertFailsWith<ApiConnectionClosedException> { listen.await().getOrThrow() }
         assertTrue(generateSequence<Throwable>(error) { it.cause }.any { it.message == "session terminated on request" })
+    }
+
+    @Test
+    fun aWordTheEncodingOfTheRouterHasNoCodeForIsRefusedAsAValue() = runTest {
+        val api = ApiConnection(FakeRouterStream(), ApiEncoding.Windows1251, backgroundScope)
+        val error = assertFailsWith<DeviceException> { api.call("/ip/address/set", "=.id=*1", "=comment=\u4E2D") }
+        assertEquals(ErrorCategory.ArgumentValue, error.category)
     }
 
     @Test

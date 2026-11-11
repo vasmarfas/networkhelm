@@ -1,5 +1,7 @@
 package com.vasmarfas.networkhelm.routeros.api
 
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.transport.ByteStream
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CompletableDeferred
@@ -111,7 +113,11 @@ class ApiConnection(
     }.flowOn(dispatcher)
 
     private suspend fun send(words: List<String>) {
-        val bytes = encodeSentence(words.map(encoding::encode))
+        val bytes = try {
+            encodeSentence(words.map(encoding::encode))
+        } catch (e: IllegalArgumentException) {
+            throw DeviceException(ErrorCategory.ArgumentValue, e.message.orEmpty(), e)
+        }
         writeLock.withLock {
             try {
                 stream.write(bytes)

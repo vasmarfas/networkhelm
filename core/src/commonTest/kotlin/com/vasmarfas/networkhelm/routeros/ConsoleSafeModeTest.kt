@@ -104,6 +104,17 @@ class ConsoleSafeModeTest {
     }
 
     @Test
+    fun theModeAlreadyHeldIsNotTakenAgainThroughAnotherConsole() = runTest {
+        val ssh = Ssh()
+        val safeMode = ConsoleSafeMode(ssh, backgroundScope, { 1 }, 1.seconds)
+
+        assertTrue(safeMode.enter())
+        assertTrue(safeMode.enter())
+        assertEquals(1, ssh.consoles.size)
+        assertTrue(ssh.consoles.single().safe && safeMode.active.first())
+    }
+
+    @Test
     fun theQuestionsOfTheFirstLoginAreAnsweredBeforeTheModeIsTaken() = runTest {
         val ssh = Ssh(firstLogin = true)
         val safeMode = ConsoleSafeMode(ssh, backgroundScope, { 1 }, 1.seconds)

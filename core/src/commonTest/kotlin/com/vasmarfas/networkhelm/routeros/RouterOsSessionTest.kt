@@ -377,6 +377,41 @@ class RouterOsSessionTest {
         assertFalse(safe.stranded.first())
     }
 
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun theModeTheSessionHoldsIsNotTakenAgain() = runTest {
+        val link = Link()
+        val safe = assertNotNull(RouterOsSession(link, device, capabilities, scope = backgroundScope).safeMode)
+        assertTrue(safe.enter())
+        assertTrue(safe.enter())
+        runCurrent()
+        assertEquals(1, link.calls.count { it == "/safe-mode/take" })
+        assertEquals(1, link.streams.size, "one command keeps the session of the mode alive")
+    }
+
+    @Test
+    fun aChangeThatFellIntoAReadOfTheListHasItReadAgainAtOnce() = runTest {
+        val router = FakeRouterStream()
+        val events = Channel<ListEvent>(Channel.UNLIMITED)
+        val path = MenuPath.parse("ip/firewall/connection")
+        val session = session(router, backgroundScope)
+        backgroundScope.launch { session.watch(path).collect { events.send(it) } }
+        val listen = router.expect("/ip/firewall/connection/listen")
+        val print = router.expect("/ip/firewall/connection/print")
+        router.reply("!trap", "=message=no such command", ".tag=$listen")
+        router.reply("!done", ".tag=$listen")
+        router.reply("!re", "=.id=*1", "=protocol=udp", ".tag=$print")
+        router.reply("!done", ".tag=$print")
+        assertEquals(ListEvent.Snapshot(listOf(Item("*1", mapOf("protocol" to "udp")))), events.receive())
+        val round = router.expect("/ip/firewall/connection/print")
+        val edit = async { session.set(path, "*1", mapOf("comment" to "kept")) }
+        router.reply("!done", ".tag=${router.expect("/ip/firewall/connection/set", "=.id=*1", "=comment=kept")}")
+        edit.await()
+        router.reply("!re", "=.id=*1", "=protocol=udp", ".tag=$round")
+        router.reply("!done", ".tag=$round")
+        assertNotNull(withTimeoutOrNull(0.5.seconds) { router.nextSent() }, "the list is read again without waiting out a round")
+    }
+
     @Test
     fun aPasswordThatExpiredIsChangedWithTheCommandOfTheRouterAndIsNotAskedAgain() = runTest {
         val link = Link().apply { expired = true }

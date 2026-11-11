@@ -45,7 +45,12 @@ class FileSchemaCache(private val directory: File) : SchemaCache {
         val file = file(build)
         // written aside and renamed, so a crash never leaves a cut file; Windows renames only onto a free name
         val temporary = File(directory, file.name + ".tmp")
-        temporary.writeText(json.toString())
+        try {
+            temporary.writeText(json.toString())
+        } catch (e: IOException) {
+            // answers that could not be kept are asked of the router again at the next connect
+            return@withContext
+        }
         if (!temporary.renameTo(file)) {
             file.delete()
             temporary.renameTo(file)

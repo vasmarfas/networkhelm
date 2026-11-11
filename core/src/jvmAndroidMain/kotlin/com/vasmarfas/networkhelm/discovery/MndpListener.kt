@@ -45,24 +45,35 @@ suspend fun requestMndpRefresh() = withContext(Dispatchers.IO) {
     val request = ByteArray(4)
     var sent = 0
     var failure: IOException? = null
-    for (nic in NetworkInterface.getNetworkInterfaces()) {
-        if (!nic.isUp || nic.isLoopback) continue
-        for (address in nic.inetAddresses) {
-            val target = when {
-                address is Inet4Address -> InetAddress.getByName("255.255.255.255")
-                address is Inet6Address && address.isLinkLocalAddress -> Inet6Address.getByAddress(null, ALL_NODES, nic)
-                else -> continue
-            }
-            // bound to each local address, so the broadcast leaves by its interface and a router of another network hears it
-            try {
-                DatagramSocket(InetSocketAddress(address, 0)).use { socket ->
-                    socket.broadcast = true
-                    socket.send(DatagramPacket(request, request.size, target, PORT))
+    // an interface may go between the listing and the question whether it is up, and the system tells that with an error
+    val interfaces = try {
+        NetworkInterface.getNetworkInterfaces()?.toList().orEmpty()
+    } catch (e: IOException) {
+        failure = e
+        emptyList()
+    }
+    for (nic in interfaces) {
+        try {
+            if (!nic.isUp || nic.isLoopback) continue
+            for (address in nic.inetAddresses) {
+                val target = when {
+                    address is Inet4Address -> InetAddress.getByName("255.255.255.255")
+                    address is Inet6Address && address.isLinkLocalAddress -> Inet6Address.getByAddress(null, ALL_NODES, nic)
+                    else -> continue
                 }
-                sent++
-            } catch (e: IOException) {
-                failure = e
+                // bound to each local address, so the broadcast leaves by its interface and a router of another network hears it
+                try {
+                    DatagramSocket(InetSocketAddress(address, 0)).use { socket ->
+                        socket.broadcast = true
+                        socket.send(DatagramPacket(request, request.size, target, PORT))
+                    }
+                    sent++
+                } catch (e: IOException) {
+                    failure = e
+                }
             }
+        } catch (e: IOException) {
+            failure = e
         }
     }
     if (sent == 0) throw DeviceException(ErrorCategory.General, "no network interface took the MNDP request", failure)

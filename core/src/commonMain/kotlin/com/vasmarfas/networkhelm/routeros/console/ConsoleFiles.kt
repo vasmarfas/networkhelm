@@ -34,7 +34,7 @@ internal class ConsoleFiles(private val link: RouterOsLink, private val dialect:
     }
 
     override suspend fun read(path: String): ByteArray {
-        val name = quoted(path.trim('/'), encoding)
+        val name = named(path.trim('/'))
         val file = ":local f [/file find name=$name]; :put [/file get \$f size]"
         return when (dialect) {
             Dialect.Serialize -> {
@@ -68,7 +68,7 @@ internal class ConsoleFiles(private val link: RouterOsLink, private val dialect:
     override fun close() = Unit
 
     private suspend fun writeSerialized(file: String, bytes: ByteArray) {
-        val name = quoted(file, encoding)
+        val name = named(file)
         val found = "[/file find name=$name]"
         val room = (LINE_LIMIT - LINE_ROOM - 3 * name.length) / 4 * 3
         var from = 0
@@ -84,11 +84,11 @@ internal class ConsoleFiles(private val link: RouterOsLink, private val dialect:
     }
 
     private suspend fun writeClassic(file: String, bytes: ByteArray) {
-        val name = quoted(file, encoding)
+        val name = named(file)
         val found = "[/file find name=$name]"
         if (printed(":put [:len $found]") == "0") {
             if (!file.endsWith(".txt")) throw DeviceException(ErrorCategory.Unsupported, "this router makes only .txt files through its console")
-            printed("/file print file=${quoted(file.removeSuffix(".txt"), encoding)}")
+            printed("/file print file=${named(file.removeSuffix(".txt"))}")
         }
         var from = 0
         do {
@@ -109,6 +109,12 @@ internal class ConsoleFiles(private val link: RouterOsLink, private val dialect:
     }
 
     private suspend fun printed(script: String): String = calls { link.call(listOf("/execute", "=script=$script")).done["ret"].orEmpty() }
+
+    private fun named(file: String) = try {
+        quoted(file, encoding)
+    } catch (e: IllegalArgumentException) {
+        throw DeviceException(ErrorCategory.ArgumentValue, e.message.orEmpty(), e)
+    }
 
     private suspend fun <T> calls(block: suspend () -> T): T = try {
         block()

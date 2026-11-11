@@ -56,6 +56,7 @@ internal class Usm(private val user: SnmpUser, private val engine: Engine) {
 
     private val auth = hash?.let { it to localized(it, user.authPassword, engine.id) }
     private val privKey = hash?.takeIf { user.priv != null }?.let { localized(it, user.privPassword, engine.id) }
+    private val level = (if (auth != null) AUTH else 0) or (if (privKey != null) PRIV else 0)
     private var boots = engine.boots
     private var time = engine.time
     private var since = TimeSource.Monotonic.markNow()
@@ -65,7 +66,7 @@ internal class Usm(private val user: SnmpUser, private val engine: Engine) {
 
     // the HMAC is taken over the message with twelve zero bytes in the authentication field and cut to 12 bytes
     fun request(pdu: ByteArray, msgId: Int): ByteArray {
-        val flags = (if (auth != null) AUTH else 0) or (if (privKey != null) PRIV else 0) or REPORTABLE
+        val flags = level or REPORTABLE
         val clock = now()
         val plain = scoped(engine.id, pdu)
         val (data, privacy) = if (privKey == null) plain to ByteArray(0) else seal(privKey, plain, clock)
@@ -91,7 +92,10 @@ internal class Usm(private val user: SnmpUser, private val engine: Engine) {
         } else {
             message.data
         }
-        return message.id to (tlv(scoped, 0, scoped.size).children().getOrNull(2) ?: throw malformed("a scoped PDU without its PDU"))
+        val pdu = tlv(scoped, 0, scoped.size).children().getOrNull(2) ?: throw malformed("a scoped PDU without its PDU")
+        // a report tells why the agent refused, and the agent sends it as it can; an answer below the security of the user proves nothing
+        if (pdu.tag != REPORT && message.flags and level != level) throw malformed("an answer below the security of the user")
+        return message.id to pdu
     }
 
     fun response(bytes: ByteArray): Pair<Int, Response> {

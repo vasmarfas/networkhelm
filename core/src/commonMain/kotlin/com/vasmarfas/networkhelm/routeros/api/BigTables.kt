@@ -46,6 +46,8 @@ internal class BigTables {
         portion: suspend (IntRange) -> List<Map<String, String>>?,
     ): ApiResult {
         if (menu == null) return whole(words)
+        // rows asked for by their ids are no table to take in parts: a part would ask for rows a second time
+        if (words.any { it.startsWith("=from=") }) return tried { whole(words) }
         val total = size(words, menu, whole) ?: return printed(words, whole, portion).also { if (it.rows.size > PORTION) small.update { menus -> menus - menu } }
         val size = maxOf(PORTION, total / PORTIONS)
         val rows = LinkedHashMap<String, Map<String, String>>()
@@ -118,7 +120,7 @@ internal class BigTables {
     }
 
     private suspend fun size(words: List<String>, menu: String, whole: suspend (List<String>) -> ApiResult): Int? {
-        if (menu in small.value || words.any { it.startsWith("?.id=") || it.startsWith("=from=") }) return null
+        if (menu in small.value || words.any { it.startsWith("?.id=") }) return null
         val query = words.filter { it.startsWith("?") }
         val count = try {
             whole(listOf(words.first(), "=count-only=") + query).done["ret"]?.toIntOrNull()

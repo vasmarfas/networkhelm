@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.snmp
 
+import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.routeros.api.md5
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -20,6 +21,17 @@ class UsmTest {
     @Test
     fun privacyTakesAuthentication() {
         assertFailsWith<IllegalArgumentException> { SnmpUser("rd-test", priv = PrivProtocol.Aes, privPassword = "rd-test-privacy") }
+    }
+
+    @Test
+    fun anAnswerBelowTheSecurityOfTheUserIsRefusedAndAReportIsHeard() {
+        val user = SnmpUser("rd-test", AuthProtocol.Sha1, "rd-test-auth", PrivProtocol.Aes, "rd-test-privacy")
+        val clear = Usm(SnmpUser("rd-test"), Engine(engine, 3, 1000))
+        val signed = Usm(SnmpUser("rd-test", AuthProtocol.Sha1, "rd-test-auth"), Engine(engine, 3, 1000))
+        val names = listOf(oid("1.3.6.1.2.1.1.5.0"))
+        assertFailsWith<DeviceException> { Usm(user, Engine(engine, 3, 1000)).open(clear.request(pdu(GET, 42, 0, 0, names), 42)) }
+        assertFailsWith<DeviceException> { Usm(user, Engine(engine, 3, 1000)).open(signed.request(pdu(GET, 42, 0, 0, names), 42)) }
+        assertEquals(REPORT, Usm(user, Engine(engine, 3, 1000)).open(clear.request(pdu(REPORT, 42, 0, 0, names), 42)).second.tag)
     }
 
     @Test

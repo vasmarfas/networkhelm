@@ -9,6 +9,7 @@ import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.routeros.api.md5
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.UdpLink
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
@@ -91,6 +92,26 @@ class UpnpTest {
     }
 
     private suspend fun connect(device: Device) = connectUpnp(UpnpLogin("192.0.2.1", 5000)) { _, _ -> device.open() }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aDeviceThatGoesSilentEndsTheRequestInsteadOfHoldingItForever() = runTest {
+        val closed = CompletableDeferred<Unit>()
+        val silent = object : ByteStream {
+            override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+                closed.await()
+                return -1
+            }
+
+            override suspend fun write(bytes: ByteArray) = Unit
+
+            override fun close() {
+                closed.complete(Unit)
+            }
+        }
+        assertFailsWith<DeviceException> { UpnpClient("192.0.2.1", 5000, { _, _ -> silent }).description("/rootDesc.xml") }
+        assertEquals(10_000, testScheduler.currentTime)
+    }
 
     @Test
     fun theDescriptionNamesTheDeviceAndTheControlsOfItsServices() {

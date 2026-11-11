@@ -4,8 +4,16 @@ import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.session.SafeMode
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.FlowCollector
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.withTimeoutOrNull
+
+private const val ROUND_MILLIS = 1_000L
+private const val LONGEST_WAIT_MILLIS = 30_000L
 
 interface RouterOsLink {
     suspend fun call(words: List<String>): ApiResult
@@ -32,3 +40,20 @@ interface RouterOsClient : RouterOsLink {
 }
 
 suspend fun RouterOsLink.call(vararg words: String): ApiResult = call(words.asList())
+
+// a watch of a client that asks for every answer starts over after a lost link: a round at least between its tries, fewer of them
+// while the link stays down, and at once when the link is back
+internal fun <T> outliving(link: StateFlow<LinkState>, block: suspend FlowCollector<T>.() -> Unit): Flow<T> = flow {
+    var wait = ROUND_MILLIS
+    while (true) {
+        try {
+            block()
+            return@flow
+        } catch (e: ApiConnectionClosedException) {
+            if (link.value == LinkState.Closed) throw e
+            delay(ROUND_MILLIS)
+            withTimeoutOrNull(wait - ROUND_MILLIS) { link.first { it != LinkState.Reconnecting } }
+            wait = if (link.value == LinkState.Up) ROUND_MILLIS else minOf(wait * 2, LONGEST_WAIT_MILLIS)
+        }
+    }
+}

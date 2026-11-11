@@ -18,7 +18,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.take
 import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.test.advanceTimeBy
+import kotlinx.coroutines.test.currentTime
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import kotlinx.coroutines.withTimeout
@@ -991,6 +993,65 @@ class ConsoleClientTest {
     }
 
     @Test
+    fun aBigTableStartedWhileSafeModeIsBeingTakenGoesOn() = runTest {
+        val client = client(handler = table(3_000))
+        val entering = async { assertNotNull(client.safeMode).enter() }
+        val rows = async { client.call(addresses).rows }
+        assertTrue(entering.await())
+        assertEquals(3_000, withTimeout(60_000) { rows.await() }.size)
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aChangeThatWaitedOutTheLeavingOfSafeModeTakesAConsoleOfThePoolLikeAnyOther() = runTest {
+        var running = 0
+        var together = false
+        val client = client(size = 1) { command ->
+            if (running++ > 0) together = true
+            delay(1_000)
+            running--
+            if ("print" in command) "[]" else ""
+        }
+        val safe = assertNotNull(client.safeMode)
+        assertTrue(safe.enter())
+        val first = async { client.call(listOf("/ip/address/set", "=.id=*1", "=comment=a")) }
+        runCurrent()
+        val leaving = async { safe.commit() }
+        runCurrent()
+        val second = async { client.call(listOf("/ip/address/set", "=.id=*2", "=comment=b")) }
+        runCurrent()
+        val read = async { client.call(listOf("/ip/address/print", "=.proplist=address")) }
+        awaitAll(first, leaving, second, read)
+        assertFalse(together, "two lines were typed into one console at once")
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aChangeMadeWhileSafeModeIsRolledBackWaitsForTheRollBack() = runTest {
+        val rolledBack = mutableListOf<Boolean>()
+        val client = client(size = 2) { command ->
+            if ("*2" in command) rolledBack += consoles.first().closed
+            delay(1_000)
+            ""
+        }
+        val safe = assertNotNull(client.safeMode)
+        assertTrue(safe.enter())
+        val first = async { client.call(listOf("/ip/address/set", "=.id=*1", "=comment=a")) }
+        runCurrent()
+        val leaving = async { safe.rollback() }
+        runCurrent()
+        val second = async { client.call(listOf("/ip/address/set", "=.id=*2", "=comment=b")) }
+        awaitAll(first, leaving, second)
+        assertEquals(listOf(true), rolledBack)
+    }
+
+    @Test
+    fun aPortionThatIsNotRowsIsAnErrorOfTheDevice() = runTest {
+        val client = client { command -> if ("count-only" in command) "3000" else "the console printed something else" }
+        assertEquals(ErrorCategory.Api, assertFailsWith<DeviceException> { client.call(addresses) }.category)
+    }
+
+    @Test
     fun theConsoleOfSafeModeThatWentDownLeavesThePoolWhole() = runTest {
         val rows = table(3_000)
         val client = client { command -> if ("comment" in command) "~" else rows(command) }
@@ -1198,6 +1259,35 @@ class ConsoleClientTest {
         assertEquals(listOf(4), seen)
         client.close()
         assertFailsWith<ApiConnectionClosedException> { client.each<Int> { throw ApiConnectionClosedException("closed") }.toList() }
+    }
+
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun aWatchIsBackWithTheLinkHoweverLongTheLinkStayedDown() = runTest {
+        var up = true
+        val client = ConsoleClient(1, alive = { up }) {
+            if (!up) error("failed to connect after 10000ms")
+            FakeConsole { "{\"name\":\"CHR\"}" }.also { consoles += it }
+        }
+        client.warm(backgroundScope)
+        val answered = mutableListOf<Long>()
+        backgroundScope.launch {
+            client.each<Unit> { link ->
+                while (true) {
+                    link.call(listOf("/system/identity/print"))
+                    answered += currentTime
+                    delay(1_000)
+                }
+            }.collect { }
+        }
+        runCurrent()
+        up = false
+        advanceTimeBy(285_000)
+        up = true
+        val back = currentTime
+        advanceTimeBy(3_000)
+        assertTrue(answered.last() > back, "the watch asked ${answered.last() - back} ms after the link was back")
+        client.close()
     }
 
     @Test

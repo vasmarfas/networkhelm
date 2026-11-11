@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.transport
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedInputStream
+import java.io.InputStream
 import java.net.DatagramPacket
 import java.net.DatagramSocket
 import java.net.InetAddress
@@ -20,13 +21,20 @@ import javax.net.ssl.X509TrustManager
 
 private const val READ_BUFFER = 64 * 1024
 
+private class HeldInput(input: InputStream) : BufferedInputStream(input, READ_BUFFER) {
+    val held: Int get() = count - pos
+}
+
 open class SocketStream(private val socket: Socket) : ByteStream {
-    private val input = BufferedInputStream(socket.getInputStream(), READ_BUFFER)
+    private val input = HeldInput(socket.getInputStream())
     private val output = socket.getOutputStream()
 
-    // what has already arrived is taken without a hop to the threads of blocking calls
-    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int =
-        if (input.available() > 0) input.read(buffer, offset, length) else withContext(Dispatchers.IO) { input.read(buffer, offset, length) }
+    // what the buffer holds is taken without a hop to the threads of blocking calls; anything more is a read of the socket,
+    // which Android refuses on the main thread even for bytes that have arrived
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+        val held = input.held
+        return if (held > 0) input.read(buffer, offset, minOf(length, held)) else withContext(Dispatchers.IO) { input.read(buffer, offset, length) }
+    }
 
     override suspend fun write(bytes: ByteArray) = withContext(Dispatchers.IO) {
         output.write(bytes)
