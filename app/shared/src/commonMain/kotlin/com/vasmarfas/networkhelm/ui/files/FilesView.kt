@@ -694,7 +694,7 @@ internal fun FilesView(
             }
         }
         renaming?.let { (entry, field) ->
-            Confirm(stringResource(Res.string.files_rename), stringResource(Res.string.files_rename), onCancel = { renaming = null }, content = {
+            Confirm(stringResource(Res.string.files_rename), stringResource(Res.string.files_rename), onCancel = { renaming = null }, typing = true, content = {
                 TextField(field, Modifier.width(320.dp).testTag("files-name"), mono = true)
             }) {
                 val new = field.text.toString().trim()
@@ -718,6 +718,7 @@ internal fun FilesView(
                 stringResource(Res.string.files_new),
                 onCancel = { creating = null },
                 content = { TextField(making.field, Modifier.width(320.dp).testTag("files-name"), placeholder = stringResource(Res.string.files_name_hint), mono = true) },
+                typing = true,
             ) {
                 val new = making.field.text.toString().trim()
                 val destination = listOf(making.into, new).filter { it.isNotEmpty() }.joinToString("/")

@@ -38,10 +38,13 @@ import com.vasmarfas.networkhelm.packs.PackQuery
 import com.vasmarfas.networkhelm.packs.PackTab
 import com.vasmarfas.networkhelm.packs.PackWindow
 import com.vasmarfas.networkhelm.packs.bundledPacks
+import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.QUERY_END
 import com.vasmarfas.networkhelm.session.QUERY_PASS
+import com.vasmarfas.networkhelm.session.TextStore
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.CompletableDeferred
 import java.io.File
 import java.util.Locale
 import javax.imageio.ImageIO
@@ -182,6 +185,30 @@ class QueryViewTest {
         show(router(pack(fallback = console), emptyList(), gone = setOf(key)))
         onNodeWithText("Console Address").assertExists()
         assertEquals(0, onAllNodes(hasTestTag("query-start")).fetchSemanticsNodes().size)
+    }
+
+    @Test
+    fun aWindowOpenedBeforeTheDescriptionsOfTheRouterCameTakesTheFieldsOfTheQuery() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val console = MenuSchema(MenuPath.parse(key), NodeKind.Command, emptyList(), emptyList(), listOf(Argument("host", ValueType.Text())))
+        val described = CompletableDeferred<Unit>()
+        val router = router(pack(), emptyList())
+        val late = object : DeviceSession by router {
+            override suspend fun packs(store: TextStore?): List<Pack> {
+                described.await()
+                return router.packs(store)
+            }
+
+            override suspend fun describe(path: MenuPath): MenuSchema = if (described.isCompleted) router.describe(path) else console
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(late, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Echo", key))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("field-host")).fetchSemanticsNodes().isNotEmpty() }
+        described.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("field-address")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(0, onAllNodes(hasTestTag("field-host")).fetchSemanticsNodes().size)
     }
 
     @Test

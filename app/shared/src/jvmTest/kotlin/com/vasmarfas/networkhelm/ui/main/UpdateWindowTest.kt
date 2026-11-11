@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.ui.main
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toAwtImage
+import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
@@ -11,6 +12,8 @@ import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.vasmarfas.networkhelm.FakeRouter
 import com.vasmarfas.networkhelm.app.MemoryStorage
@@ -185,6 +188,25 @@ class UpdateWindowTest {
         onNodeWithTag("action-download").performClick()
         waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }
         assertEquals(listOf("download"), router.ran)
+    }
+
+    @Test
+    fun theButtonThatRestartsTheRouterAsksFirstAndRunsOnlyAfterTheAnswer() = runDesktopComposeUiTest(1100, 800) {
+        val router = UpdateRouter()
+        opened(router)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("7.26beta5")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("action-install").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Download & Install on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(emptyList(), router.ran)
+        onNodeWithTag("confirm").performKeyInput { pressKey(Key.Escape) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("confirm").fetchSemanticsNodes().isEmpty() }
+        assertEquals(emptyList(), router.ran)
+
+        onNodeWithTag("action-install").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("confirm").fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("confirm").performKeyInput { pressKey(Key.Enter) }
+        waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }
+        assertEquals(listOf("install"), router.ran)
     }
 
     @Test

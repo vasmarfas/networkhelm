@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
@@ -262,6 +263,7 @@ private fun SnippetEditor(snippets: Snippets, onClose: () -> Unit) {
                                 Modifier.fillMaxWidth().heightIn(min = 56.dp).background(palette.surface, shape).border(1.dp, palette.line, shape).padding(6.dp)
                                     .testTag("snippet-text"),
                                 textStyle = Theme.type.mono.copy(color = palette.text),
+                                keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                                 cursorBrush = SolidColor(palette.accent),
                                 lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 2),
                             )

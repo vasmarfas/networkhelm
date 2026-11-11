@@ -34,10 +34,11 @@ class FormState(router: Map<String, String> = emptyMap()) {
         value != now && !(now == null && value.isNullOrEmpty())
     }
 
-    fun applied(changes: Map<String, String?>) {
-        router = (router + changes.filterValues { it != null }.mapValues { it.value.orEmpty() }) - changes.filterValues { it == null }.keys
-        edits.clear()
-        base.clear()
+    // what was typed while the request went stays an edit, now of the values just written
+    fun applied(written: Map<String, String?>) {
+        router = (router + written.filterValues { it != null }.mapValues { it.value.orEmpty() }) - written.filterValues { it == null }.keys
+        discard(edits.keys - changes().keys)
+        for (name in written.keys) if (name in edits) base[name] = router[name]
     }
 
     fun discard(names: Collection<String>) {

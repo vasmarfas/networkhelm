@@ -4,8 +4,10 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toPixelMap
+import androidx.compose.ui.platform.InterceptPlatformTextInput
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.captureToImage
@@ -17,7 +19,9 @@ import androidx.compose.ui.unit.dp
 import com.vasmarfas.networkhelm.ui.theme.Palette
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import kotlinx.coroutines.awaitCancellation
 import kotlin.test.Test
+import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
@@ -39,5 +43,21 @@ class TextFieldTest {
         val image = captureToImage().toPixelMap()
         val marked = (10 until 310).sumOf { x -> (10 until 46).count { y -> image[x, y] == palette.selection } }
         assertTrue(marked > 100, "the selection is drawn on $marked pixels")
+    }
+
+    @OptIn(ExperimentalComposeUiApi::class)
+    @Test
+    fun theKeyboardIsToldNotToCorrectWhatIsTyped() = runDesktopComposeUiTest(400, 120) {
+        val state = TextFieldState()
+        var corrects: Boolean? = null
+        setContent {
+            InterceptPlatformTextInput({ request, _ ->
+                corrects = request.imeOptions.autoCorrect
+                awaitCancellation()
+            }) { NetworkHelmTheme { TextField(state, Modifier.testTag("field")) } }
+        }
+        onNodeWithTag("field").performClick()
+        waitForIdle()
+        assertEquals(false, corrects)
     }
 }

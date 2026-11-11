@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
@@ -64,6 +65,7 @@ internal fun ScriptEditor(value: String, onChange: (String) -> Unit, support: Sc
                 if (it.text != value) onChange(it.text)
             },
             textStyle = Theme.type.mono.copy(color = palette.text),
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             cursorBrush = SolidColor(palette.accent),
             visualTransformation = VisualTransformation { text -> TransformedText(coloured(text.text, shown, palette), OffsetMapping.Identity) },
             modifier = modifier.heightIn(min = 160.dp).background(palette.surface, shape).border(1.dp, palette.line, shape).padding(6.dp),

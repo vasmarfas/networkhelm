@@ -226,7 +226,7 @@ fun MainScreen(
     onStay: () -> Unit = {},
 ) {
     val palette = Theme.palette
-    LaunchedEffect(tab) { tab.loadMenu() }
+    LaunchedEffect(tab) { tab.openMenu() }
     LaunchedEffect(tab) { tab.keepLayout() }
     LaunchedEffect(tab) { tab.session.ssh?.reach() }
     LaunchedEffect(tab, tab.updating) {
@@ -357,6 +357,7 @@ fun MainScreen(
                 stringResource(if (purpose == Naming.Rename) Res.string.workspace_rename_action else Res.string.workspace_create),
                 onCancel = { naming = null },
                 content = { TextField(name, Modifier.fillMaxWidth().testTag("workspace-name"), error = taken) },
+                typing = true,
             ) {
                 naming = null
                 if (chosen.isNotEmpty() && !taken) {

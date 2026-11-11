@@ -37,9 +37,11 @@ import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsVersion
 import com.vasmarfas.networkhelm.routeros.schema.label
 import com.vasmarfas.networkhelm.session.DeviceSession
+import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.session.watchSettings
 import com.vasmarfas.networkhelm.ui.files.FILE_WINDOW
 import com.vasmarfas.networkhelm.ui.files.FileSpec
+import com.vasmarfas.networkhelm.ui.form.FormState
 import com.vasmarfas.networkhelm.ui.log.LogEntryWindow
 import com.vasmarfas.networkhelm.ui.log.LogRequest
 import com.vasmarfas.networkhelm.ui.log.LogWindows
@@ -100,6 +102,10 @@ class ItemSpec(
     val listed: Map<String, String> = emptyMap(),
 ) {
     var id by mutableStateOf(id)
+
+    // what was typed into the form stays with its window while the window is not drawn:
+    // minimized, under another one on a phone, behind the tab of another router
+    internal var edits: FormState? = null
 }
 
 @Serializable
@@ -529,7 +535,7 @@ class RouterTab(
 
     private suspend fun saveLayout(layout: List<SavedWindow>) {
         if (workspaceName.isEmpty()) {
-            storage.write(layoutFile, json.encodeToString(layoutSerializer, layout))
+            storage.keep(layoutFile, json.encodeToString(layoutSerializer, layout))
         } else {
             val saved = workspaces()
             writeWorkspaces(SavedWorkspaces(workspaceName, saved.layouts + (workspaceName to layout)))
@@ -566,7 +572,7 @@ class RouterTab(
     }
 
     private suspend fun writeWorkspaces(saved: SavedWorkspaces) {
-        storage.write(workspacesFile, json.encodeToString(SavedWorkspaces.serializer(), saved))
+        storage.keep(workspacesFile, json.encodeToString(SavedWorkspaces.serializer(), saved))
         workspaceNames = saved.layouts.keys.sorted()
         workspaceName = saved.current
     }
@@ -587,7 +593,7 @@ class RouterTab(
 
     private suspend fun writeTunnels(tunnels: List<SavedTunnel>) {
         savedTunnels = tunnels
-        storage.write(tunnelsFile, json.encodeToString(tunnelsSerializer, tunnels))
+        storage.keep(tunnelsFile, json.encodeToString(tunnelsSerializer, tunnels))
     }
 
     private fun restore(saved: SavedWindow) {
@@ -615,6 +621,18 @@ class RouterTab(
             window.maximized,
             window.minimized,
         )
+    }
+
+    private var loaded = false
+    private var cut = false
+
+    // the menu is read once for a tab, so a return from the tab of another router finds the windows as they were left
+    // and asks the router nothing; a read that the link cut short is made again
+    suspend fun openMenu() {
+        if (loaded) return
+        cut = false
+        loadMenu()
+        loaded = !cut
     }
 
     suspend fun loadMenu() {
@@ -688,7 +706,7 @@ class RouterTab(
                 saveLayout(layout())
                 for (window in workspace.windows.toList()) workspace.close(window)
             }
-            storage.write(viewFile, view.name)
+            storage.keep(viewFile, view.name)
             menu = null
             loadMenu()
             if (crossing) {
@@ -760,6 +778,7 @@ class RouterTab(
             session.packs(storage)
         } catch (e: DeviceException) {
             // a lost connection shows in the link strip, and the menu stays without them
+            cut = true
             return
         }
         if (made.isEmpty() || load != loads) return

@@ -162,6 +162,8 @@ fun ListScrollBar(state: LazyListState, modifier: Modifier = Modifier) {
     val travel = track - thumb
     val position = shown.first().let { it.index * average - it.offset }
     val start = if (travel > 0) (travel * position / (content - viewport)).coerceIn(0f, travel.toFloat()).roundToInt() else 0
+    // the content is an estimate from the rows in sight and changes as they scroll
+    val perPixel by rememberUpdatedState(if (travel > 0) (content - viewport) / travel else 0f)
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     var dragged by remember { mutableStateOf(false) }
@@ -176,14 +178,14 @@ fun ListScrollBar(state: LazyListState, modifier: Modifier = Modifier) {
                 .then(if (classic) Modifier.bevel(palette) else Modifier)
                 .hoverable(source)
                 .hand()
-                .pointerInput(state, content, viewport, travel) {
+                .pointerInput(state) {
                     detectVerticalDragGestures(
                         onDragStart = { dragged = true },
                         onDragEnd = { dragged = false },
                         onDragCancel = { dragged = false },
                     ) { change, amount ->
                         change.consume()
-                        if (travel > 0) state.dispatchRawDelta(amount * (content - viewport) / travel)
+                        state.dispatchRawDelta(amount * perPixel)
                     }
                 },
         )

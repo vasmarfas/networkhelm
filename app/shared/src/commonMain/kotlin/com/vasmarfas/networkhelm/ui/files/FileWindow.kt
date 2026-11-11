@@ -395,7 +395,7 @@ fun FileWindow(session: DeviceSession, spec: FileSpec, window: WindowState, onCl
             null -> {}
         }
         naming?.let { field ->
-            Confirm(stringResource(Res.string.file_save_as), stringResource(Res.string.file_save), onCancel = { naming = null }, content = {
+            Confirm(stringResource(Res.string.file_save_as), stringResource(Res.string.file_save), onCancel = { naming = null }, typing = true, content = {
                 TextField(field, Modifier.width(360.dp).testTag("file-save-as-name"), mono = true)
             }) {
                 val path = field.text.toString().trim().trim('/')

@@ -121,7 +121,6 @@ kotlin {
         androidMain.dependencies {
             implementation(project(":miknative"))
             implementation(libs.compose.uiToolingPreview)
-            implementation(libs.compose.uiTooling)
             implementation(libs.termlib)
         }
         iosMain.dependencies {
@@ -173,10 +172,6 @@ kotlin {
             implementation(compose.desktop.currentOs)
         }
     }
-}
-
-dependencies {
-    androidRuntimeClasspath(libs.compose.uiTooling)
 }
 
 // Xcode picks the version up from the xcconfig, which the root task rewrites

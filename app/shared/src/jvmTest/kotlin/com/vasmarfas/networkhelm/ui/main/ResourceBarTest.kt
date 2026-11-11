@@ -18,11 +18,19 @@ import com.vasmarfas.networkhelm.app.BarItem
 import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.app.Settings
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
+import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.packs.bundledPacks
+import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import java.io.File
 import java.util.Locale
 import javax.imageio.ImageIO
@@ -37,7 +45,7 @@ class ResourceBarTest {
         resource: Map<String, String>,
         compact: Boolean = false,
         settings: Settings = Settings(),
-        router: FakeRouter = FakeRouter(mapOf("system/resource" to listOf(Item("", resource)))),
+        router: DeviceSession = FakeRouter(mapOf("system/resource" to listOf(Item("", resource)))),
     ) {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
@@ -132,6 +140,26 @@ class ResourceBarTest {
         bar(emptyMap(), settings = Settings(barInterface = "ether5"), router = router)
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("ether5 ↓ 800 bps ↑ 0 bps")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(mapOf("interface" to "ether5"), router.ran.single { it.first == "interface/monitor-traffic" }.second)
+    }
+
+    @Test
+    fun theTrafficThatEndedWithTheLinkComesBackWithIt() = runDesktopComposeUiTest(1100, 60) {
+        val router = FakeRouter(
+            mapOf("system/resource" to listOf(Item("", mapOf("cpu-load" to "3")))),
+            output = mapOf("interface/monitor-traffic" to listOf(Item("", mapOf("name" to "ether5", "rx-bits-per-second" to "800", "tx-bits-per-second" to "0")))),
+        )
+        var asked = 0
+        val dropping = object : DeviceSession by router {
+            override fun run(path: MenuPath, command: String, arguments: Map<String, String>): Flow<Item> =
+                if (asked++ == 0) flow { throw DeviceException(ErrorCategory.ConnectionLost, LINK_LOST) } else router.run(path, command, arguments)
+        }
+        bar(emptyMap(), settings = Settings(barInterface = "ether5"), router = dropping)
+        waitUntil(timeoutMillis = 5_000) { asked == 1 }
+        waitForIdle()
+        router.link.value = LinkState.Reconnecting
+        waitForIdle()
+        router.link.value = LinkState.Up
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("ether5 ↓ 800 bps ↑ 0 bps")).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

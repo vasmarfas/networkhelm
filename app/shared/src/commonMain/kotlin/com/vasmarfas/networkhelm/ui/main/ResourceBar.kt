@@ -27,6 +27,7 @@ import com.vasmarfas.networkhelm.app.BarItem
 import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.Platform
@@ -86,8 +87,10 @@ fun ResourceBar(tab: RouterTab) {
     val clocked = !openWrt && BarItem.Clock in items
     val clock by remember(tab, clocked) { if (clocked) clockOf(tab) else emptyFlow() }.collectAsStateWithLifecycle(null)
     val trafficked = BarItem.Traffic in items
-    val traffic by remember(tab, trafficked, settings.barInterface) {
-        if (trafficked) trafficOf(tab, settings.barInterface.trim(), received, sent) else emptyFlow()
+    // the monitor of the traffic ends with the link, and is asked for again when the link is back
+    val up = remember(tab) { tab.session.link }.collectAsStateWithLifecycle(LinkState.Up).value == LinkState.Up
+    val traffic by remember(tab, trafficked, settings.barInterface, up) {
+        if (trafficked && up) trafficOf(tab, settings.barInterface.trim(), received, sent) else emptyFlow()
     }.collectAsStateWithLifecycle(null)
     DisableSelection {
         BarLine(Modifier.fillMaxWidth().height(Theme.metrics.row + 4.dp).background(palette.raised).padding(horizontal = 10.dp), if (compact) 10.dp else 14.dp) {

@@ -22,6 +22,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
+import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
@@ -47,6 +48,7 @@ import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.ui.kit.readText
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.runBlocking
 import java.io.File
 import java.util.Locale
@@ -185,6 +187,43 @@ class TableDialogParityTest {
     }
 
     @Test
+    fun theCommentOfARowIsTypedAtOnceAndEnterWritesIt() = runDesktopComposeUiTest(1100, 700) {
+        val router = router()
+        rulesList(router, FakeClipboard(), AppSettings(MemoryStorage()))
+        onNodeWithText("drop").performClick()
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.M) } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("comment")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onNodeWithTag("comment").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true }
+        onNodeWithTag("comment").performTextReplacement("guests")
+        onNodeWithTag("comment").performKeyInput { pressKey(Key.Enter) }
+        waitUntil(timeoutMillis = 5_000) { router.changed.isNotEmpty() }
+        assertEquals(listOf("*2" to mapOf<String, String?>("comment" to "guests")), router.changed.toList())
+    }
+
+    @Test
+    fun theCommentOfSeveralRowsStartsFromTheFirstOfThem() = runDesktopComposeUiTest(1100, 700) {
+        rulesList(router(), FakeClipboard(), AppSettings(MemoryStorage()))
+        onNodeWithText("drop").performClick()
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.A) } }
+        onNodeWithTag("table").performKeyInput { pressKey(Key.Spacebar) }
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.M) } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("comment")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("comment").assertTextEquals("other")
+    }
+
+    @Test
+    fun aLetterTypedWithAltGrIsNoShortcutOfTheList() = runDesktopComposeUiTest(1100, 700) {
+        val router = router()
+        rulesList(router, FakeClipboard(), AppSettings(MemoryStorage()))
+        onNodeWithText("drop").performClick()
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { withKeyDown(Key.AltRight) { pressKey(Key.E) } } }
+        waitForIdle()
+        assertTrue(router.changed.isEmpty())
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.E) } }
+        waitUntil(timeoutMillis = 5_000) { router.changed.isNotEmpty() }
+    }
+
+    @Test
     fun aValueTheClientRejectsShowsItsReasonUnderTheFieldAndHoldsTheButtons() = runDesktopComposeUiTest(1200, 800) {
         val router = router()
         newRule(router)
@@ -212,6 +251,18 @@ class TableDialogParityTest {
         waitUntil(timeoutMillis = 5_000) { router.added.isNotEmpty() }
         assertEquals(mapOf("chain" to "input"), router.added.single())
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("field-chain")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun enterWithAValueTheClientRejectsSendsNothingAndKeepsTheDialog() = runDesktopComposeUiTest(1200, 800) {
+        val router = router()
+        newRule(router)
+        field("src-address").performTextInput("not-an-address")
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("mismatch-src-address")).fetchSemanticsNodes().isNotEmpty() }
+        field("src-address").performKeyInput { pressKey(Key.Enter) }
+        waitForIdle()
+        assertTrue(router.added.isEmpty())
+        assertTrue(onAllNodes(hasTestTag("field-src-address")).fetchSemanticsNodes().isNotEmpty(), "the dialog stays")
     }
 
     @Test
@@ -248,6 +299,59 @@ class TableDialogParityTest {
         assertTrue(!seen("New Firewall Rule"), "the title is the record's now")
         onNodeWithText("Apply").assertIsNotEnabled()
         assertTrue(onAllNodes(hasTestTag("field-chain")).fetchSemanticsNodes().isNotEmpty(), "the dialog stays")
+    }
+
+    private class SlowRouter(private val fake: FakeRouter) : DeviceSession by fake {
+        val answer = CompletableDeferred<Unit>()
+        var asked = 0
+
+        override suspend fun add(path: MenuPath, values: Map<String, String>): String {
+            asked++
+            answer.await()
+            return fake.add(path, values)
+        }
+    }
+
+    @Test
+    fun twoPressesOfOkBeforeTheRouterAnswersAddOneRule() = runDesktopComposeUiTest(1200, 800) {
+        val fake = router()
+        val slow = SlowRouter(fake)
+        newRule(slow)
+        field("chain").performTextInput("input")
+        onNodeWithText("OK").performMouseInput {
+            moveTo(center)
+            press()
+            release()
+            press()
+            release()
+        }
+        waitUntil(timeoutMillis = 5_000) { slow.asked > 0 }
+        waitForIdle()
+        assertEquals(1, slow.asked)
+        slow.answer.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("field-chain")).fetchSemanticsNodes().isEmpty() }
+        assertEquals(listOf(mapOf("chain" to "input")), fake.added.toList())
+    }
+
+    @Test
+    fun whatIsTypedWhileTheRouterAnswersStaysForTheNextApply() = runDesktopComposeUiTest(1200, 800) {
+        val fake = router()
+        val slow = SlowRouter(fake)
+        newRule(slow)
+        field("chain").performTextInput("input")
+        onNodeWithText("Apply").performClick()
+        waitUntil(timeoutMillis = 5_000) { slow.asked == 1 }
+        field("chain").performTextReplacement("output")
+        waitForIdle()
+        slow.answer.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { fake.added.isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { runCatching { onNodeWithText("Apply").assertIsEnabled() }.isSuccess }
+        assertTrue(onAllNodes(hasText("output") and hasSetTextAction()).fetchSemanticsNodes().isNotEmpty(), "the newer text stays in the field")
+        assertTrue(onAllNodes(hasText("On the router", substring = true)).fetchSemanticsNodes().isEmpty(), "the value just written is not one the router changed")
+        onNodeWithText("Apply").performClick()
+        waitUntil(timeoutMillis = 5_000) { fake.changed.isNotEmpty() }
+        assertEquals(listOf(mapOf("chain" to "input")), fake.added.toList())
+        assertEquals(listOf("*99" to mapOf<String, String?>("chain" to "output")), fake.changed.toList())
     }
 
     @Test

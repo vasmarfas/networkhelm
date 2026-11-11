@@ -104,6 +104,10 @@ ru.UnpackingText=Это происходит один раз для этой в�
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked; Check: not IsPortable
 
+[InstallDelete]
+; the jars and the files of the web page carry a hash in their names, and those of the version before would stay
+Type: filesandordirs; Name: "{app}\app"
+
 [Files]
 Source: "{#AppImage}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 

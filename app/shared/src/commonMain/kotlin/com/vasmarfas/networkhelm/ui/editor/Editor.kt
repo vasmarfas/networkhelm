@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.OutputTransformation
 import androidx.compose.foundation.text.input.TextFieldBuffer
 import androidx.compose.foundation.text.input.TextFieldLineLimits
@@ -43,6 +44,7 @@ import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -193,18 +195,36 @@ fun Palette.toneColor(tone: Tone): Color = when (tone) {
     Tone.Warning -> warning
 }
 
-private class Colouring(
+// every key press lays the whole text out again, and the styles add to that by their number and by the length of the text:
+// about 30 ms on a desktop for as many of them as these two allow, which is an export of some 20 KB
+internal const val STYLES_MOST = 2_400
+internal const val CHARS_A_STYLE = 100
+
+// the matches next to the current one are painted in a text of any length
+internal const val MATCHES_LEAST = 100
+
+internal class Colouring(
     val language: Language,
     val palette: Palette,
     val matches: List<IntRange>,
     val current: Int,
 ) : OutputTransformation {
     override fun TextFieldBuffer.transformOutput() {
-        for (span in highlight(asCharSequence(), language)) {
+        val most = STYLES_MOST - length / CHARS_A_STYLE
+        val spans = highlight(asCharSequence(), language).takeIf { it.size <= most }.orEmpty()
+        val shown = maxOf(most, MATCHES_LEAST)
+        val first = (current - shown / 2).coerceIn(0, maxOf(0, matches.size - shown))
+        // the matches come with the composition, which lags behind the text of the buffer
+        val painted = matches.subList(first, minOf(first + shown, matches.size)).takeWhile { it.last < length }
+        if (spans.isEmpty() && painted.isEmpty()) return
+        // the buffer records every style as a change and walks through all the changes before it;
+        // one change over the whole text takes the later ones in, and the walk stays a single step
+        addStyle(SpanStyle(), 0, length)
+        for (span in spans) {
             addStyle(SpanStyle(color = palette.toneColor(span.tone), fontStyle = if (span.tone == Tone.Comment) FontStyle.Italic else null), span.start, span.end)
         }
-        for ((index, range) in matches.withIndex()) {
-            addStyle(SpanStyle(background = palette.warning.copy(alpha = if (index == current) 0.65f else 0.28f)), range.first, range.last + 1)
+        for ((index, range) in painted.withIndex()) {
+            addStyle(SpanStyle(background = palette.warning.copy(alpha = if (first + index == current) 0.65f else 0.28f)), range.first, range.last + 1)
         }
     }
 }
@@ -255,6 +275,8 @@ fun TextEditor(state: EditorState, controls: EditorControls, readOnly: Boolean, 
         val text = state.snapshot()
         val replaced = replaceAll(text.substring(at.first, at.last + 1), options, with)?.first ?: return
         state.replaceRange(at, replaced)
+        val after = at.first + replaced.length
+        find.current = found.ranges.indexOfFirst { it.first >= after }.coerceAtLeast(0)
         go(0)
     }
 
@@ -266,7 +288,8 @@ fun TextEditor(state: EditorState, controls: EditorControls, readOnly: Boolean, 
 
     fun onKey(event: KeyEvent): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
-        val ctrl = event.isCtrlPressed || event.isMetaPressed
+        // AltGr comes as Ctrl with Alt, and the letter it types is no shortcut
+        val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
         return when {
             ctrl && event.key == Key.S && !readOnly -> true.also { onSave() }
             ctrl && event.key == Key.F -> true.also { find.show(false) }
@@ -280,9 +303,6 @@ fun TextEditor(state: EditorState, controls: EditorControls, readOnly: Boolean, 
                 find.open = false
                 controls.goto = false
                 focus.requestFocus()
-            }
-            event.key == Key.Tab && !readOnly && !event.isShiftPressed -> true.also {
-                state.text.edit { replace(selection.min, selection.max, "\t") }
             }
             else -> false
         }
@@ -319,6 +339,7 @@ fun TextEditor(state: EditorState, controls: EditorControls, readOnly: Boolean, 
                             .testTag("editor-text"),
                         readOnly = readOnly,
                         textStyle = style,
+                        keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
                         cursorBrush = SolidColor(palette.accent),
                         lineLimits = TextFieldLineLimits.MultiLine(),
                         scrollState = scroll,

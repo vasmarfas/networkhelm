@@ -48,6 +48,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
@@ -313,7 +314,8 @@ private fun PathView(
     val defaults = tab.shown?.defaults.orEmpty()
     val combos = tab.shown?.combos.orEmpty()
     val radios = tab.shown?.radios.orEmpty()
-    val described by produceState<Described?>(recall?.schemas?.get(path)?.let { Described(it.withDefaults(defaults).withRadios(radios), null) }, session, path) {
+    // the descriptions of the router may bring an open window another pack, and the menu is described as the pack says
+    val described by produceState<Described?>(recall?.schemas?.get(path)?.let { Described(it.withDefaults(defaults).withRadios(radios), null) }, session, path, tab.shown?.native?.handler, defaults, combos, radios) {
         value = try {
             val schema = session.describe(path).withCombos(combos, session.comboCounts(combos))
             recall?.schemas?.set(path, schema)
@@ -453,9 +455,12 @@ private fun ListView(
     }
     val recall = tab.recall
     val recalled = "$name|$filter"
+    // a watch that broke off sends no more rows, whatever it had sent before
+    var failed by remember(session, path, refresh) { mutableStateOf(false) }
     val arrived = remember(session, path, refresh) {
         session.watch(path, filter).onEach { reading = it as? ListEvent.Progress }.rowsSoFar().drop(1).atMostEvery(150.milliseconds).flowOn(Dispatchers.Default).catch {
             reading = null
+            failed = true
             (it as? DeviceException)?.let { e -> problem = e.message }
         }
     }.collectAsState(recall?.rows?.get(recalled)).value
@@ -621,7 +626,7 @@ private fun ListView(
         }
 
     fun comment() {
-        commenting = TextFieldState(rows.firstOrNull { it.id == state.anchor }?.get("comment").orEmpty())
+        commenting = TextFieldState(rows.firstOrNull { it.id in state.selected }?.get("comment").orEmpty())
     }
     val grouping = pack?.category?.takeIf { categories }
     val ordered = pack?.ordered == true || "move" in schema.commands
@@ -675,7 +680,8 @@ private fun ListView(
     }
 
     fun onKey(event: KeyEvent): Boolean {
-        val ctrl = event.isCtrlPressed || event.isMetaPressed
+        // AltGr comes as Ctrl with Alt, and the letter it types is no shortcut
+        val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
         when {
             ctrl && event.isShiftPressed && event.key == Key.C && state.selected.isNotEmpty() -> copyRows(::rowsAsTabs)
             ctrl && event.key == Key.C && state.selected.isNotEmpty() -> copy()
@@ -900,7 +906,7 @@ private fun ListView(
             problem?.let {
                 Row(Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(deviceMessage(it), Modifier.weight(1f).testTag("problem"), style = Theme.type.small, color = palette.danger)
-                    if (arrived == null || it == LINK_LOST) ToolbarButton(stringResource(Res.string.list_retry), Lucide.RefreshCw, ::reload, Modifier.testTag("retry"))
+                    if (arrived == null || failed || it == LINK_LOST) ToolbarButton(stringResource(Res.string.list_retry), Lucide.RefreshCw, ::reload, Modifier.testTag("retry"))
                 }
             }
             DisableSelection {
@@ -953,7 +959,7 @@ private fun ListView(
                 }
             }) {
                 removing = null
-                if (quiet) scope.launch { store?.change { it.copy(confirmRemoval = false) } }
+                if (quiet) scope.launch { store?.arrange { it.copy(confirmRemoval = false) } }
                 table.requestFocus()
                 act { session.remove(path, ids) }
             }
@@ -978,7 +984,7 @@ private fun ListView(
             }
         }
         commenting?.let { comment ->
-            Confirm(stringResource(Res.string.list_comment), stringResource(Res.string.form_ok), onCancel = { commenting = null }, content = {
+            Confirm(stringResource(Res.string.list_comment), stringResource(Res.string.form_ok), onCancel = { commenting = null }, typing = true, content = {
                 TextField(comment, Modifier.width(320.dp).testTag("comment"))
             }) {
                 val ids = state.selected.toList()
@@ -1114,11 +1120,14 @@ internal fun Confirm(
     onCancel: () -> Unit,
     content: (@Composable () -> Unit)? = null,
     alternative: Pair<String, () -> Unit>? = null,
+    typing: Boolean = false,
     onConfirm: () -> Unit,
 ) {
     val palette = Theme.palette
     val focus = remember { FocusRequester() }
-    LaunchedEffect(Unit) { focus.requestFocus() }
+    val field = remember { FocusRequester() }
+    // a dialog that asks for a text gives the keyboard to its field, and Enter and Escape come up from the field to the panel
+    LaunchedEffect(Unit) { (if (typing) field else focus).requestFocus() }
     val keys = Modifier.onKeyEvent { event ->
         if (event.type != KeyEventType.KeyDown) return@onKeyEvent false
         when (event.key) {
@@ -1134,7 +1143,7 @@ internal fun Confirm(
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Text(question)
-            content?.invoke()
+            if (content != null) Box(Modifier.focusRequester(field)) { content() }
             Row(Modifier.align(Alignment.End), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(stringResource(Res.string.list_cancel), onCancel)
                 alternative?.let { (text, onClick) -> Button(text, onClick) }

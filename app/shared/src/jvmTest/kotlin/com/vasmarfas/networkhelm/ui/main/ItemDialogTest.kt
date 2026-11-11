@@ -28,8 +28,12 @@ import androidx.compose.ui.unit.dp
 import com.vasmarfas.networkhelm.FakeRouter
 import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.model.Argument
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
+import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
@@ -328,5 +332,29 @@ class ItemDialogTest {
         onNodeWithText("Statistics").performClick()
         waitForIdle()
         assertEquals(general + 40.dp, dialog.size.height)
+    }
+
+    @Test
+    fun aDialogThatLostTheLinkCountsAgainWhenTheLinkIsBack() = runDesktopComposeUiTest(1200, 800) {
+        Locale.setDefault(Locale.ENGLISH)
+        val router = FakeRouter(mapOf(path.toString() to listOf(rule)), schemas = mapOf(path.toString() to schema))
+        var asked = 0
+        val dropping = object : DeviceSession by router {
+            override fun counters(path: MenuPath, properties: List<String>, filter: Filter?): Flow<Map<String, Map<String, String>>> =
+                if (asked++ == 0) flow { throw DeviceException(ErrorCategory.ConnectionLost, LINK_LOST) } else router.counters(path, properties, filter)
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(dropping, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.openItem("Firewall", path, "*1")
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("problem")).fetchSemanticsNodes().isNotEmpty() }
+        router.link.value = LinkState.Reconnecting
+        waitForIdle()
+        router.link.value = LinkState.Up
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("problem")).fetchSemanticsNodes().isEmpty() }
+        waitForIdle()
+        router.counted.tryEmit(mapOf("*1" to mapOf("bytes" to "1536000", "packets" to "790")))
+        onNodeWithText("Statistics").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("790")).fetchSemanticsNodes().isNotEmpty() }
     }
 }

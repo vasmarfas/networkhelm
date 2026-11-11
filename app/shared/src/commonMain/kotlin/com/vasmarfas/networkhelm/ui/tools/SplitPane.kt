@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.text.input.TextFieldLineLimits
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.runtime.Composable
@@ -153,6 +154,7 @@ private fun SummaryList(list: TextFieldState) {
             list,
             Modifier.width(360.dp).background(palette.surface, shape).border(1.dp, if (unreadable != null) palette.danger else palette.line, shape).padding(6.dp).testTag("split-list"),
             textStyle = Theme.type.mono.copy(color = palette.text),
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             cursorBrush = SolidColor(palette.accent),
             lineLimits = TextFieldLineLimits.MultiLine(minHeightInLines = 3),
         )

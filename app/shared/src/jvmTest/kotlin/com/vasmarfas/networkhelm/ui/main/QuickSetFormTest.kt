@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onLast
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -85,11 +86,11 @@ class QuickSetFormTest {
         hidden = true,
     )
 
-    private fun ComposeUiTest.opened(inactive: String, nat: String = "true"): FakeRouter {
+    private fun ComposeUiTest.opened(inactive: String, nat: String = "true", quick: Pack = pack): FakeRouter {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
         val record = Item("0", mapOf("mode" to "Router", "ip-address" to "192.0.2.1", "nat" to nat, "identity" to "lab", ".inactive" to inactive))
-        val router = FakeRouter(rows = mapOf(path to listOf(record)), schemas = mapOf(path to schema), made = listOf(pack, mapping))
+        val router = FakeRouter(rows = mapOf(path to listOf(record)), schemas = mapOf(path to schema), made = listOf(quick, mapping))
         val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
         setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Quick Set")).fetchSemanticsNodes().isNotEmpty() }
@@ -122,6 +123,18 @@ class QuickSetFormTest {
         waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }
         assertEquals(listOf(MenuPath.parse(path).child("11").toString()), router.ran.map { it.first })
         assertTrue(router.ran.all { it.second.isEmpty() })
+    }
+
+    @Test
+    fun aButtonUnderAFieldThatAsksFirstRunsOnlyAfterTheAnswer() = runDesktopComposeUiTest(1100, 800) {
+        val asking = pack.paths.getValue(path).copy(actions = listOf(PackAction("Reconnect", "13", confirm = true, below = "identity", row = 1)))
+        val router = opened("false", quick = Pack(menu = pack.menu, window = pack.window, paths = mapOf(path to asking), forms = pack.forms, prio = pack.prio))
+        onNodeWithTag("action-13").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reconnect on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(router.ran.isEmpty())
+        onAllNodes(hasText("Reconnect")).onLast().performClick()
+        waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }
+        assertEquals(listOf(MenuPath.parse(path).child("13").toString()), router.ran.map { it.first })
     }
 
     @Test

@@ -8,6 +8,9 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasSetTextAction
+import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -16,6 +19,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
 import com.vasmarfas.networkhelm.App
@@ -87,6 +91,26 @@ class PhoneTest {
         onNodeWithTag("back").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("IP")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(tab.workspace.windows.isEmpty())
+    }
+
+    @Test
+    fun whatWasTypedIntoAFormIsStillThereWhenTheWindowOverItIsClosed() = runDesktopComposeUiTest(400, 800) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val path = MenuPath.parse("ip/firewall/filter")
+        val schema = MenuSchema(path, NodeKind.List, emptyList(), listOf("add", "print", "remove", "set"), listOf(Argument("chain", ValueType.Text()), Argument("comment", ValueType.Text())))
+        val router = FakeRouter(mapOf(path.toString() to listOf(Item("*1", mapOf("chain" to "input")))), schemas = mapOf(path.toString() to schema))
+        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme { CompositionLocalProvider(LocalCompact provides true) { MainScreen(tab, onDisconnect = {}) } } }
+        waitUntil(timeoutMillis = 10_000) { tab.menu != null }
+        tab.openItem("Firewall Rule", path, "*1")
+        val chain = hasSetTextAction() and hasAnyAncestor(hasTestTag("field-chain"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(chain).fetchSemanticsNodes().isNotEmpty() }
+        onNode(chain).performTextReplacement("forward")
+        tab.open(MenuEntry("Log", "log"))
+        waitUntil(timeoutMillis = 5_000) { tab.workspace.windows.size == 2 && onAllNodes(chain).fetchSemanticsNodes().isEmpty() }
+        onNodeWithTag("back").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("forward")).fetchSemanticsNodes().isNotEmpty() }
     }
 
     @Test

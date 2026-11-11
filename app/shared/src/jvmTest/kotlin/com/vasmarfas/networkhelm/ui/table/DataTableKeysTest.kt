@@ -12,6 +12,7 @@ import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
+import androidx.compose.ui.test.withKeyDown
 import androidx.compose.ui.unit.dp
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlin.test.Test
@@ -73,6 +74,25 @@ class DataTableKeysTest {
         assertEquals("rd-test-b", state.anchor)
         press(Key.Spacebar)
         assertEquals(setOf("rd-test-b"), state.selected)
+    }
+
+    @Test
+    fun aLetterTypedWithAltGrDoesNotSelectAllTheRows() = runDesktopComposeUiTest(600, 300) {
+        val state = TableState<String>()
+        val rows = listOf("rd-test-a", "rd-test-b", "rd-test-c")
+        setContent {
+            NetworkHelmTheme {
+                DataTable(rows, listOf(TableColumn<String>("name", "Name", 200.dp) { it }), key = { it }, state = state)
+            }
+        }
+        onNodeWithText("rd-test-b").performClick()
+        waitForIdle()
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { withKeyDown(Key.AltRight) { pressKey(Key.A) } } }
+        waitForIdle()
+        assertEquals(setOf("rd-test-b"), state.selected)
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.A) } }
+        waitForIdle()
+        assertEquals(rows.toSet(), state.selected)
     }
 
     @Test

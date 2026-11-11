@@ -16,6 +16,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
 import com.vasmarfas.networkhelm.app.MemoryStorage
@@ -43,7 +44,7 @@ class MainActivity : ComponentActivity() {
             val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
             LaunchedEffect(Unit) { if (!localNetworkAllowed(this@MainActivity)) ask.launch(Manifest.permission.ACCESS_LOCAL_NETWORK) }
             BackHandler(enabled = shell.canGoBack) { shell.back() }
-            val night = resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            val night = LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
             val dark = shell.settings.theme.isDark(shell.settings.current.dark, night)
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {

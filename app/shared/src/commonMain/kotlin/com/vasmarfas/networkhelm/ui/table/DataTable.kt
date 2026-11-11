@@ -61,6 +61,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.key
@@ -295,7 +296,8 @@ fun <T, K : Any> DataTable(
                     .background(palette.surface)
                     .onPreviewKeyEvent { event ->
                         if (event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
-                        val ctrl = event.isCtrlPressed || event.isMetaPressed
+                        // AltGr comes as Ctrl with Alt, and the letter it types is no shortcut
+                        val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
                         when {
                             ctrl && event.key == Key.A -> choose(order.toSet(), order.firstOrNull())
                             event.key == Key.DirectionDown -> step(order.indexOf(state.anchor) + 1)
@@ -396,7 +398,8 @@ fun <T, K : Any> DataTable(
                                             lastPress = up.uptimeMillis
                                             lastRow = id
                                             choose(setOf(id), id)
-                                            if (phone || again) currentRows.getOrNull(index)?.let { openRow(it, cells, down.position.x) }
+                                            // the rows may have moved while the finger was down
+                                            if (phone || again) currentRows.getOrNull(currentOrder.indexOf(id))?.let { openRow(it, cells, down.position.x) }
                                         }
                                         !scrolled -> {
                                             choose(if (id in state.selected) state.selected - id else state.selected + id, id)

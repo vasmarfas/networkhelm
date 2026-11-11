@@ -14,7 +14,6 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -36,13 +35,11 @@ import com.vasmarfas.networkhelm.ui.kit.Button
 import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.QrImage
 import com.vasmarfas.networkhelm.ui.kit.ScrollArea
-import com.vasmarfas.networkhelm.ui.kit.copyClipboard
 import com.vasmarfas.networkhelm.ui.kit.dialogPanel
+import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.kit.scrim
-import com.vasmarfas.networkhelm.ui.kit.writeText
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import kotlinx.coroutines.flow.toList
-import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.form_hide_secret
@@ -57,8 +54,7 @@ internal suspend fun DeviceSession.output(path: MenuPath, action: PackAction, id
 @Composable
 internal fun Output(title: String, text: String, onClose: () -> Unit) {
     val palette = Theme.palette
-    val clipboard = copyClipboard()
-    val scope = rememberCoroutineScope()
+    val copier = rememberCopier()
     val hiding = LocalSettings.current.hidePasswords && masked(text) != text
     var shown by remember(text) { mutableStateOf(!hiding) }
     val code = remember(text) {
@@ -97,7 +93,7 @@ internal fun Output(title: String, text: String, onClose: () -> Unit) {
                 if (hiding) {
                     IconButton(if (shown) Lucide.EyeOff else Lucide.Eye, stringResource(if (shown) Res.string.form_hide_secret else Res.string.form_show_secret), { shown = !shown })
                 }
-                Button(stringResource(Res.string.output_copy), { scope.launch { clipboard.writeText(text) } })
+                Button(stringResource(Res.string.output_copy), { copier.copy(text) })
                 Button(stringResource(Res.string.output_close), onClose, primary = true)
             }
         }

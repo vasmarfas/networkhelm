@@ -43,6 +43,21 @@ class FormStateTest {
     }
 
     @Test
+    fun whatIsTypedWhileAWriteGoesStaysAnEditAndTheWrittenValuesDoNot() {
+        val form = FormState(mapOf("chain" to "forward"))
+        form.edit("chain", "input")
+        form.edit("comment", "web")
+        val sent = form.changes()
+        form.edit("chain", "output")
+        form.edit("action", "drop")
+        form.applied(sent)
+        assertEquals(mapOf("chain" to "input", "comment" to "web"), form.router)
+        assertEquals(mapOf<String, String?>("chain" to "output", "action" to "drop"), form.changes())
+        assertFalse(form.touched("comment"))
+        assertFalse(form.changedOnRouter("chain"))
+    }
+
+    @Test
     fun titlesDropColonsNextToEmptyFields() {
         val template = "Firewall Rule <{src-address}:{src-port}->{dst-address}:{dst-port}>"
         val values = mapOf("src-address" to "!192.0.2.0/24", "dst-port" to "8080")

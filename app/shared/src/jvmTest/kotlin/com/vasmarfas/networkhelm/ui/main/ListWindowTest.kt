@@ -8,6 +8,8 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
 import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -17,6 +19,7 @@ import androidx.compose.ui.test.SemanticsMatcher
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsNotEnabled
+import androidx.compose.ui.test.assertTextEquals
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
 import androidx.compose.ui.test.hasContentDescription
@@ -58,6 +61,7 @@ import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.session.DeviceSession
+import com.vasmarfas.networkhelm.ui.kit.HintHost
 import com.vasmarfas.networkhelm.ui.kit.readText
 import com.vasmarfas.networkhelm.ui.table.CommentMode
 import com.vasmarfas.networkhelm.ui.table.RowTone
@@ -187,6 +191,37 @@ class ListWindowTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(onAllNodes(hasText("the console fell over")).fetchSemanticsNodes().isEmpty())
         assertTrue(onAllNodes(hasTestTag("retry")).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
+    fun aListWhoseReadBrokeOffAfterItsRowsCameKeepsThemAndIsAskedAgain() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val router = FakeRouter(mapOf("ip/firewall/filter" to rules))
+        var broken = true
+        val falls = CompletableDeferred<Unit>()
+        val failing = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                emit(ListEvent.Snapshot(rules))
+                if (broken) {
+                    falls.await()
+                    throw DeviceException(ErrorCategory.Api, "the read fell over")
+                }
+                awaitCancellation()
+            }
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(failing, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty() }
+        falls.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("the read fell over")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty(), "the rows read before stay")
+        broken = false
+        onNodeWithTag("retry").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("the read fell over")).fetchSemanticsNodes().isEmpty() }
+        assertTrue(onAllNodes(hasTestTag("retry")).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty())
     }
 
     @Test
@@ -684,6 +719,34 @@ class ListWindowTest {
         assertEquals(conf, runBlocking { clip.readText() })
         onNodeWithText("Close").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("output")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun aClipboardHeldByAnotherProgramLeavesTheOutputStandingAndSaysSo() = runDesktopComposeUiTest(1000, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val held = object : Clipboard {
+            override suspend fun getClipEntry(): ClipEntry? = null
+            override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+                throw IllegalStateException("cannot open system clipboard")
+            }
+        }
+        val path = MenuPath.parse("interface/wireguard/peers")
+        val schema = MenuSchema(path, NodeKind.List, emptyList(), listOf("add", "print", "remove", "set", "show-client-config"), emptyList())
+        val peers = listOf(Item("*1", mapOf("name" to "rd-test-peer", "interface" to "wg1")))
+        val clients = mapOf("$path/show-client-config" to listOf(Item("", mapOf("conf" to "[Interface]\nAddress = 192.0.2.2/32"))))
+        val router = FakeRouter(mapOf(path.toString() to peers), schemas = mapOf(path.toString() to schema), output = clients)
+        val storage = MemoryStorage()
+        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { CompositionLocalProvider(LocalClipboard provides held) { NetworkHelmTheme(dark = true) { HintHost { MainScreen(tab, onDisconnect = {}) } } } }
+        tab.open(MenuEntry("Peers", path.toString()))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rd-test-peer")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("rd-test-peer").performClick()
+        onNodeWithText("Client Config").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("output")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Copy").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("copy-notice")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("copy-notice").assertTextEquals("The clipboard could not be written.")
+        onNodeWithTag("output").assertExists()
     }
 
     @Test

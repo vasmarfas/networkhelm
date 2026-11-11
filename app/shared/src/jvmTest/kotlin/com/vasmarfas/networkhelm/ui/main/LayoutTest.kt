@@ -17,6 +17,8 @@ import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import com.vasmarfas.networkhelm.FakeRouter
 import com.vasmarfas.networkhelm.app.MemoryStorage
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
@@ -29,6 +31,7 @@ import com.vasmarfas.networkhelm.packs.PackWindow
 import com.vasmarfas.networkhelm.packs.bundledMenu
 import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.session.DeviceSession
+import com.vasmarfas.networkhelm.session.TextStore
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.runBlocking
@@ -165,6 +168,37 @@ class LayoutTest {
         onNodeWithTag("windows").performClick()
         onNodeWithText("Main workspace").performClick()
         waitUntil(timeoutMillis = 5_000) { tab.workspaceName.isEmpty() && tab.workspace.windows.map { it.title } == listOf("Addresses") }
+    }
+
+    @Test
+    fun theMenuOfARouterIsReadOnceForItsTabAndAgainAfterAReadTheLinkCutShort() {
+        val router = FakeRouter()
+        var reads = 0
+        var lost = false
+        val counting = object : DeviceSession by router {
+            override suspend fun packs(store: TextStore?): List<Pack> {
+                reads++
+                if (lost) throw DeviceException(ErrorCategory.ConnectionLost, "the link is lost")
+                return router.packs(store)
+            }
+        }
+        val storage = MemoryStorage()
+        runBlocking {
+            val tab = RouterTab(counting, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+            tab.openMenu()
+            tab.openMenu()
+            assertEquals(1, reads, "a return to the tab reads nothing")
+            tab.reloadStructure()
+            assertEquals(2, reads)
+
+            lost = true
+            val cut = RouterTab(counting, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+            cut.openMenu()
+            lost = false
+            cut.openMenu()
+            cut.openMenu()
+            assertEquals(4, reads, "the read that the link cut short is made again, once")
+        }
     }
 
     @Test

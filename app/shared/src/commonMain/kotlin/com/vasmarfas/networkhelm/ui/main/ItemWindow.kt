@@ -30,6 +30,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -77,6 +78,8 @@ import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.LINK_LOST
+import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
@@ -141,6 +144,7 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
+import networkhelm.app.shared.generated.resources.command_question
 import networkhelm.app.shared.generated.resources.copy_item_command
 import networkhelm.app.shared.generated.resources.copy_list
 import networkhelm.app.shared.generated.resources.copy_value
@@ -181,9 +185,9 @@ fun ItemForm(
 ) {
     val palette = Theme.palette
     val scope = rememberCoroutineScope()
-    // a row opened from a list shows what the list read until the router answers the window
+    // a row opened from a list shows what the list read until the router answers the window; a window that comes back into sight goes on with its edits
     val form = remember(spec) {
-        FormState(if (spec.listed.isEmpty()) emptyMap() else derived(spec.shown, spec.listed)).apply { spec.prefill.forEach { (name, value) -> edit(name, value) } }
+        spec.edits ?: FormState(if (spec.listed.isEmpty()) emptyMap() else derived(spec.shown, spec.listed)).apply { spec.prefill.forEach { (name, value) -> edit(name, value) } }.also { spec.edits = it }
     }
     var schema by remember { mutableStateOf<MenuSchema?>(null) }
     var problem by remember { mutableStateOf<String?>(null) }
@@ -191,6 +195,7 @@ fun ItemForm(
     val confirming = remember(spec) { mutableStateMapOf<String, String>() }
     var removing by remember { mutableStateOf(false) }
     var resetting by remember { mutableStateOf(false) }
+    var asking by remember { mutableStateOf<PackAction?>(null) }
     var output by remember { mutableStateOf<Pair<String, String>?>(null) }
     var showing by remember { mutableStateOf(false) }
     val copier = rememberCopier()
@@ -201,7 +206,11 @@ fun ItemForm(
     LaunchedEffect(have, need, buttons, onFit) {
         if (have > 0) onFit(with(density) { (maxOf(need, buttons) - have).toDp() })
     }
-    LaunchedEffect(session, spec.path) {
+    // what the dialog asks of the router stops with the link and starts again when the link is back
+    val linked = remember(session) { session.link }.collectAsState(LinkState.Up).value == LinkState.Up
+    LaunchedEffect(linked) { if (linked && problem == LINK_LOST) problem = null }
+    LaunchedEffect(session, spec.path, linked) {
+        if (!linked) return@LaunchedEffect
         try {
             val described = session.describe(spec.path).withDefaults(spec.shown?.defaults.orEmpty()).withRadios(spec.shown?.radios.orEmpty())
             if (spec.id == null && spec.name == null && spec.prefill.isEmpty()) described.prefill.forEach { (field, value) -> if (!form.touched(field)) form.edit(field, value) }
@@ -239,14 +248,16 @@ fun ItemForm(
     val ordered = spec.form == null && session.device.platform == Platform.RouterOs
     val fresh = remember(spec) { spec.id == null && spec.name == null }
     var printed by remember(spec) { mutableStateOf(spec.listed.keys.toList().takeIf { it.isNotEmpty() }) }
-    LaunchedEffect(session, spec.path, id, kind == NodeKind.Settings) {
+    // kept over a watch that starts again: a row that went while the link was down closes the dialog as well
+    var seen by remember(spec) { mutableStateOf(spec.listed.isNotEmpty()) }
+    LaunchedEffect(session, spec.path, id, kind == NodeKind.Settings, linked) {
         val updates = when {
+            !linked -> return@LaunchedEffect
             kind == NodeKind.Settings -> session.watchSettings(spec.path).map { listOf(it) }
             id != null -> session.watch(spec.path, Filter.Equals(".id", id)).rows().drop(1)
             lookup != null -> session.watch(spec.path, Filter.Equals("name", lookup)).rows().drop(1)
             else -> return@LaunchedEffect
         }
-        var seen = spec.listed.isNotEmpty()
         try {
             updates.onTheSecond().collect { rows ->
                 val item = rows.firstOrNull()
@@ -285,8 +296,8 @@ fun ItemForm(
     val related = remember(spec) { spec.form?.tabs.orEmpty().mapNotNull { it.path }.distinct().associateWith { Related(MenuPath.parse(it)) } }
     val name = form.value("name")
     for (source in related.values) {
-        LaunchedEffect(source, name) {
-            if (name == null) return@LaunchedEffect
+        LaunchedEffect(source, name, linked) {
+            if (name == null || !linked) return@LaunchedEffect
             try {
                 source.schema = session.describe(source.path)
                 session.watch(source.path, Filter.Equals("name", name)).rows().collect { rows ->
@@ -303,9 +314,9 @@ fun ItemForm(
     // listen says nothing when counters move, so the read-only fields are printed again every second
     val formTabs = spec.form?.tabs.orEmpty()
     val counted = formTabs.filter { it.path == null && it.monitor == null }.flatMap { it.fields }.filter { it in spec.shown?.readonly.orEmpty() }
-    LaunchedEffect(session, spec.path, id, counted) {
+    LaunchedEffect(session, spec.path, id, counted, linked) {
         val element = id ?: return@LaunchedEffect
-        if (counted.isEmpty()) return@LaunchedEffect
+        if (counted.isEmpty() || !linked) return@LaunchedEffect
         try {
             session.counters(spec.path, counted, element.takeIf { it.isNotEmpty() }?.let { Filter.Equals(".id", it) }).onTheSecond()
                 .collect { round -> round[element]?.let { form.update(form.router + it) } }
@@ -314,12 +325,12 @@ fun ItemForm(
         }
     }
     val watched = formTabs.firstOrNull { it.monitor != null && "status" in it.fields }
-    val monitored = watched?.monitor?.takeIf { id != null || it.argument == null }?.let { monitor -> reported(session, monitor, name ?: id) { problem = it } }.orEmpty()
+    val monitored = watched?.monitor?.takeIf { id != null || it.argument == null }?.let { monitor -> reported(session, monitor, name ?: id, linked) { problem = it } }.orEmpty()
     for ((path, source) in related) {
         val fields = formTabs.filter { it.path == path }.flatMap { it.properties }.filter { source.schema?.argument(it)?.readOnly != false }
-        LaunchedEffect(source, source.id, fields) {
+        LaunchedEffect(source, source.id, fields, linked) {
             val element = source.id ?: return@LaunchedEffect
-            if (fields.isEmpty()) return@LaunchedEffect
+            if (fields.isEmpty() || !linked) return@LaunchedEffect
             try {
                 session.counters(source.path, fields, Filter.Equals(".id", element)).onTheSecond()
                     .collect { round -> round[element]?.let { source.form.update(source.form.router + it) } }
@@ -386,6 +397,8 @@ fun ItemForm(
     }
 
     suspend fun apply(): Boolean {
+        // a second press that came before the first one took the buttons away
+        if (busy) return false
         if (!changed() && !(creating && spec.id == null)) return true
         if (unconfirmed()) {
             problem = mismatch
@@ -418,6 +431,23 @@ fun ItemForm(
         }
     }
 
+    fun run(action: PackAction) {
+        scope.launch {
+            problem = try {
+                val property = action.output
+                if (property != null) output = action.title to session.output(spec.path, action, listOfNotNull(id), property)
+                else for (arguments in action.runs(listOfNotNull(id))) session.run(spec.path, action.command, arguments).collect()
+                null
+            } catch (e: DeviceException) {
+                e.message
+            }
+        }
+    }
+
+    fun act(action: PackAction) {
+        if (action.confirm) asking = action else run(action)
+    }
+
     val possible = tabsOf(spec, current, form, order.takeIf { ordered }.orEmpty(), session.device.version).filter { !it.readonly || current.kind == NodeKind.Settings || id != null || lookup != null }
     val tabs = possible.filter { tab -> tab.monitor != null || tab.path != null || tab.fields.any { current.argument(it)?.applies(form, current) ?: (it in form.router) } }.ifEmpty { possible }
     var selected by remember { mutableIntStateOf(0) }
@@ -436,7 +466,7 @@ fun ItemForm(
         ScriptSupport(if (session.device.platform == Platform.RouterOs && session.capabilities.menuContents) { text -> highlight(session, text) } else null)
     }
     val labelColumn = remember(spec) { LabelColumn() }
-    val accept by rememberUpdatedState<() -> Unit> { if (!busy) scope.launch { if (apply()) onClose() } }
+    val accept by rememberUpdatedState<() -> Unit> { if (!busy && !misfit()) scope.launch { if (apply()) onClose() } }
     val submit = remember(spec) { { accept() } }
     val firstFocus = remember(spec) { FirstFocus() }
     CompositionLocalProvider(LocalScripts provides scripts, LocalLabelColumn provides labelColumn, LocalSubmit provides submit) {
@@ -463,18 +493,6 @@ fun ItemForm(
                 split(Modifier.weight(1f).fillMaxWidth()) { fields ->
                     val actions = spec.shown?.actions.orEmpty().filter { it.command in current.commands && (!it.selection || id != null) && it.depends.hold(form, current) && (it.tabs.isEmpty() || shown.any { index -> tabs[index].title in it.tabs }) }
                     val links = present(session, spec.shown?.links.orEmpty()).filter { it.depends.hold(form, current) }
-                    fun act(action: PackAction) {
-                        scope.launch {
-                            problem = try {
-                                val property = action.output
-                                if (property != null) output = action.title to session.output(spec.path, action, listOfNotNull(id), property)
-                                else for (arguments in action.runs(listOfNotNull(id))) session.run(spec.path, action.command, arguments).collect()
-                                null
-                            } catch (e: DeviceException) {
-                                e.message
-                            }
-                        }
-                    }
                     fun open(link: PackLink) {
                         val element = form.value("name") ?: id
                         onOpenWindow(MenuEntry(link.title, link.path, window = link.window, arguments = link.argument?.let { argument -> element?.let { mapOf(argument to it) } }.orEmpty()))
@@ -534,7 +552,7 @@ fun ItemForm(
                                 }
                                 val source = tab.path?.let(related::get)
                                 val owner = source?.form ?: form
-                                val reported = if (tab === watched) monitored else tab.monitor?.let { monitor -> reported(session, monitor, name ?: id) { problem = it } }.orEmpty()
+                                val reported = if (tab === watched) monitored else tab.monitor?.let { monitor -> reported(session, monitor, name ?: id, linked) { problem = it } }.orEmpty()
                                 if (tab.chart) Rates(listOf(reported["tx-bits-per-second"], reported["rx-bits-per-second"]), listOf("Tx", "Rx"))
                                 tab.graph?.let { graph ->
                                     val halves = spec.shown?.pairs?.get(graph).orEmpty().map { spec.labels[it] ?: label(it) }
@@ -725,6 +743,12 @@ fun ItemForm(
                     reset()
                 }
             }
+            asking?.let { action ->
+                Confirm(stringResource(Res.string.command_question, action.title), action.title, onCancel = { asking = null }) {
+                    asking = null
+                    run(action)
+                }
+            }
             output?.let { (heading, reply) -> Output(heading, reply) { output = null } }
         }
     }
@@ -786,10 +810,10 @@ private class Related(val path: MenuPath) {
 
 // after the first row a monitor sends only what changed, so the rows are laid over each other
 @Composable
-private fun reported(session: DeviceSession, monitor: PackMonitor, name: String?, onError: (String?) -> Unit): Map<String, String> {
-    val values by produceState(emptyMap<String, String>(), session, monitor, name) {
+private fun reported(session: DeviceSession, monitor: PackMonitor, name: String?, linked: Boolean, onError: (String?) -> Unit): Map<String, String> {
+    val values by produceState(emptyMap<String, String>(), session, monitor, name, linked) {
         val argument = monitor.argument
-        if (argument != null && name == null) return@produceState
+        if (!linked || argument != null && name == null) return@produceState
         val command = MenuPath.parse(monitor.command)
         val arguments = if (argument == null || name == null) emptyMap() else mapOf(argument to name)
         try {

@@ -8,15 +8,15 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
-import androidx.compose.foundation.layout.exclude
+import androidx.compose.foundation.layout.displayCutout
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawing
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.systemBars
+import androidx.compose.foundation.layout.union
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -83,7 +83,7 @@ fun App(shell: Shell, tabsInTitle: Boolean = false) {
     LaunchedEffect(shell, read, shell.settings.current.checkUpdates) { if (read) shell.checkRelease() }
     ShellTheme(shell) {
         // the keyboard takes its room inside: counted in the height, it turns a tablet to the layout of a phone, which makes the field anew and hides the keyboard
-        BoxWithConstraints(Modifier.fillMaxSize().background(Theme.palette.workspace).windowInsetsPadding(WindowInsets.safeDrawing.exclude(WindowInsets.ime))) {
+        BoxWithConstraints(Modifier.fillMaxSize().background(Theme.palette.workspace).windowInsetsPadding(WindowInsets.systemBars.union(WindowInsets.displayCutout))) {
             val compact = maxWidth < CompactWidth || maxHeight < CompactHeight
             CompositionLocalProvider(LocalCompact provides compact) { TouchMetrics(compact) { HintHost { Box(Modifier.imePadding()) { Routers(shell, tabsInTitle) } } } }
         }

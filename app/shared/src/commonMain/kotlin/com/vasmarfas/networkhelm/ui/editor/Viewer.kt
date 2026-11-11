@@ -38,10 +38,12 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.input.key.KeyEvent
 import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
 import androidx.compose.ui.input.key.isCtrlPressed
 import androidx.compose.ui.input.key.isMetaPressed
 import androidx.compose.ui.input.key.isShiftPressed
 import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
 import androidx.compose.ui.layout.ContentScale
@@ -100,12 +102,14 @@ fun LineViewer(text: String, language: Language, controls: EditorControls, modif
         scope.launch { clipboard.writeText(lines.subList(first, last + 1).joinToString("\n")) }
     }
 
-    fun onKey(event: KeyEvent): Boolean {
+    fun onKey(event: KeyEvent, preview: Boolean): Boolean {
         if (event.type != KeyEventType.KeyDown) return false
-        val ctrl = event.isCtrlPressed || event.isMetaPressed
+        // AltGr comes as Ctrl with Alt, and the letter it types is no shortcut
+        val ctrl = event.isCtrlPressed && !event.isAltPressed || event.isMetaPressed
         return when {
-            ctrl && event.key == Key.C -> true.also { copy() }
-            ctrl && event.key == Key.A -> true.also {
+            // the fields of the bars copy and select their own text, the lines take what the fields let through
+            ctrl && !preview && event.key == Key.C -> true.also { copy() }
+            ctrl && !preview && event.key == Key.A -> true.also {
                 from = 0
                 to = lines.lastIndex
             }
@@ -119,7 +123,7 @@ fun LineViewer(text: String, language: Language, controls: EditorControls, modif
         }
     }
 
-    Column(modifier.onPreviewKeyEvent(::onKey).focusRequester(focus).focusable().testTag("viewer")) {
+    Column(modifier.onPreviewKeyEvent { onKey(it, true) }.onKeyEvent { onKey(it, false) }.focusRequester(focus).focusable().testTag("viewer")) {
         if (find.open) FindBar(find, found, true, ::go, {}, {}) { find.open = false }
         if (controls.goto) {
             GotoBar(lines.size, (if (from < 0) 0 else from) + 1) { line ->

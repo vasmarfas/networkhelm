@@ -323,6 +323,7 @@ fun TextField(
             selectionColors = LocalTextSelectionColors.current,
             lineLimits = TextFieldLineLimits.SingleLine,
             inputTransformation = inputTransformation,
+            keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             modifier = modifier
                 .onEnter(LocalSubmit.current.takeIf { enabled && !readOnly })
                 .onFocusChanged { focused = it.isFocused }
@@ -396,7 +397,7 @@ fun SecretField(state: TextFieldState, modifier: Modifier = Modifier, enabled: B
             enabled = enabled,
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false, keyboardType = KeyboardType.Password, imeAction = if (onGo != null) ImeAction.Go else ImeAction.Default),
             onKeyboardAction = onGo?.let { go -> { go() } },
-            textObfuscationMode = if (shown) TextObfuscationMode.Visible else TextObfuscationMode.RevealLastTyped,
+            textObfuscationMode = if (shown) TextObfuscationMode.Visible else TextObfuscationMode.System,
             textStyle = Theme.type.body.copy(color = if (enabled) palette.text else palette.faint),
             cursorBrush = SolidColor(palette.accent),
             modifier = modifier
