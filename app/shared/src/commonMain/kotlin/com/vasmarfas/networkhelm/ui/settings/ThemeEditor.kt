@@ -80,6 +80,7 @@ import com.vasmarfas.networkhelm.ui.theme.shaded
 import com.vasmarfas.networkhelm.ui.theme.snack
 import com.vasmarfas.networkhelm.ui.theme.themeIcon
 import com.vasmarfas.networkhelm.ui.theme.tintOf
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
@@ -357,7 +358,14 @@ private fun IconField(label: String, spec: String, onChange: (String) -> Unit) {
                             open = false
                             scope.launch {
                                 val file = exchange.pick().firstOrNull() ?: return@launch
-                                val picture = pictureSpec(file.read())
+                                // a file the system does not give is no picture this platform reads either
+                                val picture = try {
+                                    pictureSpec(file.read())
+                                } catch (e: CancellationException) {
+                                    throw e
+                                } catch (e: Exception) {
+                                    null
+                                }
                                 if (picture == null) refused = file.name else pick(specOf(picture, icon?.tint))
                             }
                         }, Modifier.testTag("icon-picture"))

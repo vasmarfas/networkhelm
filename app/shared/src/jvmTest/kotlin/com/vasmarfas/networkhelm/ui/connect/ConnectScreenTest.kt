@@ -4,6 +4,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assertIsDisplayed
@@ -34,6 +35,7 @@ import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.pressKey
 import androidx.compose.ui.test.swipeUp
 import androidx.compose.ui.test.v2.runDesktopComposeUiTest
+import androidx.compose.ui.text.TextLayoutResult
 import com.vasmarfas.networkhelm.app.Access
 import com.vasmarfas.networkhelm.app.AppSettings
 import com.vasmarfas.networkhelm.app.DeviceKind
@@ -397,6 +399,30 @@ class ConnectScreenTest {
     }
 
     @Test
+    fun aFileTheSystemDoesNotGiveIsNamedAsTheProblemOfTheImportTheKeyAndTheConfiguration() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        var picks = 0
+        val exchange = object : FileExchange {
+            override suspend fun pick() = listOf(LocalFile("file${++picks}") { throw IOException("Access is denied") })
+            override suspend fun save(name: String, bytes: ByteArray) = false
+        }
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } }
+            }
+        }
+        fun told(file: String) = waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("$file could not be read: Access is denied")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("import").performClick()
+        told("file1")
+        onNodeWithText("Choose").performClick()
+        told("file2")
+        onNodeWithTag("open-file").performClick()
+        told("file3")
+    }
+
+    @Test
     fun anSshKeyIsRememberedWithThePasswordAndGoesToTheLogin() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
@@ -729,6 +755,21 @@ class ConnectScreenTest {
         onNodeWithText("Neighbors").performClick()
         waitForIdle()
         onNodeWithTag("neighbors-status").assertTextContains("5678", substring = true)
+    }
+
+    @Test
+    fun anEmptyListOfSavedRoutersTellsWhatImportTakesInWholeWords() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.forLanguageTag("ru"))
+        val services = Services(MemoryStorage(), MemoryTrustStore(), null) { _, _, _ -> router }
+        val saved = SavedRouters(services.storage)
+        setContent { NetworkHelmTheme { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        waitForIdle()
+        val layouts = mutableListOf<TextLayoutResult>()
+        onNodeWithTag("import-hint").fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
+        assertFalse(layouts.single().hasVisualOverflow)
+        runBlocking { saved.save(SavedRouter("192.0.2.1", "admin", Access.Api)) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("import-hint")).fetchSemanticsNodes().isEmpty() }
+        Locale.setDefault(Locale.ENGLISH)
     }
 
     @Test

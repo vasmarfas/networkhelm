@@ -23,7 +23,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.input.InputTransformation
 import androidx.compose.foundation.text.input.TextFieldState
-import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -43,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Download
@@ -232,6 +232,7 @@ import networkhelm.app.shared.generated.resources.error_tcp_8291_unsupported
 import networkhelm.app.shared.generated.resources.error_timeout
 import networkhelm.app.shared.generated.resources.error_unknown_host
 import networkhelm.app.shared.generated.resources.error_unreachable
+import networkhelm.app.shared.generated.resources.error_unreadable
 import networkhelm.app.shared.generated.resources.error_unsupported
 import networkhelm.app.shared.generated.resources.error_winbox_file
 import networkhelm.app.shared.generated.resources.form_ok
@@ -325,14 +326,7 @@ fun ConnectScreen(
                     onConnect = { state.connect(onConnected) },
                     onSave = { ui.launch { state.save() } },
                     onOpenFile = { ui.launch { state.openFiles(exchange.pick(), onConnected) } },
-                    onKey = {
-                        ui.launch {
-                            exchange.pick().firstOrNull()?.let { file ->
-                                state.key = file.name to file.read()
-                                state.passphrase.clearText()
-                            }
-                        }
-                    },
+                    onKey = { ui.launch { exchange.pick().firstOrNull()?.let { state.takeKey(it) } } },
                     modifier = modifier,
                     fill = fill,
                 )
@@ -693,13 +687,9 @@ private fun Lists(
                 TabStrip(tabs, tab, { tab = it })
                 Box(Modifier.weight(1f).padding(horizontal = 8.dp), contentAlignment = Alignment.CenterEnd) {
                     val imported = state.imported
-                    val note = when {
-                        tab != 0 -> null
-                        imported != null -> stringResource(Res.string.connect_imported, imported.first, imported.second)
-                        routers.isEmpty() -> stringResource(Res.string.connect_import_hint)
-                        else -> null
+                    if (tab == 0 && imported != null) {
+                        Text(stringResource(Res.string.connect_imported, imported.first, imported.second), color = palette.muted, style = Theme.type.small, maxLines = 2, overflow = TextOverflow.Ellipsis)
                     }
-                    if (note != null) Text(note, color = palette.muted, style = Theme.type.small, maxLines = 2, overflow = TextOverflow.Ellipsis)
                 }
                 if (tab == 0) {
                     val import = stringResource(Res.string.connect_import)
@@ -729,6 +719,16 @@ private fun Lists(
                 tab == 0 -> SavedTable(saved, state, onConnect, onRemove)
                 tab == 2 && scan != null -> ScanTable(scan, services, state)
                 else -> NeighborTable(services, state)
+            }
+            // an empty list tells what Import takes in its own body, where the words have room
+            if (tab == 0 && routers.isEmpty() && state.imported == null) {
+                Text(
+                    stringResource(Res.string.connect_import_hint),
+                    Modifier.align(Alignment.Center).widthIn(max = 420.dp).padding(16.dp).testTag("import-hint"),
+                    color = palette.muted,
+                    style = Theme.type.small,
+                    textAlign = TextAlign.Center,
+                )
             }
         }
     }
@@ -1065,6 +1065,7 @@ private fun problemText(problem: Problem): String = when (problem) {
     is Problem.BookFile -> stringResource(Res.string.error_book_file, problem.message)
     Problem.WinBoxFile -> stringResource(Res.string.error_winbox_file)
     is Problem.NotConfig -> stringResource(Res.string.error_not_config, problem.file)
+    is Problem.Unreadable -> stringResource(Res.string.error_unreadable, problem.file, problem.message)
     is Problem.ThroughMissing -> stringResource(Res.string.error_through_missing, problem.address)
     Problem.ThroughCircle -> stringResource(Res.string.error_through_circle)
     is Problem.NoSnmp -> stringResource(if (problem.v3) Res.string.error_no_snmp3 else Res.string.error_no_snmp, problem.host)

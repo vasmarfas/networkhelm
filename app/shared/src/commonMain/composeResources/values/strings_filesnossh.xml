@@ -13,7 +13,7 @@
     <string name="files_no_ssh">Large files go over SFTP, and this connection has no SSH.</string>
     <string name="files_key_refused">The SSH host key was not accepted, so large files do not go.</string>
     <string name="files_too_big_rpcd">The file is bigger than rpcd gives (256 KiB), and SSH is not available.</string>
-    <string name="files_openwrt_ssh">On OpenWrt SSH is turned on in System, Administration (Dropbear).</string>
+    <string name="files_openwrt_ssh">On OpenWrt SSH is turned on in System → Administration (Dropbear).</string>
     <string name="files_enable_ssh">Turn on SSH on the router</string>
     <string name="files_enable_ssh_question">Turn on the SSH service of the router? Files of any size will go over SFTP afterwards.</string>
     <string name="files_retry">Try again</string>

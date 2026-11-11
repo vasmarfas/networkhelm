@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ui.connect
 
 import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
@@ -130,6 +131,8 @@ sealed interface Problem {
     data object ThroughCircle : Problem
 
     class NotConfig(val file: String) : Problem
+
+    class Unreadable(val file: String, val message: String) : Problem
 
     // an SNMP agent answers a wrong community with silence, the same as no agent at all
     class NoSnmp(val host: String, val v3: Boolean) : Problem
@@ -602,11 +605,27 @@ class ConnectState(
         }
     }
 
+    // a file the system does not give is a problem of the screen, told in the words of the system
+    private suspend fun contents(file: LocalFile): ByteArray? = try {
+        file.read()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        problem = Problem.Unreadable(file.name, e.message ?: e.toString())
+        null
+    }
+
     suspend fun openFiles(files: List<LocalFile>, onOpened: (DeviceSession, String, RouterOsLogin?) -> Unit) {
         for (file in files) {
-            val session = withContext(Dispatchers.Default) { openConfig(file.name, file.read()) }
+            val bytes = contents(file) ?: continue
+            val session = withContext(Dispatchers.Default) { openConfig(file.name, bytes) }
             if (session == null) problem = Problem.NotConfig(file.name) else onOpened(session, file.name, null)
         }
+    }
+
+    suspend fun takeKey(file: LocalFile) {
+        key = file.name to (contents(file) ?: return)
+        passphrase.clearText()
     }
 
     suspend fun import(files: List<LocalFile>) {
@@ -616,7 +635,7 @@ class ConnectState(
         val sessions = mutableListOf<WinBoxSession>()
         try {
             for (file in files) {
-                val bytes = file.read()
+                val bytes = contents(file) ?: continue
                 val book = try {
                     services.readWinBoxBook?.invoke(bytes)
                 } catch (e: WinBoxBookException) {

@@ -20,7 +20,7 @@
     <string name="files_empty">Папка пуста</string>
     <string name="files_filtered_empty">Ничего не найдено</string>
     <string name="files_drop">Отпустите файлы, чтобы отправить их в %1$s</string>
-    <string name="files_selected_size">Выбрано: %1$s</string>
+    <string name="files_selected_size">размер: %1$s</string>
     <string name="files_delete_folders">Папка удаляется вместе со всем, что в ней.</string>
     <plurals name="files_delete_question">
         <item quantity="one">Удалить с роутера %1$d элемент?</item>
@@ -72,7 +72,7 @@
     <string name="file_read_only_big">Только чтение: файл весит %1$s, а редактор берёт меньше 512 КиБ.</string>
     <string name="file_too_big">Файл весит %1$s — больше, чем открывает окно. Скачайте его и читайте на компьютере.</string>
     <string name="file_not_opened">Этот файл здесь не показывается. Скачайте его, чтобы открыть на компьютере.</string>
-    <string name="file_cannot_encode">В тексте есть символы, которых нет в cp1251. Переключите кодировку на UTF-8, чтобы сохранить.</string>
+    <string name="file_cannot_encode">В тексте есть символы, которых нет в Windows-1251. Переключите кодировку на UTF-8, чтобы сохранить.</string>
     <string name="file_import">Импорт</string>
     <string name="file_import_question">Выполнить скрипт %1$s на роутере? Его команды изменят конфигурацию.</string>
     <string name="file_imported">Импортирован</string>

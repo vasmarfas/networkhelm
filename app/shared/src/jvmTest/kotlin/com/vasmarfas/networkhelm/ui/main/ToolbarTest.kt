@@ -12,6 +12,7 @@ import androidx.compose.ui.platform.LocalUriHandler
 import androidx.compose.ui.platform.UriHandler
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
+import androidx.compose.ui.test.assertIsNotEnabled
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.onNodeWithTag
@@ -112,6 +113,22 @@ class ToolbarTest {
         onNodeWithText("Roll back changes").performClick()
         waitUntil(timeoutMillis = 5_000) { safeMode.calls == listOf("unroll") }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Roll back changes")).fetchSemanticsNodes().isEmpty() }
+    }
+
+    @Test
+    fun onAPhoneTheWordsOfALostSafeModeStandAboveItsButtonsAtTheirFullWidth() = runDesktopComposeUiTest(375, 812) {
+        Locale.setDefault(Locale.forLanguageTag("ru"))
+        val safeMode = FakeSafeMode().apply { left.value = true }
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(safeMode = safeMode), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { CompositionLocalProvider(LocalCompact provides true) { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Соединение пропало", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        val words = onNode(hasText("Соединение пропало", substring = true)).fetchSemanticsNode().boundsInRoot
+        val button = onNodeWithText("Откатить изменения").fetchSemanticsNode().boundsInRoot
+        assertTrue(words.width > 300f, "the words take the width of the window: ${words.width}")
+        assertTrue(button.top >= words.bottom, "the buttons stand under the words")
+        picture("safe-stranded-phone")
+        Locale.setDefault(Locale.ENGLISH)
     }
 
     private fun updateRouter(installed: String, latest: String) = FakeRouter(
@@ -300,12 +317,15 @@ class ToolbarTest {
         val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
         setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
         waitUntil(timeoutMillis = 5_000) { tab.menu?.isNotEmpty() == true }
-        onNodeWithTag("close-all").assertDoesNotExist()
+        onNodeWithTag("close-all").assertIsNotEnabled()
+        val undo = onNodeWithTag("undo").fetchSemanticsNode().boundsInRoot
         tab.open(MenuEntry("Firewall", "ip/firewall/nat"))
         tab.open(MenuEntry("Addresses", "ip/address"))
+        assertEquals(undo, onNodeWithTag("undo").fetchSemanticsNode().boundsInRoot, "Undo stands where it stood without windows")
         onNodeWithTag("close-all").performClick()
         waitUntil(timeoutMillis = 5_000) { tab.workspace.windows.isEmpty() }
-        onNodeWithTag("close-all").assertDoesNotExist()
+        onNodeWithTag("close-all").assertIsNotEnabled()
+        assertEquals(undo, onNodeWithTag("undo").fetchSemanticsNode().boundsInRoot, "a second tap on the place of the button does not land on Undo")
     }
 
     @Test

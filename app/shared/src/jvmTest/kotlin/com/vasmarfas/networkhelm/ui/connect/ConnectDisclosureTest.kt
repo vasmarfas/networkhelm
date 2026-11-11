@@ -55,14 +55,14 @@ class ConnectDisclosureTest {
         for ((platform, driver) in listOf("OpenWrt" to "RutOS (Teltonika)", "Keenetic" to "Keenetic / Netcraze")) {
             onNodeWithTag("platform").performClick()
             onAllNodes(hasText(platform)).onLast().performClick()
-            onNodeWithTag("platform-unverified").assertTextEquals("$driver: Written from the vendor documentation, not yet tried on a real device.")
+            onNodeWithTag("platform-unverified").assertTextEquals("$driver: written from the vendor documentation, not yet tried on a real device.")
         }
         onNodeWithTag("platform").performClick()
         onAllNodes(hasText("Other device: SSH, SNMP, UPnP")).onLast().performClick()
         onNodeWithTag("platform-unverified").assertDoesNotExist()
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("UPnP IGD and TR-064, read only (SSDP 1900)")).onLast().performClick()
-        onNodeWithTag("platform-unverified").assertTextEquals("TR-064: Written from the vendor documentation, not yet tried on a real device.")
+        onNodeWithTag("platform-unverified").assertTextEquals("TR-064: written from the vendor documentation, not yet tried on a real device.")
         onNodeWithTag("platform").performClick()
         onAllNodes(hasText("OPNsense")).onLast().performClick()
         onNodeWithTag("platform-unverified").assertDoesNotExist()

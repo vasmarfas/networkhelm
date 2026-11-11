@@ -327,11 +327,14 @@ class RouterOsSession(
             ?: throw DeviceException(ErrorCategory.Api, "$script returned no text")
     }
 
+    // a router that cannot be asked right now says nothing of its ssh service, and the port is tried as the login names it
     suspend fun sshService(): SshService? = try {
         client.call("/ip/service/print", "?name=ssh", "=.proplist=port,disabled").rows.firstOrNull()?.let {
             SshService(it["port"]?.toIntOrNull(), it["disabled"] == "true")
         }
     } catch (e: ApiTrapException) {
+        null
+    } catch (e: ApiConnectionClosedException) {
         null
     }
 

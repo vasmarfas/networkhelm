@@ -218,9 +218,12 @@ class OpenWrtSession(
         ssh?.close()
     }
 
+    // a router that cannot be asked right now names no port, and the one of the login is tried
     suspend fun sshPort(): Int? = try {
         uci.sections("dropbear").firstOrNull { it.type == "dropbear" }?.let { it.options["Port"] ?: "22" }?.toIntOrNull()
     } catch (e: UbusException) {
+        null
+    } catch (e: DeviceException) {
         null
     }
 

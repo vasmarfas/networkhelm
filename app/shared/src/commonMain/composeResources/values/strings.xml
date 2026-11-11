@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="connect_unverified">%1$s: Written from the vendor documentation, not yet tried on a real device.</string>
+    <string name="connect_unverified">%1$s: written from the vendor documentation, not yet tried on a real device.</string>
     <string name="error_book_invalid">The encrypted address book is damaged or uses unsupported encryption parameters.</string>
     <string name="connect_secrets_software">Remembered passwords use software encryption; the key is kept in the app’s data folder.</string>
     <string name="connect_secrets_system">Remembered passwords use the system’s protected storage.</string>
@@ -153,9 +153,10 @@
     <string name="renew_change">Change</string>
     <string name="renew_skip">Skip</string>
     <string name="error_book_password">The master password does not open this file</string>
-    <string name="error_book_file">The address book file failed: %1$s</string>
+    <string name="error_book_file">The address book file could not be read or written: %1$s</string>
     <string name="error_winbox_file">This is not an address book of WinBox that the app can read: the file is damaged or closed with a file password. Export the list from WinBox without a password and import it again.</string>
     <string name="error_not_config">%1$s is neither an /export of RouterOS nor a configuration or backup of OpenWrt</string>
+    <string name="error_unreadable">%1$s could not be read: %2$s</string>
     <string name="error_through_missing">%1$s, the router to go through, is not in the saved list</string>
     <string name="error_through_circle">The routers to go through lead back to one of them</string>
     <string name="error_no_snmp">No SNMP answer from %1$s: the community is wrong or is not allowed to read, the agent is off or UDP 161 is closed</string>
@@ -176,7 +177,7 @@
     <string name="connect_snmp_community">SNMP v2c asks for a community instead of a user and a password. Changing an interface or the name, contact and location of the system needs a community that may write; there is no rollback like Safe Mode.</string>
     <string name="connect_snmp3_auth">Authentication</string>
     <string name="connect_snmp3_privacy">Privacy</string>
-    <string name="connect_snmp3_user">The user and password are those of an SNMPv3 user; with no password the agent is asked without authentication. In RouterOS the user is the name of an /snmp community, the passwords its authentication-password and encryption-password. Nothing is written over SNMP.</string>
+    <string name="connect_snmp3_user">The user and password are those of an SNMPv3 user; with no password the agent is asked without authentication. In RouterOS the user is the name of an /snmp community, the passwords its authentication-password and encryption-password. Changing an interface or the name, contact and location of the system needs a user that may write; there is no rollback like Safe Mode.</string>
     <string name="connect_snmp3_plain">Without a privacy password every value travels unencrypted; the password itself is never sent.</string>
     <string name="connect_upnp_port">Port 1900 finds the description of the device by SSDP; another port is that of the description, as 49000 of a FRITZ!Box. The user and password are those of TR-064 where the device asks for them. Nothing is written.</string>
     <string name="connect_via">Via router</string>
@@ -194,7 +195,7 @@
     <string name="tabs_later">Later tabs</string>
     <string name="about_close">Close</string>
     <string name="about_description">NetworkHelm is a client for routers: one menu tree, windows in a single workspace, tables that update live, item dialogs with tabs, Safe Mode, a terminal and a file browser. It works with MikroTik RouterOS 7 and 6, OpenWrt, OPNsense, pfSense, VyOS, Keenetic and Linux hosts over SSH, and works with devices over SNMP and UPnP. One Kotlin codebase builds for Windows, macOS, Linux, Android, iOS and the browser. The app sends nothing to its developer: no account, no analytics, no crash reports.</string>
-    <string name="about_site">Website</string>
+    <string name="about_site">Website of the author</string>
     <string name="about_source">Source and issues</string>
     <string name="about_telegram">Telegram channel</string>
     <string name="about_chat">Telegram chat</string>
@@ -228,7 +229,7 @@
     <string name="compare_summary">Menus that differ: %1$d</string>
     <string name="compare_platforms">%1$s is a configuration of another platform</string>
     <string name="compare_unsupported">The router does not give its whole configuration: OpenWrt gives uci export over SSH only</string>
-    <string name="main_search">Search the menu  Alt+F</string>
+    <string name="main_search">Search the menu</string>
     <string name="main_connect_another">Connect to another router</string>
     <string name="main_connect_another_short">+ Router</string>
     <string name="search_title">Search the routers</string>
@@ -319,7 +320,7 @@
     <string name="snippets_hint">A click in the list types the text into the console, a line break as Enter. The snippets are the same for every router.</string>
     <string name="snippets_name">Name</string>
     <string name="snippets_add">Add</string>
-    <string name="snippets_unreadable">The file of snippets could not be read, so it is not written over</string>
+    <string name="snippets_unreadable">The file of snippets could not be read, so it is not written over: the changes are not saved</string>
     <string name="tunnels_hint">A port of this computer leads through the SSH connection of the router to an address as the router sees it: 127.0.0.1:80 is WebFig of the router itself, 192.168.88.10:3389 a computer behind it. The port listens on 127.0.0.1 only; 0 takes a free one. RouterOS forwards only where forwarding-enabled in /ip ssh allows it.</string>
     <string name="tunnels_local">Port here</string>
     <string name="tunnels_address">Address</string>
@@ -492,7 +493,7 @@
     <string name="settings_comments">Comments in tables</string>
     <string name="settings_separators">Lines between the columns of tables</string>
     <string name="settings_confirm_removal">Ask before removing from the router</string>
-    <string name="settings_resource_bar">Bar of the router's resources at the foot of the window</string>
+    <string name="settings_resource_bar">Bar of the resources of the router at the foot of the window</string>
     <string name="settings_bar_router">Router: name, address and version</string>
     <string name="settings_bar_cpu">Processor load</string>
     <string name="settings_bar_memory">Memory</string>
@@ -509,7 +510,7 @@
     <string name="settings_probe">Recognize the device and check which protocols answer while the address is typed</string>
     <string name="settings_probe_hint">The client opens a TCP connection to each port, reads the greeting of SSH and asks the web server for its first page, without logging in. A router that guards against password guessing may still count that as an attempt and block the address.</string>
     <string name="settings_check_updates">Check for new versions of NetworkHelm</string>
-    <string name="settings_check_updates_hint">At start the client asks GitHub (api.github.com) for the latest release of the project and shows a button when it is newer than this one. The request carries the version of the program and your address, as any request to the network does. With the setting off there is no request.</string>
+    <string name="settings_check_updates_hint">At start the client asks GitHub (api.github.com) for the latest release of the project and shows a button when it is newer than this one. The request carries the version of the program and your IP address, as any request to the network does. With the setting off there is no request.</string>
     <string name="query_risky">%1$s changes data or settings of the router and cannot be undone. Start it?</string>
     <string name="settings_close">Close</string>
     <string name="settings_not_theme">%1$s is not a theme: %2$s</string>
@@ -650,7 +651,7 @@
     <string name="list_paste">Paste</string>
     <string name="list_open">Open</string>
     <string name="list_copy">Copy</string>
-    <string name="list_paste_none">The clipboard holds no items of this list: copy rows of it or a part of an export with its menu.</string>
+    <string name="list_paste_none">The clipboard holds no items of this list: copy rows of it or a part of an export with the line of its menu, as /ip firewall filter.</string>
     <string name="list_paste_failed">The clipboard could not be read.</string>
     <string name="dhcp_setup_intro">A DHCP server on an interface with an IPv4 address: a pool, a network and the server, with the commands below.</string>
     <string name="dhcp_setup_interface">Interface</string>
@@ -670,7 +671,7 @@
     <string name="dashboard_download">Download</string>
     <string name="dashboard_upload">Upload</string>
     <string name="dashboard_rates">Now %1$s · average %2$s · maximum %3$s</string>
-    <string name="topology_empty">The router has no layouts. Add one under Controller → Layout.</string>
+    <string name="topology_empty">The router has no layouts. Add one under Controller › Layout.</string>
     <string name="topology_no_nodes">The layout has no nodes.</string>
     <string name="topology_zoom_in">Zoom in</string>
     <string name="topology_zoom_out">Zoom out</string>
@@ -917,7 +918,7 @@
     <string name="tools_n2_as_name">AS name</string>
     <string name="tools_n2_network_name">Network name</string>
     <string name="tools_n2_description">Description</string>
-    <string name="tools_n2_organisation">Organisation</string>
+    <string name="tools_n2_organisation">Organization</string>
     <string name="tools_n2_postal">Postal address</string>
     <string name="tools_n2_abuse_email">Abuse email</string>
     <string name="tools_n2_abuse_phone">Abuse phone</string>

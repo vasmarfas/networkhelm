@@ -44,7 +44,7 @@ The connection window opens on start. Its fields:
 | Field | What to enter |
 | --- | --- |
 | Address | the name or IP address of the router; add a port after a colon if it is not the standard one |
-| Platform | the type of device; the program recognises it by itself, and then "recognized" stands beside it |
+| Platform | the type of device; the program recognizes it by itself, and then "recognized" stands beside it |
 | Protocol | the way to connect; grey entries are ports that gave no answer |
 | Port | change it only if the service on the router listens on a non-standard port |
 | User, Password | the account on the router |
@@ -52,7 +52,7 @@ The connection window opens on start. Its fields:
 | Group, Comment | for order in the list of saved routers |
 | Via router | connect through the SSH of another saved router, when the one you need cannot be reached directly |
 
-As soon as you type an address, the program checks almost at once which ports of the router answer. It only tries to open a connection and reads the greeting, without logging in; from the answers it recognises the device and picks a protocol. You can change the choice by hand. A router that guards against password guessing may count such a check as a login attempt and block your address. Then turn the check off in "Settings": the item "Recognize the device and check which protocols answer while the address is typed".
+As soon as you type an address, the program checks almost at once which ports of the router answer. It only tries to open a connection and reads the greeting, without logging in; from the answers it recognizes the device and picks a protocol. You can change the choice by hand. A router that guards against password guessing may count such a check as a login attempt and block your address. Then turn the check off in "Settings": the item "Recognize the device and check which protocols answer while the address is typed".
 
 Press "Connect". The "Save" button puts the router in the list on the "Saved" tab, so next time you only pick it there: a click fills the form, a double click connects. The "Neighbors" tab shows the MikroTik routers that announce themselves on your network. They do it every 30 to 60 seconds, and "Refresh" asks them to answer now. On a window 960 dp wide or more the form and the lists stand side by side at the full height of the window; the button at the right of the tabs moves the lists under the form and back. Under the form a bar divides the height between the two: drag it to give one more room, double-click it to give the form its own height back.
 
@@ -70,7 +70,7 @@ The services are visible in WinBox and in the console: `/ip service print`. Any 
 
 | Way | Port | Notes |
 | --- | --- | --- |
-| WinBox | 8291 | the console carries the whole interface, so no API, REST or SSH is needed; the program picks it first when the port answers; the login on this port does not work on RouterOS 6.42, pick the API there |
+| TCP 8291 (WinBox port) | 8291 | the whole interface works over this one port, so no API, REST or SSH is needed; the program picks it first when the port answers; the login on this port does not work on RouterOS 6.42, pick the API there |
 | API-SSL | 8729 | encrypted; needs a certificate: without one RouterOS answers with anonymous TLS, which the program does not use |
 | API | 8728 | not encrypted |
 | REST over HTTPS and HTTP | 443 and 80 | RouterOS 7.1 and later only, the `www-ssl` and `www` services |
@@ -173,7 +173,7 @@ The "Network tools" button in the connection window and the wrench in the top ba
 | Subnet splitter | Three modes. Equal cuts a network, or a range that is exactly one network, into parts by their number (rounded up to a power of two) or by a prefix; the table shows up to 1024 parts. VLSM gives every host count its own block, the biggest first, inside a network or a range; a block is never smaller than a /30. Summarize merges a list of networks and ranges, one per line or separated by commas, into the fewest CIDR blocks | Everywhere |
 | Transfer time | Gives the third of size, speed and time when two are typed: sizes from B to TiB (decimal and binary), speeds from bit/s to GB/s, time in hours, minutes and seconds. Overhead in per cent is the share of the speed that carries no data. For a known size the time at 10 Mbit/s, 100 Mbit/s and 1 Gbit/s is listed under the result | Everywhere |
 | Port reference | 109 well-known TCP and UDP ports with the protocol, the service and a short description in the language of the interface. The filter takes the start of a number, a part of the service, the protocol or a word of the description. The port scanner names open ports from the same list | Everywhere |
-| MAC vendor lookup | Finds the vendor in the IEEE registry that comes with the program (58 623 blocks of 25.09.2026); the longest prefix wins | Everywhere |
+| MAC vendor lookup | Finds the vendor in the IEEE registry that comes with the program (58 623 blocks of 2026-09-25); the longest prefix wins | Everywhere |
 
 A browser can open no sockets, so the page shows the calculator, the splitter, the port reference, the transfer time and the MAC lookup. On iOS the echoes of the ping, the traceroute and the LAN scanner go through an ICMP socket that needs no privileges.
 
@@ -183,7 +183,7 @@ The scan sends many packets, so run it only on networks you manage. On Android 1
 
 ## Appearance
 
-Settings → Theme offers three looks. Modern is the default: flat controls in the layout of WinBox 4. Legacy repeats WinBox 3, with raised buttons and framed tabs, and stays light until "Look" is set to Dark. Material follows Material Design 3: pill-shaped buttons, rounded windows with a thin frame, tonal selection of the current item, and the title of the active window in a tint of the accent. Its sizes are made for a mouse: table rows 26 dp high against 24 in Modern, fields and window titles 32 dp; on a phone every theme grows to 40 dp for a finger. "Table rows" in the same settings adds up to 8 dp to every row of a table or takes 2 away. "Comments in tables" puts the comment of a row above it, in a column or nowhere; a table whose comment menu was set to another mode keeps that one until the menu is set back to the mode of the settings. "Colour" picks one of eight accents, and Material builds both its light and its dark palette from it. On Android 12 and later "System colours" takes the palette Android builds from the wallpaper instead. "Look" chooses between light, dark and the setting of the system; Modern and Material follow the system until it is changed.
+Settings → Theme offers three themes. Modern is the default: flat controls in the layout of WinBox 4. Legacy repeats WinBox 3, with raised buttons and framed tabs, and stays light until "Look" is set to Dark. Material follows Material Design 3: pill-shaped buttons, rounded windows with a thin frame, tonal selection of the current item, and the title of the active window in a tint of the accent. Its sizes are made for a mouse: table rows 26 dp high against 24 in Modern, fields and window titles 32 dp; on a phone every theme grows to 40 dp for a finger. "Table rows" in the same settings adds up to 8 dp to every row of a table or takes 2 away. "Comments in tables" puts the comment of a row above it, in a column or nowhere; a table whose comment menu was set to another mode keeps that one until the menu is set back to the mode of the settings. "Colour" picks one of eight accents, and Material builds both its light and its dark palette from it. On Android 12 and later "System colours" takes the palette Android builds from the wallpaper instead. "Look" chooses between light, dark and the setting of the system; Modern and Material follow the system until it is changed.
 
 ## When something does not work
 
@@ -199,8 +199,8 @@ Settings → Theme offers three looks. Modern is the default: flat controls in t
 | "the SNMP agent answered inconsistentValue for …" (or wrongValue, wrongLength, noCreation) | the agent does not take this value or this row: a required column of a new row is missing, the index is taken, the value is out of range | fill the other columns of the row, take another index, check the allowed values in the documentation of the device |
 | "Android does not let NetworkHelm reach the local network" | the permission is not granted | in the Android settings of the app allow "Nearby devices" |
 | "The connection was lost after sending the command …" | the link dropped at the moment of the edit | check the router first: the command may have run, and a repeat would run it twice |
-| "The connection to the router is lost, reconnecting…" | the link dropped or the router rebooted; on a phone the system also closes the connections of an app in the background | wait: the session comes back by itself, open forms keep what you typed; after a return to the app on a phone this takes up to half a minute |
-| "Loading… 2187 of 34998" at the bottom of a list | over WinBox, SSH and REST a table of more than 2 000 rows comes in portions, so that the router does not have to hold it in memory whole; on a local network 30 000 rows take about 10 seconds over REST and 40 over WinBox | wait: the list is ready when the count turns into the number of items |
+| "The connection to the router is lost, reconnecting…" | the link dropped or the router rebooted; on a phone the system also closes the connections of an app in the background | wait: the session comes back by itself, open forms keep what you typed; after a return to the app on a phone this takes a few seconds |
+| "Loading… 2187 of 34998" at the bottom of a list | over TCP 8291, SSH and REST a table of more than 2 000 rows comes in portions, so that the router does not have to hold it in memory whole; on a local network 30 000 rows take about 10 seconds over REST and 40 over TCP 8291 | wait: the list is ready when the count turns into the number of items |
 | "Not loaded" and a "Retry" button under a list | the rows did not arrive; the reason stands beside the button | press "Retry" or F5 |
 | The router stopped answering right after you typed the address | its protection against password guessing took the port check for a login attempt | wait for the block to end and turn the check off in "Settings" |
 | "The browser blocked the request …" | a page in a browser can only send HTTP, and RouterOS sends no CORS headers | open the app through a gateway, or connect with the app |

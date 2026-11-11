@@ -384,6 +384,34 @@ class LogViewTest {
         picture("log-window-wrapped")
     }
 
+    private fun added(count: Int) = List(count) { line("*N$it", "2026-10-27 10:0$it:00", "system,info", "the line $it of those that came later") }
+
+    @Test
+    fun aFullBufferThatTradesItsOldestLinesForNewOnesIsFollowedToItsEnd() = runDesktopComposeUiTest(1280, 760) {
+        val first = busy()
+        val (session, updates) = live(first)
+        opened(session)
+        waitForIdle()
+        updates.tryEmit(ListEvent.Snapshot(first.drop(3) + added(3)))
+        waitUntil(timeoutMillis = 5_000) { listed("the line 2 of those that came later") > 0 }
+        assertEquals("80 lines", drawn("log-count"))
+    }
+
+    @Test
+    fun aLogScrolledAwayFromItsEndStaysWhereItIsWhenNewLinesCome() = runDesktopComposeUiTest(1280, 760) {
+        val first = listOf(line("*0", "2026-10-26 21:00:00", "system,info", "the oldest line of the buffer")) + busy()
+        val (session, updates) = live(first)
+        opened(session)
+        waitForIdle()
+        press(Key.MoveHome)
+        waitUntil(timeoutMillis = 5_000) { listed("the oldest line of the buffer") > 0 }
+        updates.tryEmit(ListEvent.Snapshot(first + added(3)))
+        waitUntil(timeoutMillis = 5_000) { drawn("log-count") == "84 lines" }
+        waitForIdle()
+        assertEquals(0, listed("the line 2 of those that came later"))
+        assertTrue(listed("the oldest line of the buffer") > 0)
+    }
+
     @Test
     fun theLegacyThemeDrawsTheListAndTheDetails() = runDesktopComposeUiTest(1100, 640) {
         opened(busy(), dark = false, theme = Legacy)

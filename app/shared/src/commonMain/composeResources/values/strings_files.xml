@@ -63,14 +63,14 @@
     <string name="file_actual_size">Actual size</string>
     <string name="file_image_size">%1$d × %2$d px</string>
     <string name="file_line_col">Line %1$d, column %2$d</string>
-    <string name="file_lines">%1$d lines</string>
+    <string name="file_lines">Lines: %1$d</string>
     <string name="file_modified">Modified</string>
     <string name="file_read_only">Read only: %1$s</string>
     <string name="file_read_only_rights">the user has no write policy</string>
     <string name="file_read_only_big">Read only: the file is %1$s, and the editor takes less than 512 KiB.</string>
     <string name="file_too_big">The file is %1$s, more than the window opens. Download it to read it on the computer.</string>
     <string name="file_not_opened">This file is not shown here. Download it to open it on the computer.</string>
-    <string name="file_cannot_encode">The text has characters that cp1251 has no code for. Switch the encoding to UTF-8 to save it.</string>
+    <string name="file_cannot_encode">The text has characters that Windows-1251 has no code for. Switch the encoding to UTF-8 to save it.</string>
     <string name="file_import">Import</string>
     <string name="file_import_question">Run the script %1$s on the router? Its commands change the configuration.</string>
     <string name="file_imported">Imported</string>

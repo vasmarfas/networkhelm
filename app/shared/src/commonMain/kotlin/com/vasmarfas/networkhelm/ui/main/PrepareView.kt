@@ -33,6 +33,7 @@ import com.vasmarfas.networkhelm.ui.kit.Button
 import com.vasmarfas.networkhelm.ui.kit.Checkbox
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.workspace.VerticalScrollbar
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
@@ -108,8 +109,11 @@ internal fun PrepareView(session: DeviceSession, onSecure: (suspend () -> Unit)?
                     scope.launch {
                         try {
                             reopen()
-                        } catch (e: DeviceException) {
-                            problem = e.message
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (e: Exception) {
+                            // the new connection fails as any connect does, with the errors of the socket and of TLS among them
+                            problem = e.message ?: e.toString()
                         } finally {
                             busy = false
                         }

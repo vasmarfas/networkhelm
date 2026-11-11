@@ -398,4 +398,11 @@ class RouterOsSessionTest {
         assertEquals(2222, service.port)
         assertTrue(service.disabled)
     }
+
+    @Test
+    fun aRouterThatCannotBeAskedSaysNothingOfItsSshServiceInsteadOfFailing() = runTest {
+        val session = RouterOsSession(Dropping(), device, capabilities)
+        assertEquals(null, session.sshService())
+        assertEquals(null, session.sshPort())
+    }
 }

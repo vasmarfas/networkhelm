@@ -319,11 +319,15 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
     LaunchedEffect(state.live, jump) {
         if (state.live && lines.isNotEmpty()) list.scrollToItem(lines.lastIndex)
     }
-    var seen by remember { mutableIntStateOf(0) }
-    LaunchedEffect(lines.size) {
-        val last = list.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: -1
-        if (state.live && target == null && lines.isNotEmpty() && last >= seen - 2) list.scrollToItem(lines.lastIndex)
-        seen = lines.size
+    // the view follows the end while it stands at the line that was the newest or the one before it; the lines are told by their keys,
+    // since a full buffer trades its oldest lines for new ones and keeps its size
+    var newest by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(lines.size, lines.lastOrNull()?.key) {
+        val shown = list.layoutInfo.visibleItemsInfo.lastOrNull()?.key as? String
+        val before = place[newest]
+        val atEnd = shown == null || before == null || place[shown]?.let { before - it <= 1 } == true
+        if (state.live && target == null && lines.isNotEmpty() && atEnd) list.scrollToItem(lines.lastIndex)
+        newest = lines.lastOrNull()?.key
     }
     LaunchedEffect(target, place) {
         val key = target ?: return@LaunchedEffect

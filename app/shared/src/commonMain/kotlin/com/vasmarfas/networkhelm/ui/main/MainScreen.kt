@@ -266,7 +266,15 @@ fun MainScreen(
                 before = { other.session.export() }
             } else {
                 val file = exchange.pick().firstOrNull() ?: return@launch
-                val opened = withContext(Dispatchers.Default) { openConfig(file.name, file.read()) }
+                val opened = try {
+                    withContext(Dispatchers.Default) { openConfig(file.name, file.read()) }
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // a file the system does not give is told in the words of the system
+                    problem = e.message ?: e.toString()
+                    return@launch
+                }
                 if (opened == null || opened.device.platform != platform) {
                     problem = getString(if (opened == null) Res.string.error_not_config else Res.string.compare_platforms, file.name)
                     return@launch
@@ -508,9 +516,8 @@ private fun Toolbar(
                 ToolbarButton(if (compact) "$count" else "${stringResource(Res.string.main_windows)} $count$named", Lucide.AppWindow, { windows = true }, Modifier.testTag("windows"))
             },
         )
-        if (tab.workspace.windows.isNotEmpty()) {
-            IconButton(Lucide.X, stringResource(Res.string.main_close_all_windows), ::closeAll, Modifier.testTag("close-all"))
-        }
+        // the button keeps its place when the last window goes: a second tap there would otherwise land on Undo, which the router takes at once
+        IconButton(Lucide.X, stringResource(Res.string.main_close_all_windows), ::closeAll, Modifier.testTag("close-all"), enabled = tab.workspace.windows.isNotEmpty())
         val canWrite = tab.session.device.canWrite
         if (canWrite && tab.session.device.platform == Platform.RouterOs) {
             val undo = stringResource(Res.string.main_undo)
@@ -706,7 +713,8 @@ private fun LeftMenu(tab: RouterTab, search: FocusRequester, modifier: Modifier)
                     }
                     true
                 },
-                placeholder = stringResource(Res.string.main_search),
+                // Alt+F reaches the field only beside the workspace, so a narrow window does not name it
+                placeholder = stringResource(Res.string.main_search) + if (LocalCompact.current) "" else "  Alt+F",
             )
             Spacer(Modifier.height(6.dp))
             if (menu == null) {
@@ -765,14 +773,22 @@ private fun Stranded(safeMode: SafeMode, onProblem: (String?) -> Unit) {
             }
         }
     }
-    Row(
-        Modifier.fillMaxWidth().background(palette.warning).padding(horizontal = 12.dp, vertical = 4.dp).testTag("safe-stranded"),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(stringResource(Res.string.safe_stranded), Modifier.weight(1f), color = palette.on(palette.warning))
+    val banner = Modifier.fillMaxWidth().background(palette.warning).padding(horizontal = 12.dp, vertical = 4.dp).testTag("safe-stranded")
+    val buttons: @Composable () -> Unit = {
         Button(stringResource(Res.string.safe_rollback), { settle(false) }, primary = true)
         Button(stringResource(Res.string.safe_keep), { settle(true) })
+    }
+    // a narrow window has no room for the words beside the two buttons
+    if (LocalCompact.current) {
+        Column(banner, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Text(stringResource(Res.string.safe_stranded), color = palette.on(palette.warning))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { buttons() }
+        }
+    } else {
+        Row(banner, verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text(stringResource(Res.string.safe_stranded), Modifier.weight(1f), color = palette.on(palette.warning))
+            buttons()
+        }
     }
 }
 

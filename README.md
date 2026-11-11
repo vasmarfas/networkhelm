@@ -36,7 +36,7 @@ For MikroTik the program connects over the WinBox port 8291 (it is tried first w
 - Turns on Safe Mode wherever the router can take an edit back when the connection drops. Where it cannot, the program says so.
 - Has a terminal over SSH with ready-made commands, and the files of a router over SFTP with a viewer and an editor (highlighting, search and replace, saving back to the router). SSH tunnels, connections through another router and keys from ssh-agent work too.
 - Shows the log of a router coloured by severity, and searches all connected routers at once by address, network, MAC address or text.
-- Opens a saved configuration without a router (`/export` of RouterOS, an OpenWrt backup, VyOS commands) in the same windows and compares it with another one.
+- Opens a saved configuration without a router (`/export` of RouterOS, an OpenWrt backup or a UCI file) in the same windows and compares it with another one.
 - Keeps an address book with groups, imports a CSV file or the address book of WinBox, and exports it under a master password. MikroTik routers on the local network show up by themselves (the Neighbors tab), and a subnet can be scanned.
 - For RouterOS there are Ping, Traceroute, Torch, Profile, Packet Sniffer and traffic graphs. Over port 8291 they open as the router's own windows and refresh by themselves.
 - Has network tools that work on the device itself, whatever router is connected: ping with a chart and a path MTU search, traceroute with host names, port and LAN scanners, DNS lookup, Whois over RDAP and port 43, IP info, speed test, Wake-on-LAN, a subnet calculator that takes ranges, a subnet splitter, a transfer time calculator, a port reference and a MAC vendor lookup. The page in a browser keeps those that need no sockets.
@@ -70,7 +70,7 @@ In a browser the app runs as WebAssembly where the browser has WebAssembly GC: C
 ## First connection
 
 1. Start the program. The connection window opens.
-2. Type the address of the router: a name or an IP address, with a port only if it is not the standard one. Almost at once the program checks which ports answer, recognises the device and picks a protocol. Ports that gave no answer are grey in the list of protocols.
+2. Type the address of the router: a name or an IP address, with a port only if it is not the standard one. Almost at once the program checks which ports answer, recognizes the device and picks a protocol. Ports that gave no answer are grey in the list of protocols.
 3. Enter the login and password of the router. The "Remember the password" box keeps the password in the protected storage of the system.
 4. Press "Connect".
 
