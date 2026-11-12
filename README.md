@@ -59,11 +59,11 @@ Everything is on the [releases](https://github.com/vasmarfas/networkhelm/release
 
 The portable EXE needs no install. On its first start it unpacks itself once into `%LOCALAPPDATA%\NetworkHelm\portable\<version>` (about 200 MB), starts from there afterwards and keeps its settings in the `NetworkHelm data` folder beside the file. The AppImage mounts itself through FUSE and needs `fusermount` from the `fuse3` or `fuse` package; without FUSE, start it with `--appimage-extract-and-run`.
 
-Files marked `legacy` are built for 64-bit Windows 7 SP1 and 8 (on Java 17), files marked `arm64` for Windows and Linux on ARM processors. I have not been able to run them on such hardware yet. If you try one, tell me how it went.
+Files marked `legacy` are built for 64-bit Windows 7 SP1 and 8 (on Java 17) and draw their windows on the processor, without the graphics card; files marked `arm64` are for Windows and Linux on ARM processors. I have not been able to run them on such hardware yet. If you try one, tell me how it went.
 
 ### What you need to run it
 
-Windows 10 or newer, 64-bit (on older Windows the installer and the portable EXE stop with a message about the version of Windows), macOS 12 or newer, Linux on x86_64 or arm64 with glibc 2.28 or newer (Debian 10, Ubuntu 20.04, RHEL 8), Android 7.0 or newer, iOS 15 or newer. Windows XP and Vista are not supported.
+Windows 10 or newer, 64-bit (on older Windows the installer and the portable EXE stop with a message about the version of Windows), macOS 12 or newer, Linux on x86_64 or arm64 with glibc 2.28 or newer (Debian 10, Ubuntu 20.04, RHEL 8), Android 8.0 or newer, iOS 15 or newer. Windows XP and Vista are not supported, and neither is 32-bit Windows: Skiko, the library that draws the windows, has no build for it.
 
 In a browser the app runs as WebAssembly where the browser has WebAssembly GC: Chrome and Edge 119, Firefox 120, Safari 18.2 (on an iPhone or iPad that is iOS 18.2). Older browsers get a JavaScript build instead. It is slower and needs a browser of about 2021 or newer (Chrome 85, Firefox 79, Safari 14.1).
 

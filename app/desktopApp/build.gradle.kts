@@ -137,6 +137,9 @@ compose.desktop {
         javaHome = javaToolchains.launcherFor(jetBrainsRuntime).get().metadata.installationPath.asFile.absolutePath
         // --enable-native-access: JDK 25 warns at the first native call of each library, JNA and Skia among them
         jvmArgs("-Xmx1g", "-XX:ParallelGCThreads=4", "-XX:ConcGCThreads=1", "-XX:G1PeriodicGCInterval=15000", "-XX:MaxHeapFreeRatio=30", "-XX:MinHeapFreeRatio=10", "--enable-native-access=ALL-UNNAMED")
+        // Windows 7 and 8 have no Direct3D 12, and Skia over their OpenGL drew into a part of the window while the clicks went by the whole
+        // of it; drawn through Java2D, the picture takes the scale AWT gives the clicks
+        if (legacy) jvmArgs("-Dskiko.renderApi=SOFTWARE_COMPAT")
         if (macAppStore) {
             jvmArgs(
                 "-Djna.boot.library.path=\$APPDIR/resources",
