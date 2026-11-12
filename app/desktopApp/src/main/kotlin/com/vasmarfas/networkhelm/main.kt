@@ -16,6 +16,7 @@ import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.vasmarfas.networkhelm.app.ClearTypeLayer
 import com.vasmarfas.networkhelm.app.ResizeEdges
+import com.vasmarfas.networkhelm.app.WindowFailures
 import com.vasmarfas.networkhelm.app.WorkspaceBackground
 import com.vasmarfas.networkhelm.app.desktopServices
 import com.vasmarfas.networkhelm.app.quit
@@ -51,47 +52,49 @@ private fun startApplication() = application {
             exitApplication()
         }
     }
-    ShellTheme(shell, relocalize = false) {
-        Frame(shell.settings.current.scale) {
-            val tab = shell.routers.getOrNull(shell.selected)
-            DecoratedWindow(
-                onCloseRequest = { shell.quit { quit() } },
-                state = rememberFrameState(shell.services.storage),
-                title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
-                icon = appIcon(),
-            ) {
-                ClearTypeLayer()
-                WorkspaceBackground()
-                TitleBar(Modifier.newFullscreenControls()) {
-                    ShellTheme(shell) { TitleBarContent(shell, Modifier.align(Alignment.Start), Modifier.clientRegion("routers")) }
-                    shell.services.browserAccess?.let { access ->
-                        ShellTheme(shell) { BrowserAccessMark(access, Modifier.align(Alignment.End).clientRegion("access")) { shell.accessShown = true } }
+    WindowFailures {
+        ShellTheme(shell, relocalize = false) {
+            Frame(shell.settings.current.scale) {
+                val tab = shell.routers.getOrNull(shell.selected)
+                DecoratedWindow(
+                    onCloseRequest = { shell.quit { quit() } },
+                    state = rememberFrameState(shell.services.storage),
+                    title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
+                    icon = appIcon(),
+                ) {
+                    ClearTypeLayer()
+                    WorkspaceBackground()
+                    TitleBar(Modifier.newFullscreenControls()) {
+                        ShellTheme(shell) { TitleBarContent(shell, Modifier.align(Alignment.Start), Modifier.clientRegion("routers")) }
+                        shell.services.browserAccess?.let { access ->
+                            ShellTheme(shell) { BrowserAccessMark(access, Modifier.align(Alignment.End).clientRegion("access")) { shell.accessShown = true } }
+                        }
+                    }
+                    CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
+                        ResizeEdges { MenuLook(shell) { App(shell, tabsInTitle = true) } }
                     }
                 }
-                CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
-                    ResizeEdges { MenuLook(shell) { App(shell, tabsInTitle = true) } }
-                }
-            }
-            for (window in shell.detached) {
-                key(window) {
-                    val name = "${window.spec.title} — ${window.tab.session.device.identity}"
-                    DecoratedWindow(
-                        onCloseRequest = { shell.attach(window) },
-                        state = rememberWindowState(size = window.size),
-                        title = name,
-                        icon = appIcon(),
-                    ) {
-                        ClearTypeLayer()
-                        TitleBar(Modifier.newFullscreenControls()) {
-                            ShellTheme(shell) { TitleBarName(name, Modifier.align(Alignment.CenterHorizontally)) }
-                        }
-                        ShellTheme(shell) {
-                            WorkspaceBackground()
-                            MenuLook(shell) {
-                                ResizeEdges {
-                                    HintHost {
-                                        PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {
-                                            shell.detached.remove(window)
+                for (window in shell.detached) {
+                    key(window) {
+                        val name = "${window.spec.title} — ${window.tab.session.device.identity}"
+                        DecoratedWindow(
+                            onCloseRequest = { shell.attach(window) },
+                            state = rememberWindowState(size = window.size),
+                            title = name,
+                            icon = appIcon(),
+                        ) {
+                            ClearTypeLayer()
+                            TitleBar(Modifier.newFullscreenControls()) {
+                                ShellTheme(shell) { TitleBarName(name, Modifier.align(Alignment.CenterHorizontally)) }
+                            }
+                            ShellTheme(shell) {
+                                WorkspaceBackground()
+                                MenuLook(shell) {
+                                    ResizeEdges {
+                                        HintHost {
+                                            PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {
+                                                shell.detached.remove(window)
+                                            }
                                         }
                                     }
                                 }

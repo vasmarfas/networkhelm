@@ -14,6 +14,7 @@ import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.vasmarfas.networkhelm.app.ClearTypeLayer
+import com.vasmarfas.networkhelm.app.WindowFailures
 import com.vasmarfas.networkhelm.app.WorkspaceBackground
 import com.vasmarfas.networkhelm.app.desktopServices
 import com.vasmarfas.networkhelm.app.quit
@@ -44,34 +45,36 @@ private fun startApplication() = application {
             exitApplication()
         }
     }
-    val tab = shell.routers.getOrNull(shell.selected)
-    Window(
-        onCloseRequest = { shell.quit { quit() } },
-        state = rememberFrameState(shell.services.storage),
-        title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
-        icon = appIcon(),
-    ) {
-        ClearTypeLayer()
-        ShellTheme(shell, relocalize = false) { WorkspaceBackground() }
-        CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
-            MenuLook(shell) { App(shell) }
+    WindowFailures {
+        val tab = shell.routers.getOrNull(shell.selected)
+        Window(
+            onCloseRequest = { shell.quit { quit() } },
+            state = rememberFrameState(shell.services.storage),
+            title = tab?.let { "${it.session.device.identity} (${it.address}) — NetworkHelm" } ?: "NetworkHelm",
+            icon = appIcon(),
+        ) {
+            ClearTypeLayer()
+            ShellTheme(shell, relocalize = false) { WorkspaceBackground() }
+            CompositionLocalProvider(LocalTerminal provides { channel, modifier -> BossTerminal(channel, modifier) }) {
+                MenuLook(shell) { App(shell) }
+            }
         }
-    }
-    for (window in shell.detached) {
-        key(window) {
-            Window(
-                onCloseRequest = { shell.attach(window) },
-                state = rememberWindowState(size = window.size),
-                title = "${window.spec.title} — ${window.tab.session.device.identity}",
-                icon = appIcon(),
-            ) {
-                ClearTypeLayer()
-                ShellTheme(shell) {
-                    WorkspaceBackground()
-                    MenuLook(shell) {
-                        HintHost {
-                            PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {
-                                shell.detached.remove(window)
+        for (window in shell.detached) {
+            key(window) {
+                Window(
+                    onCloseRequest = { shell.attach(window) },
+                    state = rememberWindowState(size = window.size),
+                    title = "${window.spec.title} — ${window.tab.session.device.identity}",
+                    icon = appIcon(),
+                ) {
+                    ClearTypeLayer()
+                    ShellTheme(shell) {
+                        WorkspaceBackground()
+                        MenuLook(shell) {
+                            HintHost {
+                                PathWindow(window.tab.session, window.spec, shell.tables, window.tab::openItem, window.tab::open) {
+                                    shell.detached.remove(window)
+                                }
                             }
                         }
                     }

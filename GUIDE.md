@@ -205,6 +205,7 @@ Settings → Theme offers three themes. Modern is the default: flat controls in 
 | The router stopped answering right after you typed the address | its protection against password guessing took the port check for a login attempt | wait for the block to end and turn the check off in "Settings" |
 | "The browser blocked the request …" | a page in a browser can only send HTTP, and RouterOS sends no CORS headers | open the app through a gateway, or connect with the app |
 | The program does not start | on a computer it writes the cause to the file `NetworkHelm-startup-error.log` in the temporary folder | take the file (`%TEMP%` on Windows, `/tmp` on Linux) and attach it to your report with the version of the system |
+| A window closes after a message about an error | the error is written to `NetworkHelm-error.log` in the same temporary folder, and the message gives its full path | attach that file to your report |
 
 Everything else can go to the [issue tracker](https://github.com/vasmarfas/networkhelm/issues). Leave addresses, passwords and keys out of your reports.
 

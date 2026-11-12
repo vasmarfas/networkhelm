@@ -249,6 +249,7 @@
     <string name="window_not_ready">This kind of window is not ready yet.</string>
     <string name="window_missing">This router has no %1$s: it lacks the package, the hardware or the version with this menu, or the group of this user has no policy that shows it.</string>
     <string name="window_policy">The group of this user lacks the policies %1$s, and the router refuses to run this. Policies of a group are set in System › Users › Groups.</string>
+    <string name="window_failed">The window ran into an error and will close. What happened is written to %1$s: attach this file to the report.</string>
     <string name="menu_locked_policy">The user group lacks %1$s</string>
     <string name="menu_locked_device_mode">Turned off by device-mode: %1$s</string>
     <string name="list_enable">Enable</string>

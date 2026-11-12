@@ -249,6 +249,7 @@
     <string name="window_not_ready">Такое окно пока не сделано.</string>
     <string name="window_missing">На этом роутере нет %1$s: не хватает пакета, оборудования или версии, где это меню есть, или у группы пользователя нет права, которое его открывает.</string>
     <string name="window_policy">У группы этого пользователя нет прав %1$s, и роутер не даст это запустить. Права группы задаются в System › Users › Groups.</string>
+    <string name="window_failed">В окне произошла ошибка, и оно закроется. Что случилось, записано в %1$s: приложите этот файл к сообщению об ошибке.</string>
     <string name="menu_locked_policy">У группы пользователя нет прав: %1$s</string>
     <string name="menu_locked_device_mode">Выключено в device-mode: %1$s</string>
     <string name="list_enable">Включить</string>
