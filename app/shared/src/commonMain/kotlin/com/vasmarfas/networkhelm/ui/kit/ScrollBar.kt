@@ -162,8 +162,7 @@ fun ListScrollBar(state: LazyListState, modifier: Modifier = Modifier) {
     val travel = track - thumb
     val position = shown.first().let { it.index * average - it.offset }
     val start = if (travel > 0) (travel * position / (content - viewport)).coerceIn(0f, travel.toFloat()).roundToInt() else 0
-    // the content is an estimate from the rows in sight and changes as they scroll
-    val perPixel by rememberUpdatedState(if (travel > 0) (content - viewport) / travel else 0f)
+    val thumbAt by rememberUpdatedState(start to travel)
     val source = remember { MutableInteractionSource() }
     val hovered by source.collectIsHoveredAsState()
     var dragged by remember { mutableStateOf(false) }
@@ -179,15 +178,32 @@ fun ListScrollBar(state: LazyListState, modifier: Modifier = Modifier) {
                 .hoverable(source)
                 .hand()
                 .pointerInput(state) {
+                    var aim = 0f
                     detectVerticalDragGestures(
-                        onDragStart = { dragged = true },
+                        onDragStart = {
+                            dragged = true
+                            aim = thumbAt.first.toFloat()
+                        },
                         onDragEnd = { dragged = false },
                         onDragCancel = { dragged = false },
                     ) { change, amount ->
                         change.consume()
-                        state.dispatchRawDelta(amount * perPixel)
+                        aim += amount
+                        val length = thumbAt.second
+                        if (length > 0) state.showAt(aim / length)
                     }
                 },
         )
     }
+}
+
+// the list is put on the row under the thumb: a scroll by the distance would compose every row on the way, thousands of them per step in a long table
+private fun LazyListState.showAt(fraction: Float) {
+    val info = layoutInfo
+    val shown = info.visibleItemsInfo
+    if (shown.isEmpty()) return
+    val average = shown.sumOf { it.size }.toFloat() / shown.size
+    val viewport = info.viewportEndOffset - info.viewportStartOffset
+    val row = fraction.coerceIn(0f, 1f) * (info.totalItemsCount - viewport / average).coerceAtLeast(0f)
+    requestScrollToItem(row.toInt(), ((row - row.toInt()) * average).roundToInt())
 }
