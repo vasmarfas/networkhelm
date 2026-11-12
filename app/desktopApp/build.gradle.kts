@@ -1,6 +1,19 @@
 import org.gradle.api.artifacts.component.ModuleComponentIdentifier
+import org.gradle.api.artifacts.transform.InputArtifact
+import org.gradle.api.artifacts.transform.TransformAction
+import org.gradle.api.artifacts.transform.TransformOutputs
+import org.gradle.api.artifacts.transform.TransformParameters
+import org.gradle.api.artifacts.type.ArtifactTypeDefinition
+import org.gradle.api.attributes.Attribute
+import org.gradle.api.file.FileSystemLocation
 import org.jetbrains.compose.desktop.application.dsl.TargetFormat
 import java.util.concurrent.TimeUnit
+import java.util.jar.Attributes
+import java.util.jar.JarFile
+import java.util.jar.Manifest
+import java.util.zip.ZipEntry
+import java.util.zip.ZipFile
+import java.util.zip.ZipOutputStream
 
 plugins {
     alias(libs.plugins.kotlinJvm)
@@ -40,6 +53,52 @@ dependencies {
 
     implementation(libs.compose.uiToolingPreview)
 }
+
+// pty4j keeps the executable it starts local processes with in its jar, and Compose signs only the libraries packed in jars;
+// notarization refuses an executable without the hardened runtime, and the terminal of the app runs over SSH, not a local process.
+// jbr-api seals com.jetbrains: in an installed app the class data archive comes from another folder, a class taken from it defines
+// the package unsealed, and the next class loaded from the jar stopped the start with "can't seal package com.jetbrains"
+abstract class PatchJars : TransformAction<TransformParameters.None> {
+    @get:InputArtifact
+    abstract val jar: Provider<FileSystemLocation>
+
+    override fun transform(outputs: TransformOutputs) {
+        val source = jar.get().asFile
+        if (!source.name.startsWith("pty4j-") && !source.name.startsWith("jbr-api-")) {
+            outputs.file(source)
+            return
+        }
+        ZipFile(source).use { zip ->
+            ZipOutputStream(outputs.file(source.name).outputStream()).use { target ->
+                for (entry in zip.entries()) {
+                    if (entry.name == "resources/com/pty4j/native/darwin/pty4j-unix-spawn-helper") continue
+                    if (entry.name == JarFile.MANIFEST_NAME) {
+                        val manifest = zip.getInputStream(entry).use { Manifest(it) }
+                        manifest.mainAttributes.remove(Attributes.Name.SEALED)
+                        manifest.entries.values.forEach { it.remove(Attributes.Name.SEALED) }
+                        target.putNextEntry(ZipEntry(entry.name).apply { time = entry.time })
+                        manifest.write(target)
+                    } else {
+                        target.putNextEntry(ZipEntry(entry).apply { compressedSize = -1 })
+                        zip.getInputStream(entry).use { it.copyTo(target) }
+                    }
+                    target.closeEntry()
+                }
+            }
+        }
+    }
+}
+
+val patched = Attribute.of("networkhelm.patchedJars", Boolean::class.javaObjectType)
+dependencies {
+    attributesSchema { attribute(patched) }
+    artifactTypes.getByName(ArtifactTypeDefinition.JAR_TYPE) { attributes.attribute(patched, false) }
+    registerTransform(PatchJars::class) {
+        from.attribute(patched, false).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE)
+        to.attribute(patched, true).attribute(ArtifactTypeDefinition.ARTIFACT_TYPE_ATTRIBUTE, ArtifactTypeDefinition.JAR_TYPE)
+    }
+}
+configurations.runtimeClasspath { attributes.attribute(patched, true) }
 
 val innoSetup = listOfNotNull(
     providers.environmentVariable("INNO_SETUP").orNull,
