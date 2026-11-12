@@ -279,6 +279,8 @@
     <string name="list_comments_above">Above rows</string>
     <string name="list_comments_column">In a column</string>
     <string name="list_comments_hidden">Hidden</string>
+    <string name="list_comments_settings">As in the settings (%1$s)</string>
+    <string name="list_comments_own">Comments: this table has a mode of its own</string>
     <string name="filter_toggle">Filter</string>
     <string name="filter_all">all</string>
     <string name="filter_is">is</string>
@@ -492,6 +494,7 @@
     <string name="settings_rows">Table rows</string>
     <string name="settings_rows_theme">As in the theme</string>
     <string name="settings_comments">Comments in tables</string>
+    <string name="settings_comments_hint">A table can keep a mode of its own: the comments button of its window sets it and stays highlighted while it does. A change here applies to every table.</string>
     <string name="settings_separators">Lines between the columns of tables</string>
     <string name="settings_confirm_removal">Ask before removing from the router</string>
     <string name="settings_resource_bar">Bar of the resources of the router at the foot of the window</string>

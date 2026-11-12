@@ -61,6 +61,7 @@ import com.vasmarfas.networkhelm.ui.kit.dialogPanel
 import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.scrim
 import com.vasmarfas.networkhelm.ui.table.CommentMode
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.terminal.terminalScrollback
 import com.vasmarfas.networkhelm.ui.theme.AccentPresets
 import com.vasmarfas.networkhelm.ui.theme.BundledThemes
@@ -101,6 +102,7 @@ import networkhelm.app.shared.generated.resources.settings_check_updates
 import networkhelm.app.shared.generated.resources.settings_check_updates_hint
 import networkhelm.app.shared.generated.resources.settings_close
 import networkhelm.app.shared.generated.resources.settings_comments
+import networkhelm.app.shared.generated.resources.settings_comments_hint
 import networkhelm.app.shared.generated.resources.settings_confirm_removal
 import networkhelm.app.shared.generated.resources.settings_delete
 import networkhelm.app.shared.generated.resources.settings_edit
@@ -145,6 +147,7 @@ fun SettingsDialog(
     onBrowserAccess: () -> Unit = {},
     themeEditor: MutableState<ThemeFile?> = remember { mutableStateOf(null) },
     updates: Boolean = true,
+    tables: TableLayouts? = null,
     onClose: () -> Unit,
 ) {
     val palette = Theme.palette
@@ -246,7 +249,15 @@ fun SettingsDialog(
                         CommentMode.InColumn to stringResource(Res.string.list_comments_column),
                         CommentMode.Hidden to stringResource(Res.string.list_comments_hidden),
                     )
-                    Select(current.comments, CommentMode.entries, { modes.getValue(it) }, { mode -> act { settings.change { it.copy(comments = mode) } } }, Modifier.width(240.dp).testTag("comments"))
+                    Select(current.comments, CommentMode.entries, { modes.getValue(it) }, { mode ->
+                        act {
+                            settings.change { it.copy(comments = mode) }
+                            tables?.followComments()
+                        }
+                    }, Modifier.width(240.dp).testTag("comments"))
+                }
+                Labeled("") {
+                    Text(stringResource(Res.string.settings_comments_hint), color = palette.muted, style = Theme.type.small)
                 }
                 if (terminalScrollback) {
                     Labeled(stringResource(Res.string.settings_terminal)) {

@@ -221,6 +221,8 @@ import networkhelm.app.shared.generated.resources.list_comments
 import networkhelm.app.shared.generated.resources.list_comments_above
 import networkhelm.app.shared.generated.resources.list_comments_column
 import networkhelm.app.shared.generated.resources.list_comments_hidden
+import networkhelm.app.shared.generated.resources.list_comments_own
+import networkhelm.app.shared.generated.resources.list_comments_settings
 import networkhelm.app.shared.generated.resources.list_copy
 import networkhelm.app.shared.generated.resources.list_detail
 import networkhelm.app.shared.generated.resources.list_disable
@@ -493,10 +495,14 @@ private fun ListView(
     val classic = Theme.classic
     var detail by remember(name) { mutableStateOf(saved?.detail ?: compact) }
     var categories by remember(name) { mutableStateOf(saved?.categories == true) }
-    // a mode picked in the table holds there; picking the one the settings give lets the table follow them again
+    // a mode picked in the table holds there until "as in the settings" in its menu; a change in the settings takes the modes
+    // of the tables away (TableLayouts.followComments), and an open table lets its own one go with its saved layout
     val everywhere = LocalSettings.current.comments
     var ownComments by remember(name) { mutableStateOf(saved?.comments) }
     val comments = ownComments ?: everywhere
+    LaunchedEffect(name) {
+        snapshotFlow { tables[name]?.comments }.collect { if (it == null) ownComments = null }
+    }
     LaunchedEffect(name) {
         snapshotFlow {
             TableLayout(chosen.orEmpty(), state.widths.mapValues { it.value.value }, state.sort.map { SavedSort(it.column, it.ascending) }, detail, categories, ownComments)
@@ -839,7 +845,9 @@ private fun ListView(
                         CommentMode.InColumn to stringResource(Res.string.list_comments_column),
                         CommentMode.Hidden to stringResource(Res.string.list_comments_hidden),
                     )
-                    ActionsMenu(stringResource(Res.string.list_comments), Lucide.MessageSquare, CommentMode.entries, { true }, { modes.getValue(it) }, Modifier.testTag("comments"), active = comments != CommentMode.Above, iconOnly = true, selected = { it == comments }) { mode -> ownComments = mode.takeIf { it != everywhere } }
+                    val followed = stringResource(Res.string.list_comments_settings, modes.getValue(everywhere))
+                    val title = stringResource(if (ownComments == null) Res.string.list_comments else Res.string.list_comments_own)
+                    ActionsMenu(title, Lucide.MessageSquare, listOf<CommentMode?>(null) + CommentMode.entries, { true }, { mode -> if (mode == null) followed else modes.getValue(mode) }, Modifier.testTag("comments"), active = ownComments != null, iconOnly = true, selected = { it == ownComments }) { mode -> ownComments = mode }
                 }
                 if (!compact) search(Modifier.width(200.dp))
             }

@@ -279,6 +279,8 @@
     <string name="list_comments_above">Над строками</string>
     <string name="list_comments_column">В колонке</string>
     <string name="list_comments_hidden">Скрыты</string>
+    <string name="list_comments_settings">Как в настройках (%1$s)</string>
+    <string name="list_comments_own">Комментарии: у этой таблицы свой режим</string>
     <string name="filter_toggle">Фильтр</string>
     <string name="filter_all">все</string>
     <string name="filter_is">равно</string>
@@ -492,6 +494,7 @@
     <string name="settings_rows">Строки таблиц</string>
     <string name="settings_rows_theme">Как в теме</string>
     <string name="settings_comments">Комментарии в таблицах</string>
+    <string name="settings_comments_hint">Таблица может держать свой режим: его задаёт кнопка комментариев в её окне, и пока он есть, кнопка подсвечена. Изменение здесь действует на все таблицы.</string>
     <string name="settings_separators">Линии между колонками таблиц</string>
     <string name="settings_confirm_removal">Спрашивать перед удалением с роутера</string>
     <string name="settings_resource_bar">Полоса ресурсов роутера внизу окна</string>

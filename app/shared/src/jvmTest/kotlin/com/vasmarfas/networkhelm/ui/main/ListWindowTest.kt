@@ -78,6 +78,7 @@ import java.util.Locale
 import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertNull
 import kotlin.test.assertTrue
 import kotlin.time.Clock
 
@@ -545,18 +546,52 @@ class ListWindowTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isNotEmpty() }
         settings = Settings(comments = CommentMode.Hidden)
         waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isEmpty() && onAllNodes(hasText("web")).fetchSemanticsNodes().isEmpty() }
+        onNodeWithContentDescription("Comments").assertExists()
 
         choose("In a column")
         waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithContentDescription("Comments: this table has a mode of its own").assertExists()
         settings = Settings(comments = CommentMode.Above)
         waitForIdle()
         assertTrue(onAllNodes(column).fetchSemanticsNodes().isNotEmpty(), "the mode of the table stands")
         assertEquals(CommentMode.InColumn, tables[path.toString()]?.comments)
 
         choose("Above rows")
-        waitUntil(timeoutMillis = 5_000) { tables[path.toString()]?.comments == null }
+        waitUntil(timeoutMillis = 5_000) { tables[path.toString()]?.comments == CommentMode.Above }
         settings = Settings(comments = CommentMode.Hidden)
+        waitForIdle()
+        assertTrue(onAllNodes(hasText("web")).fetchSemanticsNodes().isNotEmpty(), "a mode of its own that the settings had stands too")
+
+        choose("As in the settings (Hidden)")
+        waitUntil(timeoutMillis = 5_000) { tables[path.toString()]?.comments == null }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("web")).fetchSemanticsNodes().isEmpty() }
+        onNodeWithContentDescription("Comments").assertExists()
+    }
+
+    @Test
+    fun aChangeOfTheSettingsTakesAnOpenTableWithAModeOfItsOwnBackToThem() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val path = MenuPath.parse("ip/firewall/filter")
+        val schema = MenuSchema(path, NodeKind.List, emptyList(), listOf("add", "print", "remove", "set"), listOf(Argument("comment", ValueType.Text()), Argument("disabled", ValueType.YesNo)))
+        val storage = MemoryStorage()
+        val tables = TableLayouts(storage)
+        val tab = RouterTab(FakeRouter(mapOf(path.toString() to rules), schemas = mapOf(path.toString() to schema)), "192.0.2.1", bundledPacks().values, storage, tables)
+        var settings by mutableStateOf(Settings(comments = CommentMode.Above))
+        setContent { CompositionLocalProvider(LocalSettings provides settings) { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } } }
+        tab.open(MenuEntry("Firewall", path.toString()))
+        val column = hasText("Comment") and hasAnyAncestor(hasTestTag("table"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("web")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("comments").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Hidden")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Hidden").performClick()
+        waitUntil(timeoutMillis = 5_000) { tables[path.toString()]?.comments == CommentMode.Hidden && onAllNodes(hasText("web")).fetchSemanticsNodes().isEmpty() }
+
+        // what the settings dialog does with a new mode
+        settings = Settings(comments = CommentMode.InColumn)
+        tables.followComments()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(column).fetchSemanticsNodes().isNotEmpty() }
+        assertNull(tables[path.toString()]?.comments)
+        onNodeWithContentDescription("Comments").assertExists()
     }
 
     @Test

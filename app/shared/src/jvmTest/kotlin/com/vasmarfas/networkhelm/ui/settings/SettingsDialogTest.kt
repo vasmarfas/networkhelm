@@ -34,6 +34,8 @@ import com.vasmarfas.networkhelm.ui.files.FileExchange
 import com.vasmarfas.networkhelm.ui.files.LocalFile
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
 import com.vasmarfas.networkhelm.ui.table.CommentMode
+import com.vasmarfas.networkhelm.ui.table.TableLayout
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.LegacyPalette
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.ui.theme.ThemeFile
@@ -101,6 +103,24 @@ class SettingsDialogTest {
         onNodeWithTag("comments").performScrollTo().performClick()
         onNodeWithText("In a column").performClick()
         waitUntil(timeoutMillis = 5_000) { settings.current.comments == CommentMode.InColumn }
+    }
+
+    @Test
+    fun aModeOfCommentsPickedHereTakesTheTablesWithAModeOfTheirOwnBackToTheSettings() = runDesktopComposeUiTest(900, 1000) {
+        Locale.setDefault(Locale.ENGLISH)
+        val settings = AppSettings(MemoryStorage())
+        val tables = TableLayouts(MemoryStorage())
+        tables["ip/firewall/mangle"] = TableLayout(columns = listOf("chain"), comments = CommentMode.Hidden)
+        tables["ip/firewall/raw"] = TableLayout(columns = listOf("action"))
+        setContent { NetworkHelmTheme { SettingsDialog(settings, tables = tables) {} } }
+        onNodeWithText("A table can keep a mode of its own", substring = true).assertExists()
+
+        onNodeWithTag("comments").performScrollTo().performClick()
+        onNodeWithText("In a column").performClick()
+        waitUntil(timeoutMillis = 5_000) { tables["ip/firewall/mangle"]?.comments == null }
+        assertEquals(CommentMode.InColumn, settings.current.comments)
+        assertEquals(listOf("chain"), tables["ip/firewall/mangle"]?.columns, "the rest of the layout stays")
+        assertEquals(listOf("action"), tables["ip/firewall/raw"]?.columns)
     }
 
     @Test

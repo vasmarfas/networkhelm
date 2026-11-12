@@ -16,7 +16,7 @@ import kotlinx.serialization.json.Json
 enum class CommentMode { Above, InColumn, Hidden }
 
 @Serializable
-class TableLayout(
+data class TableLayout(
     val columns: List<String> = emptyList(),
     val widths: Map<String, Float> = emptyMap(),
     val sort: List<SavedSort> = emptyList(),
@@ -38,6 +38,13 @@ class TableLayouts(private val storage: Storage) {
 
     operator fun set(path: String, layout: TableLayout) {
         layouts[path] = layout
+    }
+
+    // a mode picked in the settings is meant for every table, the ones that kept a mode of their own too
+    fun followComments() {
+        for ((path, layout) in layouts.toMap()) {
+            if (layout.comments != null) layouts[path] = layout.copy(comments = null)
+        }
     }
 
     suspend fun keep() {
