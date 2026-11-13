@@ -148,11 +148,19 @@ begin
   Result := ExpandConstant('{localappdata}\NetworkHelm\portable\{#AppVersionName}{#Flavor}');
 end;
 
+// Without its app folder in PATH the launcher of Java 17 starts itself again, suspended, and moves the copy into a job object
+// of its own; on Windows 7 a process started by Setup from Explorer is already in a job, and the copy stayed suspended
+procedure AddAppToPath(Dir: String);
+begin
+  SetEnvironmentVariable('PATH', GetEnv('PATH') + ';' + Dir + '\app');
+end;
+
 function StartPortable: Boolean;
 var
   Code: Integer;
 begin
   SetEnvironmentVariable('NETWORKHELM_HOME', ExpandConstant('{src}\NetworkHelm data'));
+  AddAppToPath(PortableDir);
   Result := Exec(PortableDir + '\NetworkHelm.exe', '', ExpandConstant('{src}'), SW_SHOWNORMAL, ewNoWait, Code);
   if not Result then
     Log('Could not start NetworkHelm: ' + SysErrorMessage(Code));
@@ -241,4 +249,6 @@ begin
     DropOtherCopies;
     StartPortable;
   end;
+  if not Portable and (CurStep = ssPostInstall) then
+    AddAppToPath(ExpandConstant('{app}'));
 end;

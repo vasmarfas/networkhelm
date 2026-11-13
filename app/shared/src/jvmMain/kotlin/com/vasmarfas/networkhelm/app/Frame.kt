@@ -66,7 +66,7 @@ fun rememberFrameState(storage: Storage): WindowState {
         WindowState(
             placement = if (saved?.maximized == true) WindowPlacement.Maximized else WindowPlacement.Floating,
             position = saved?.takeIf(::seen)?.let { WindowPosition(it.x.dp, it.y.dp) } ?: WindowPosition(Alignment.Center),
-            size = saved?.let { DpSize(it.width.dp, it.height.dp) } ?: FIRST_SIZE,
+            size = saved?.let { DpSize(it.width.dp, it.height.dp) } ?: firstSize(),
         )
     }
     LaunchedEffect(state) {
@@ -81,6 +81,14 @@ fun rememberFrameState(storage: Storage): WindowState {
         }
     }
     return state
+}
+
+// in the middle of a screen smaller than FIRST_SIZE, 1366×768 at 100 % or 1280×1024 at 150 %, the title bar went above the top edge
+private fun firstSize(): DpSize = try {
+    val screen = GraphicsEnvironment.getLocalGraphicsEnvironment().maximumWindowBounds
+    DpSize(minOf(FIRST_SIZE.width, screen.width.dp), minOf(FIRST_SIZE.height, screen.height.dp))
+} catch (e: HeadlessException) {
+    FIRST_SIZE
 }
 
 private fun seen(frame: SavedFrame): Boolean = try {

@@ -26,9 +26,17 @@ import com.vasmarfas.networkhelm.ui.main.PathWindow
 import com.vasmarfas.networkhelm.ui.terminal.BossTerminal
 import com.vasmarfas.networkhelm.ui.terminal.LocalTerminal
 import kotlinx.coroutines.delay
+import java.awt.GraphicsEnvironment
 
 fun main() {
     try {
+        // JBR 17 turns its HiDPI scaling off before Windows 8.1 by os.version but still divides the coordinates by the system dpi
+        val version = System.getProperty("os.version")
+        if (version == "6.1" || version == "6.2") {
+            System.setProperty("os.version", "6.3")
+            GraphicsEnvironment.getLocalGraphicsEnvironment()
+            System.setProperty("os.version", version)
+        }
         startApplication()
     } catch (e: Throwable) {
         reportStartupFailure(e)
