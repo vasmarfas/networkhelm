@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ui.main
 
 import androidx.compose.runtime.Stable
+import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateListOf
@@ -32,7 +33,10 @@ import com.vasmarfas.networkhelm.packs.PackForm
 import com.vasmarfas.networkhelm.packs.PackPath
 import com.vasmarfas.networkhelm.packs.PackTab
 import com.vasmarfas.networkhelm.packs.bundledMenu
+import com.vasmarfas.networkhelm.packs.opensTable
 import com.vasmarfas.networkhelm.packs.packName
+import com.vasmarfas.networkhelm.packs.tablesWindow
+import com.vasmarfas.networkhelm.packs.withTablesAsTabs
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsVersion
 import com.vasmarfas.networkhelm.routeros.schema.label
@@ -142,6 +146,7 @@ class RouterTab(
     val tables: TableLayouts,
     val journal: EditJournal = EditJournal(),
     val login: RouterOsLogin? = null,
+    private val tablesAsTabs: () -> Boolean = { false },
 ) {
     private val base: DeviceSession = if (session.capabilities.menuContents || session.device.platform != Platform.RouterOs) session else PackFieldsSession(session, packs)
     private val layer by lazy { RouterOsLayer(base) }
@@ -152,7 +157,8 @@ class RouterTab(
     val title: String get() = "${session.device.identity} ($address)"
     private val running = RouterOsVersion.parse(session.device.version)
     private val bundled = packs
-    private var packs by mutableStateOf(shown(session.device.platform))
+    private var plainPacks by mutableStateOf(shown(session.device.platform))
+    private val packs by derivedStateOf { arranged(plainPacks) }
     private val recall = Recall()
     val workspace = WorkspaceState { id ->
         specs -= id
@@ -268,7 +274,17 @@ class RouterTab(
     private fun packSpec(pack: Pack, path: MenuPath, arguments: Map<String, String>, start: Boolean = false): WindowSpec {
         val tabs = pack.window.tabs.filter { running?.within(it.since, it.until) != false }
             .map { windowTab(it.title, it.path, pack, if (MenuPath.parse(it.path) == path) arguments else emptyMap(), start && MenuPath.parse(it.path) == path) }
-        return WindowSpec(pack.window.title, tabs, tabs.indexOfFirst { it.path == path }, selector = pack.window.selector)
+        return WindowSpec(pack.window.title, withoutOwnLinks(tabs), tabs.indexOfFirst { it.path == path }, selector = pack.window.selector)
+    }
+
+    // a button that opens a table the window already holds as a tab gives way to the tab
+    private fun withoutOwnLinks(tabs: List<WindowTab>): List<WindowTab> {
+        val paths = tabs.map { it.path.toString() }.toSet()
+        return tabs.map { tab ->
+            val shown = tab.shown ?: return@map tab
+            val kept = shown.links.filterNot { it.opensTable && it.path in paths }
+            if (kept.size == shown.links.size) tab else WindowTab(tab.title, tab.path, shown.copy(links = kept), tab.labels, tab.form, tab.prefill, tab.recall, tab.start)
+        }
     }
 
     // a link names the fields it fills by their labels in WinBox, which are the labels of the pack or the ones a property gets by its name
@@ -598,7 +614,7 @@ class RouterTab(
 
     private fun restore(saved: SavedWindow) {
         val owner = packs.firstOrNull { it.window.title == saved.title }
-        val tabs = saved.tabs.map { windowTab(it.title, it.path, owner) }
+        val tabs = withoutOwnLinks(saved.tabs.map { windowTab(it.title, it.path, owner) })
         if (tabs.isEmpty()) return
         val paths = tabs.map { it.path }
         if (workspace.windows.any { window -> specs[window.id]?.let { it.title == saved.title && it.tabs.map(WindowTab::path) == paths } == true }) return
@@ -641,12 +657,12 @@ class RouterTab(
         viewProblem = null
         if (view == MenuView.RouterOs && base.device.platform == Platform.OpenWrt) {
             session = layer
-            packs = layer.windows(shown(Platform.RouterOs))
+            plainPacks = layer.windows(shown(Platform.RouterOs))
             loadMenu(bundledMenu(Platform.RouterOs))
             return
         }
         session = base
-        packs = shown(base.device.platform)
+        plainPacks = shown(base.device.platform)
         val native = if (view == MenuView.Native) {
             try {
                 base.nativeMenu()
@@ -662,7 +678,7 @@ class RouterTab(
             loadMenu(bundledMenu(base.device.platform))
             return
         }
-        packs = packs + native.packs.filter { own -> packs.none { it.menu == own.menu } }
+        plainPacks = plainPacks + native.packs.filter { own -> plainPacks.none { it.menu == own.menu } }
         loadMenu(native.menu, native = true)
     }
 
@@ -719,6 +735,8 @@ class RouterTab(
     }
 
     private fun shown(platform: Platform) = bundled.filter { it.platform == platform.packName && running?.within(it.since, it.until) != false }
+
+    private fun arranged(packs: List<Pack>) = if (tablesAsTabs()) packs.map(Pack::withTablesAsTabs) else packs + packs.mapNotNull(Pack::tablesWindow)
 
     suspend fun loadMenu(source: Menu, native: Boolean = false) {
         val load = ++loads
@@ -782,11 +800,12 @@ class RouterTab(
             return
         }
         if (made.isEmpty() || load != loads) return
-        val own = made.filter { pack -> packs.none { it.menu == pack.menu || it.window.tabs.any { tab -> tab.path == pack.window.tabs.firstOrNull()?.path } } }
-        packs = if (grows) packs.filter { pack -> made.none { it.menu == pack.menu } } + made else packs + own
+        val own = made.filter { pack -> plainPacks.none { it.menu == pack.menu || it.window.tabs.any { tab -> tab.path == pack.window.tabs.firstOrNull()?.path } } }
+        plainPacks = if (grows) plainPacks.filter { pack -> made.none { it.menu == pack.menu } } + made else plainPacks + own
+        val windows = arranged(made)
         for ((id, spec) in specs.entries.toList()) {
             val shown = spec.tabs.getOrNull(spec.selected) ?: continue
-            val pack = made.firstOrNull { pack -> pack.window.title == spec.title && pack.window.tabs.any { MenuPath.parse(it.path) == shown.path } }
+            val pack = windows.firstOrNull { pack -> pack.window.title == spec.title && pack.window.tabs.any { MenuPath.parse(it.path) == shown.path } }
             specs[id] = when {
                 pack != null -> packSpec(pack, shown.path, shown.prefill)
                 spec.automatic -> WindowSpec(spec.title, spec.tabs.map { windowTab(it.title, it.path.toString(), prefill = it.prefill) }, spec.selected, automatic = true)

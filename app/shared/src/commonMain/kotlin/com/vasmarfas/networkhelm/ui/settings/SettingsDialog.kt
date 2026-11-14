@@ -127,6 +127,8 @@ import networkhelm.app.shared.generated.resources.settings_scale
 import networkhelm.app.shared.generated.resources.settings_separators
 import networkhelm.app.shared.generated.resources.settings_system_colours
 import networkhelm.app.shared.generated.resources.settings_system_colours_hint
+import networkhelm.app.shared.generated.resources.settings_tables_as_tabs
+import networkhelm.app.shared.generated.resources.settings_tables_as_tabs_hint
 import networkhelm.app.shared.generated.resources.settings_terminal
 import networkhelm.app.shared.generated.resources.settings_theme
 import networkhelm.app.shared.generated.resources.settings_title
@@ -269,6 +271,9 @@ fun SettingsDialog(
                 Toggle(current.columnLines, stringResource(Res.string.settings_separators), null, "separators") { on -> act { settings.change { it.copy(columnLines = on) } } }
                 Toggle(current.confirmRemoval, stringResource(Res.string.settings_confirm_removal), null, "confirm-removal") { on ->
                     act { settings.change { it.copy(confirmRemoval = on) } }
+                }
+                Toggle(current.tablesAsTabs, stringResource(Res.string.settings_tables_as_tabs), stringResource(Res.string.settings_tables_as_tabs_hint), "tables-as-tabs") { on ->
+                    act { settings.change { it.copy(tablesAsTabs = on) } }
                 }
                 Toggle(current.resourceBar, stringResource(Res.string.settings_resource_bar), null, "resource-bar") { on -> act { settings.change { it.copy(resourceBar = on) } } }
                 if (current.resourceBar) {

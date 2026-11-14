@@ -506,6 +506,8 @@
     <string name="settings_comments_hint">A table can keep a mode of its own: the comments button of its window sets it and stays highlighted while it does. A change here applies to every table.</string>
     <string name="settings_separators">Lines between the columns of tables</string>
     <string name="settings_confirm_removal">Ask before removing from the router</string>
+    <string name="settings_tables_as_tabs">Open the tables of a settings window as its tabs</string>
+    <string name="settings_tables_as_tabs_hint">IP › DNS then shows Static, Cache, Adlist and Forwarders as tabs beside the settings instead of a window of their own; so do SNMP, NTP, UPnP, NAT-PMP, RoMON and Accounting of RouterOS 6. Windows opened before the change stay as they are.</string>
     <string name="settings_resource_bar">Bar of the resources of the router at the foot of the window</string>
     <string name="settings_bar_router">Router: name, address and version</string>
     <string name="settings_bar_cpu">Processor load</string>

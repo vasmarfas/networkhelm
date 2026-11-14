@@ -506,6 +506,8 @@
     <string name="settings_comments_hint">Таблица может держать свой режим: его задаёт кнопка комментариев в её окне, и пока он есть, кнопка подсвечена. Изменение здесь действует на все таблицы.</string>
     <string name="settings_separators">Линии между колонками таблиц</string>
     <string name="settings_confirm_removal">Спрашивать перед удалением с роутера</string>
+    <string name="settings_tables_as_tabs">Таблицы окна настроек — вкладками этого окна</string>
+    <string name="settings_tables_as_tabs_hint">Тогда IP › DNS показывает Static, Cache, Adlist и Forwarders вкладками рядом с настройками, а не в отдельном окне; так же SNMP, NTP, UPnP, NAT-PMP, RoMON и Accounting в RouterOS 6. Окна, открытые до переключения, остаются как были.</string>
     <string name="settings_resource_bar">Полоса ресурсов роутера внизу окна</string>
     <string name="settings_bar_router">Роутер: имя, адрес и версия</string>
     <string name="settings_bar_cpu">Загрузка процессора</string>

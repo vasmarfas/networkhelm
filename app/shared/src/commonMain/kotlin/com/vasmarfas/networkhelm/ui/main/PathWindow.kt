@@ -269,20 +269,27 @@ fun PathWindow(
     onClose: () -> Unit,
 ) {
     var settings by remember(spec) { mutableStateOf(false) }
-    val fits by produceState(false, session, spec, spec.tabs, settings) {
-        value = settings && spec.tabs.all { tab ->
+    val kinds by produceState(emptyList<NodeKind?>(), session, spec, spec.tabs, settings) {
+        if (settings) value = spec.tabs.map { tab ->
             try {
-                session.outline(tab.path).kind == NodeKind.Settings
+                session.outline(tab.path).kind
             } catch (e: DeviceException) {
-                false
+                null
             }
         }
+    }
+    // settings that share the window with tables only make it taller: the tables keep the room
+    val grow = remember(onFit) { { more: Dp -> if (more > 0.dp) onFit(more) } }
+    val fit = when {
+        kinds.isEmpty() || null in kinds -> NoFit
+        kinds.all { it == NodeKind.Settings } -> onFit
+        else -> grow
     }
     Column(Modifier.fillMaxSize().background(if (Theme.classic) Theme.palette.raised else Theme.palette.surface)) {
         if (spec.selector && !tabsInTitle) Row(Modifier.fillMaxWidth().background(Theme.palette.raised).padding(horizontal = 8.dp, vertical = 4.dp)) { ModeSelect(spec) }
         else if (spec.tabs.size > 1 && !tabsInTitle) TabStrip(spec.tabs.map { it.title }, spec.selected, { spec.selected = it }, Modifier.fillMaxWidth().background(Theme.palette.raised))
         val shown = spec.tabs[spec.selected]
-        key(shown.path) { PathView(session, shown, tables, onOpenItem, onOpenWindow, onClose, { settings = true }, if (fits) onFit else NoFit) }
+        key(shown.path) { PathView(session, shown, tables, onOpenItem, onOpenWindow, onClose, { settings = true }, fit) }
     }
 }
 
@@ -602,6 +609,12 @@ private fun ListView(
             }
         }
     }
+
+    // listen does not report all a command does to the table: after Flush Cache it sends the new entries and no removal of the flushed ones
+    fun perform(action: PackAction, ids: List<String>) = act {
+        for (arguments in action.runs(ids)) session.run(path, action.command, arguments).collect()
+        refresh++
+    }
     val canWrite = session.device.canWrite && session.device.lacks(tab.path).isEmpty()
     val switch = switchOf(schema)
     val canSwitch = canWrite && switch?.readOnly == false
@@ -760,7 +773,7 @@ private fun ListView(
                 when {
                     action.confirm -> confirming = action to ids
                     property != null -> act { output = action.title to session.output(path, action, ids, property) }
-                    else -> act { for (arguments in action.runs(ids)) session.run(path, action.command, arguments).collect() }
+                    else -> perform(action, ids)
                 }
             }
             fun available(action: PackAction) = !action.selection || state.selected.isNotEmpty()
@@ -987,7 +1000,7 @@ private fun ListView(
         confirming?.let { (action, ids) ->
             Confirm(stringResource(Res.string.command_question, action.title), action.title, onCancel = { confirming = null }) {
                 confirming = null
-                act { for (arguments in action.runs(ids)) session.run(path, action.command, arguments).collect() }
+                perform(action, ids)
             }
         }
         output?.let { (heading, reply) -> Output(heading, reply) { output = null } }

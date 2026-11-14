@@ -669,7 +669,7 @@ fun ItemForm(
                         }
                         if (panelLinks.isNotEmpty()) {
                             if (!compact && !plain) Text(stringResource(Res.string.form_configuration), Modifier.padding(top = 10.dp, bottom = 2.dp), style = Theme.type.strong)
-                            for (link in panelLinks) command(link.title, Lucide.Settings) { open(link) }
+                            for (link in panelLinks) command(link.title, Lucide.Settings, tag = "link-${link.title}") { open(link) }
                         }
                     }
                 }

@@ -4,6 +4,10 @@ import kotlinx.serialization.SerializationException
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
+import kotlin.test.assertNotNull
+import kotlin.test.assertNull
+import kotlin.test.assertSame
+import kotlin.test.assertTrue
 
 class PackTest {
 
@@ -15,6 +19,29 @@ class PackTest {
         assertFailsWith<SerializationException> {
             parsePack("""{"menu": ["IP"], "window": {"title": "IP", "tabs": []}, "colums": []}""")
         }
+    }
+
+    @Test
+    fun theTablesOfDnsSettingsBecomeTabsAndItsOtherButtonsStay() {
+        fun pack(vararg menu: String) = bundledPacks().values.single { it.platform == "routeros" && it.menu == menu.toList() }
+        val dns = pack("IP", "DNS").withTablesAsTabs()
+        assertEquals(listOf("ip/dns", "ip/dns/static", "ip/dns/cache", "ip/dns/adlist", "ip/dns/forwarders"), dns.window.tabs.map { it.path })
+        assertEquals(listOf("DNS Settings", "Static", "Cache", "Adlist", "Forwarders"), dns.window.tabs.map { it.title })
+        val ssh = pack("IP", "SSH")
+        assertSame(ssh, ssh.withTablesAsTabs())
+        val dhcp = pack("IP", "DHCP Server")
+        assertSame(dhcp, dhcp.withTablesAsTabs())
+    }
+
+    @Test
+    fun theTablesOfDnsShareAWindowAndALoneTableKeepsItsOwn() {
+        fun pack(vararg menu: String) = bundledPacks().values.single { it.platform == "routeros" && it.menu == menu.toList() }
+        val tables = assertNotNull(pack("IP", "DNS").tablesWindow())
+        assertEquals("DNS", tables.window.title)
+        assertEquals(listOf("Static", "Cache", "Adlist", "Forwarders"), tables.window.tabs.map { it.title })
+        assertTrue(tables.hidden)
+        assertNull(pack("IP", "SNMP").tablesWindow())
+        assertNull(pack("IP", "SSH").tablesWindow())
     }
 
     @Test

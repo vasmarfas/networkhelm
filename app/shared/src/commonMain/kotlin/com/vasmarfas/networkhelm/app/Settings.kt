@@ -33,6 +33,7 @@ data class Settings(
     val scale: Float = 1f,
     val probe: Boolean = true,
     val confirmRemoval: Boolean = true,
+    val tablesAsTabs: Boolean = false,
     val rowSpacing: Int = 0,
     val columnLines: Boolean = true,
     val comments: CommentMode = CommentMode.Above,

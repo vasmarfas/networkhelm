@@ -237,6 +237,28 @@ class PackLink(
     val row: Int = 0,
 )
 
+val PackLink.opensTable: Boolean get() = window == null && argument == null && fill.isEmpty() && !item && !autostart && depends.isEmpty()
+
+// the buttons of a settings tab that open a table the pack describes
+fun Pack.tablesOf(tab: PackTab): List<PackLink> {
+    val shown = paths[tab.path]
+    if (shown == null || shown.columns.isNotEmpty()) return emptyList()
+    return shown.links.filter { link -> link.opensTable && window.tabs.none { it.path == link.path } && paths[link.path]?.columns?.isNotEmpty() == true }
+}
+
+// the tables of a settings window as its own tabs, right after the settings
+fun Pack.withTablesAsTabs(): Pack {
+    val tabs = window.tabs.flatMap { tab -> listOf(tab) + tablesOf(tab).map { PackTab(it.title, it.path, tab.since, tab.until) } }.distinctBy { it.path }
+    return if (tabs.size == window.tabs.size) this else Pack(schema, platform, menu, PackWindow(window.title, tabs, window.selector), paths, forms, labels, since, until, native, prio, hidden)
+}
+
+// several tables of a settings window share one window named as its menu, as Static, Cache, Adlist and Forwarders of DNS do in WinBox
+fun Pack.tablesWindow(): Pack? {
+    val tables = window.tabs.flatMap(::tablesOf).distinctBy { it.path }.takeIf { it.size > 1 } ?: return null
+    val tabs = tables.map { PackTab(it.title, it.path) }
+    return Pack(schema, platform, menu, PackWindow(menu.lastOrNull() ?: window.title, tabs), paths, forms, labels, since, until, native, prio, hidden = true)
+}
+
 // from names a column of the row by its label in WinBox, and none means the name of the row; to names a field of the window by its label
 @Serializable
 class PackFill(val to: String, val from: String? = null)

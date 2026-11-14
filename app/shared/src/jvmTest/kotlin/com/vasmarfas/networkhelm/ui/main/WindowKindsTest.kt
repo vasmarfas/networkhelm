@@ -35,7 +35,9 @@ import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
+import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
@@ -45,6 +47,8 @@ import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flowOf
 import java.io.File
 import java.util.Locale
 import javax.imageio.ImageIO
@@ -61,10 +65,10 @@ class WindowKindsTest {
         ImageIO.write(captureToImage().toAwtImage(), "png", File(directory, "$name.png"))
     }
 
-    private fun SkikoComposeUiTest.show(router: DeviceSession, entry: MenuEntry): RouterTab {
+    private fun SkikoComposeUiTest.show(router: DeviceSession, entry: MenuEntry, tablesAsTabs: Boolean = false): RouterTab {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
-        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage)) { tablesAsTabs }
         setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
         tab.open(entry)
         return tab
@@ -114,6 +118,71 @@ class WindowKindsTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Adlist")).fetchSemanticsNodes().isEmpty() }
         assertTrue(onAllNodes(hasText("Forwarders")).fetchSemanticsNodes().isEmpty())
         assertTrue(onAllNodes(hasText("Cache")).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun theTablesOfDnsAreTabsOfItsWindowWhenTheSettingsSaySo() = runDesktopComposeUiTest(1100, 700) {
+        val dns = MenuPath.parse("ip/dns")
+        val static = MenuPath.parse("ip/dns/static")
+        val router = FakeRouter(
+            mapOf(dns.toString() to listOf(Item("", mapOf("servers" to ""))), static.toString() to listOf(Item("*1", mapOf("name" to "nas.lan", "address" to "192.168.88.10")))),
+            schemas = mapOf(
+                dns.toString() to MenuSchema(dns, NodeKind.Settings, emptyList(), listOf("print", "set"), listOf(Argument("servers", ValueType.Text()))),
+                static.toString() to MenuSchema(static, NodeKind.List, emptyList(), listOf("print", "add", "set", "remove"), listOf(Argument("name", ValueType.Text()), Argument("address", ValueType.Text()))),
+            ),
+            lacking = setOf("ip/dns/adlist", "ip/dns/forwarders"),
+        )
+        val shown = show(router, MenuEntry("DNS", dns.toString()), tablesAsTabs = true)
+        fun tab(title: String) = onAllNodes(hasText(title) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+        waitUntil(timeoutMillis = 5_000) { tab("Static").fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { tab("Adlist").fetchSemanticsNodes().isEmpty() }
+        assertTrue(tab("Cache").fetchSemanticsNodes().isNotEmpty())
+        assertTrue(tab("Forwarders").fetchSemanticsNodes().isEmpty())
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("field-servers")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasTestTag("link-Static")).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasTestTag("link-Cache")).fetchSemanticsNodes().isEmpty())
+        assertEquals(1, shown.workspace.windows.size)
+        tab("Static")[0].performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("nas.lan")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun theButtonsOfDnsOpenOneWindowWithATabForEachTable() = runDesktopComposeUiTest(1100, 700) {
+        val dns = MenuPath.parse("ip/dns")
+        val router = FakeRouter(
+            mapOf(dns.toString() to listOf(Item("", mapOf("servers" to "")))),
+            schemas = mapOf(dns.toString() to MenuSchema(dns, NodeKind.Settings, emptyList(), listOf("print", "set"), listOf(Argument("servers", ValueType.Text())))),
+        )
+        val shown = show(router, MenuEntry("DNS", dns.toString()))
+        fun tab(title: String) = onAllNodes(hasText(title) and SemanticsMatcher.expectValue(SemanticsProperties.Role, Role.Tab))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("link-Static")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("link-Static").performClick()
+        waitUntil(timeoutMillis = 5_000) { tab("Forwarders").fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(listOf("DNS Settings", "DNS"), shown.workspace.windows.map { it.title })
+        tab("Static")[0].assertIsSelected()
+        assertTrue(tab("All").fetchSemanticsNodes().isEmpty())
+        shown.open(MenuEntry("Cache", "ip/dns/cache"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Cache") and SemanticsMatcher.expectValue(SemanticsProperties.Selected, true)).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(2, shown.workspace.windows.size)
+    }
+
+    @Test
+    fun aFlushedCacheIsReadAgainThoughItsWatchSaysNothing() = runDesktopComposeUiTest(1100, 700) {
+        val cache = MenuPath.parse("ip/dns/cache")
+        val router = FakeRouter(
+            schemas = mapOf(cache.toString() to MenuSchema(cache, NodeKind.List, emptyList(), listOf("print", "flush"), listOf(Argument("name", ValueType.Text()), Argument("type", ValueType.Text())))),
+        )
+        val cached = Item("*1", mapOf("name" to "example.com", "type" to "A"))
+        var watches = 0
+        val quiet = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> =
+                if (path == cache) flowOf(ListEvent.Snapshot(if (++watches == 1) listOf(cached) else emptyList())) else router.watch(path, filter, properties)
+        }
+        show(quiet, MenuEntry("Cache", cache.toString()))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("example.com")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Flush Cache").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("example.com")).fetchSemanticsNodes().isEmpty() }
+        assertEquals(listOf("ip/dns/cache/flush" to emptyMap<String, String>()), router.ran.toList())
     }
 
     @Test
@@ -388,6 +457,19 @@ class WindowKindsTest {
         mainClock.advanceTimeBy(500)
         waitForIdle()
         assertEquals(440.dp, tab.workspace.windows.last().size.height)
+    }
+
+    @Test
+    fun settingsThatShareTheWindowWithTablesMakeItTaller() = runDesktopComposeUiTest(1100, 900) {
+        val dns = MenuPath.parse("ip/dns")
+        val fields = listOf(
+            "servers", "dynamic-servers", "use-doh-server", "mdns-repeat-ifaces", "allow-remote-requests", "vrf", "max-udp-packet-size", "query-server-timeout",
+            "query-total-timeout", "max-concurrent-queries", "max-concurrent-tcp-sessions", "cache-size", "cache-max-ttl", "address-list-extra-time",
+        )
+        val schema = MenuSchema(dns, NodeKind.Settings, emptyList(), listOf("print", "set"), fields.map { Argument(it, ValueType.Text()) })
+        val router = FakeRouter(mapOf(dns.toString() to listOf(Item("", fields.associateWith { "1" }))), schemas = mapOf(dns.toString() to schema))
+        val tab = show(router, MenuEntry("DNS", dns.toString()), tablesAsTabs = true)
+        waitUntil(timeoutMillis = 5_000) { tab.workspace.windows.single().size.height > 440.dp }
     }
 
     @Test

@@ -73,7 +73,7 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
 
     fun add(session: DeviceSession, address: String, login: RouterOsLogin? = null) {
         val journal = EditJournal()
-        routers += RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, login)
+        routers += RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, login) { settings.current.tablesAsTabs }
         selected = routers.size - 1
     }
 
@@ -88,7 +88,7 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
         val place = routers.indexOf(tab)
         disconnect(tab)
         val journal = EditJournal()
-        routers.add(place.coerceIn(0, routers.size), RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, secured))
+        routers.add(place.coerceIn(0, routers.size), RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, secured) { settings.current.tablesAsTabs })
         selected = place.coerceIn(0, routers.size - 1)
         saved.routers.value.firstOrNull { it.address == tab.address && it.user == login.user && it.protocol == Access.Api }?.let { entry ->
             saved.remove(entry)
