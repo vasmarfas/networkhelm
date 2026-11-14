@@ -10,7 +10,7 @@ plugins {
 }
 
 // the one place of the version: every module and the installers take it from here, the pipeline overrides it through the environment
-val appVersionName: String = System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.1.1"
+val appVersionName: String = System.getenv("APP_VERSION_NAME")?.takeIf { it.isNotBlank() } ?: "1.2.0"
 
 // stores take only a growing integer: 1.4.12-rc2 packs into 1041202, the final 1.4.12 into 1041299
 val appVersionCode: Int = System.getenv("APP_VERSION_CODE")?.toIntOrNull() ?: run {
