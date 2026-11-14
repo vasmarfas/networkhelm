@@ -4,6 +4,11 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.InternalComposeUiApi
+import androidx.compose.ui.input.pointer.PointerEventType
+import androidx.compose.ui.input.pointer.PointerId
+import androidx.compose.ui.input.pointer.PointerType
+import androidx.compose.ui.scene.ComposeScenePointer
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -15,7 +20,7 @@ import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlin.test.Test
 import kotlin.test.assertEquals
 
-@OptIn(ExperimentalTestApi::class)
+@OptIn(ExperimentalTestApi::class, InternalComposeUiApi::class)
 class DataTableSelectionTest {
 
     @Test
@@ -52,6 +57,45 @@ class DataTableSelectionTest {
         waitForIdle()
         onNodeWithText("rd-test-b").performTouchInput { up() }
         waitForIdle()
+        assertEquals(listOf("rd-test-b"), opened)
+    }
+
+    @Test
+    fun aSecondSlowPressOpensTheRowInTheWideLayout() = runDesktopComposeUiTest(600, 300) {
+        val opened = mutableListOf<String>()
+        setContent {
+            NetworkHelmTheme {
+                DataTable(listOf("rd-test-a", "rd-test-b"), listOf(TableColumn<String>("comment", "Comment", 200.dp) { it }), key = { it }, onOpen = { opened += it })
+            }
+        }
+        onNodeWithText("rd-test-b").performTouchInput {
+            down(center)
+            advanceEventTime(250)
+            up()
+            advanceEventTime(200)
+            down(center)
+            advanceEventTime(250)
+            up()
+        }
+        waitForIdle()
+        assertEquals(listOf("rd-test-b"), opened)
+    }
+
+    @Test
+    fun aPenWithNoButtonOpensTheRowLikeAFinger() = runDesktopComposeUiTest(600, 300) {
+        val opened = mutableListOf<String>()
+        setContent {
+            NetworkHelmTheme {
+                CompositionLocalProvider(LocalCompact provides true) {
+                    DataTable(listOf("rd-test-a", "rd-test-b"), listOf(TableColumn<String>("comment", "Comment", 200.dp) { it }), key = { it }, onOpen = { opened += it })
+                }
+            }
+        }
+        val at = onNodeWithText("rd-test-b").fetchSemanticsNode().boundsInRoot.center
+        for (pressed in listOf(true, false)) {
+            runOnUiThread { scene.sendPointerEvent(if (pressed) PointerEventType.Press else PointerEventType.Release, listOf(ComposeScenePointer(PointerId(1), at, pressed, PointerType.Stylus))) }
+            waitForIdle()
+        }
         assertEquals(listOf("rd-test-b"), opened)
     }
 }

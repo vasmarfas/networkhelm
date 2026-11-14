@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -200,7 +201,8 @@ internal fun TreeTable(
                         var lastRow: String? = null
                         awaitEachGesture {
                             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                            val touch = down.type == PointerType.Touch
+                            // a pen touches with no button held, like a finger
+                            val touch = down.type != PointerType.Mouse
                             if (!touch && !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
                             val y = down.position.y.roundToInt()
                             val index = list.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size }?.index
@@ -222,7 +224,7 @@ internal fun TreeTable(
                                     up != null -> {
                                         up.consume()
                                         focus.requestFocus()
-                                        val again = id == lastRow && up.uptimeMillis - lastPress < 400
+                                        val again = id == lastRow && down.uptimeMillis - lastPress < viewConfiguration.doubleTapTimeoutMillis
                                         lastPress = up.uptimeMillis
                                         lastRow = id
                                         choose(setOf(id), id)
@@ -261,43 +263,45 @@ internal fun TreeTable(
                 state = list,
             ) {
                 itemsIndexed(rows, key = { _, row -> row.entry.path }) { _, row ->
-                    val entry = row.entry
-                    val selected = entry.path in state.selected
-                    val tone = if (entry.name.startsWith(".")) RowTone.Faded else RowTone.Normal
-                    val color = if (tone == RowTone.Faded) palette.faint else palette.text
-                    val background = when {
-                        held == entry.path -> palette.accent.copy(alpha = 0.22f)
-                        selected -> palette.selection
-                        else -> palette.surface
-                    }
-                    Row(
-                        Modifier.fillMaxWidth().height(rowHeight).testTag("row-${entry.path}").background(background)
-                            .then(
-                                if (entry.directory && dropEnabled) {
-                                    Modifier.fileDrop({ onDropOnto(row, it) }) { entered -> onHold(entry.path, entered) }
-                                } else {
-                                    Modifier
-                                },
-                            )
-                            .drawBehind { drawLine(palette.line.copy(alpha = 0.4f), Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1f) },
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Row(Modifier.width(nameWidth).padding(start = 4.dp + INDENT * row.depth), verticalAlignment = Alignment.CenterVertically) {
-                            Box(Modifier.size(CHEVRON, rowHeight).testTag("toggle-${entry.path}"), contentAlignment = Alignment.Center) {
-                                if (entry.directory) UnstyledIcon(if (row.open) Lucide.ChevronDown else Lucide.ChevronRight, null, Modifier.size(14.dp), tint = palette.muted)
-                            }
-                            val icon = entry.kind.icon(row.open)
-                            UnstyledIcon(icon.vector, null, Modifier.padding(end = 6.dp).size(metrics.icon), tint = palette.tintOf(icon)?.takeIf { color == palette.text } ?: color)
-                            Text(marked(entry.name, highlight, mark), Modifier.weight(1f, fill = false), color = color, singleLine = true, overflow = TextOverflow.Ellipsis)
-                            when {
-                                entry.path in loading -> Text("…", Modifier.padding(start = 6.dp), color = palette.muted)
-                                row.count != null && row.count > 0 -> Text("${row.count}", Modifier.padding(start = 6.dp), style = Theme.type.small, color = palette.faint)
-                            }
+                    DisableSelection {
+                        val entry = row.entry
+                        val selected = entry.path in state.selected
+                        val tone = if (entry.name.startsWith(".")) RowTone.Faded else RowTone.Normal
+                        val color = if (tone == RowTone.Faded) palette.faint else palette.text
+                        val background = when {
+                            held == entry.path -> palette.accent.copy(alpha = 0.22f)
+                            selected -> palette.selection
+                            else -> palette.surface
                         }
-                        Cell(if (entry.directory) sizeText(row.size?.takeIf { it > 0 }) else sizeText(entry.size), sizeWidth, if (entry.directory) palette.muted else color)
-                        if (!compact) {
-                            Cell(entry.modified, modifiedWidth, color)
-                            Cell(entry.type, typeWidth, if (color == palette.text) palette.muted else color)
+                        Row(
+                            Modifier.fillMaxWidth().height(rowHeight).testTag("row-${entry.path}").background(background)
+                                .then(
+                                    if (entry.directory && dropEnabled) {
+                                        Modifier.fileDrop({ onDropOnto(row, it) }) { entered -> onHold(entry.path, entered) }
+                                    } else {
+                                        Modifier
+                                    },
+                                )
+                                .drawBehind { drawLine(palette.line.copy(alpha = 0.4f), Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1f) },
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Row(Modifier.width(nameWidth).padding(start = 4.dp + INDENT * row.depth), verticalAlignment = Alignment.CenterVertically) {
+                                Box(Modifier.size(CHEVRON, rowHeight).testTag("toggle-${entry.path}"), contentAlignment = Alignment.Center) {
+                                    if (entry.directory) UnstyledIcon(if (row.open) Lucide.ChevronDown else Lucide.ChevronRight, null, Modifier.size(14.dp), tint = palette.muted)
+                                }
+                                val icon = entry.kind.icon(row.open)
+                                UnstyledIcon(icon.vector, null, Modifier.padding(end = 6.dp).size(metrics.icon), tint = palette.tintOf(icon)?.takeIf { color == palette.text } ?: color)
+                                Text(marked(entry.name, highlight, mark), Modifier.weight(1f, fill = false), color = color, singleLine = true, overflow = TextOverflow.Ellipsis)
+                                when {
+                                    entry.path in loading -> Text("…", Modifier.padding(start = 6.dp), color = palette.muted)
+                                    row.count != null && row.count > 0 -> Text("${row.count}", Modifier.padding(start = 6.dp), style = Theme.type.small, color = palette.faint)
+                                }
+                            }
+                            Cell(if (entry.directory) sizeText(row.size?.takeIf { it > 0 }) else sizeText(entry.size), sizeWidth, if (entry.directory) palette.muted else color)
+                            if (!compact) {
+                                Cell(entry.modified, modifiedWidth, color)
+                                Cell(entry.type, typeWidth, if (color == palette.text) palette.muted else color)
+                            }
                         }
                     }
                 }

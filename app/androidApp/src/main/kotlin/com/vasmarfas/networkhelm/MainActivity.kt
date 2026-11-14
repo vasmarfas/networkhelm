@@ -17,6 +17,8 @@ import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalConfiguration
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.core.view.WindowCompat
 import com.vasmarfas.networkhelm.app.MemoryStorage
@@ -44,15 +46,25 @@ class MainActivity : ComponentActivity() {
             val ask = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {}
             LaunchedEffect(Unit) { if (!localNetworkAllowed(this@MainActivity)) ask.launch(Manifest.permission.ACCESS_LOCAL_NETWORK) }
             BackHandler(enabled = shell.canGoBack) { shell.back() }
-            val night = LocalConfiguration.current.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+            val configuration = LocalConfiguration.current
+            val night = configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
             val dark = shell.settings.theme.isDark(shell.settings.current.dark, night)
+            val touch = LocalViewConfiguration.current
+            // on a Quest the ray of a controller drifts up to 22 dp while the trigger is held, and a press lasts up to 420 ms
+            val pointer = remember(touch, configuration.touchscreen) {
+                if (configuration.touchscreen != Configuration.TOUCHSCREEN_NOTOUCH) touch
+                else object : ViewConfiguration by touch {
+                    override val touchSlop = touch.touchSlop * 4
+                    override val longPressTimeoutMillis = touch.longPressTimeoutMillis * 2
+                }
+            }
             SideEffect {
                 WindowCompat.getInsetsController(window, window.decorView).apply {
                     isAppearanceLightStatusBars = !dark
                     isAppearanceLightNavigationBars = !dark
                 }
             }
-            CompositionLocalProvider(LocalTerminal provides { channel, modifier -> AndroidTerminal(channel, modifier) }) {
+            CompositionLocalProvider(LocalTerminal provides { channel, modifier -> AndroidTerminal(channel, modifier) }, LocalViewConfiguration provides pointer) {
                 App(shell)
             }
         }

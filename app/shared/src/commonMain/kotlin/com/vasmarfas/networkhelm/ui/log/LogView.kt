@@ -27,6 +27,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.text.input.rememberTextFieldState
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -603,7 +604,8 @@ private fun LogList(
                     var lastTime = 0L
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                        val touch = down.type == PointerType.Touch
+                        // a pen touches with no button held, like a finger
+                        val touch = down.type != PointerType.Mouse
                         if (!touch && !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
                         val key = keyAt(down.position.y)?.takeIf { it in present } ?: return@awaitEachGesture
                         if (touch) {
@@ -638,11 +640,13 @@ private fun LogList(
                 state = list,
             ) {
                 items(lines, key = { it.key }) { line ->
-                    when (line) {
-                        is Line.Day -> DayHeading(line.date)
-                        is Line.Entry -> {
-                            val row = line.row
-                            LogLine(row, row.key in state.selected, timeText(row.last, state.times, now), timeWidth, topicsWidth, terms, state.wrap, compact)
+                    DisableSelection {
+                        when (line) {
+                            is Line.Day -> DayHeading(line.date)
+                            is Line.Entry -> {
+                                val row = line.row
+                                LogLine(row, row.key in state.selected, timeText(row.last, state.times, now), timeWidth, topicsWidth, terms, state.wrap, compact)
+                            }
                         }
                     }
                 }

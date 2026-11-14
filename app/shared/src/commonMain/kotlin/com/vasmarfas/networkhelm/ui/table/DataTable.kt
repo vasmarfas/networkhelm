@@ -378,7 +378,8 @@ fun <T, K : Any> DataTable(
                             var lastRow: Any? = null
                             awaitEachGesture {
                                 val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                                val touch = down.type == PointerType.Touch
+                                // a pen touches with no button held, like a finger
+                                val touch = down.type != PointerType.Mouse
                                 if (!touch && !currentEvent.buttons.isPrimaryPressed) return@awaitEachGesture
                                 val y = down.position.y.roundToInt()
                                 val item = list.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size } ?: return@awaitEachGesture
@@ -394,7 +395,7 @@ fun <T, K : Any> DataTable(
                                         up != null -> {
                                             up.consume()
                                             focus.requestFocus()
-                                            val again = id == lastRow && up.uptimeMillis - lastPress < 400
+                                            val again = id == lastRow && down.uptimeMillis - lastPress < viewConfiguration.doubleTapTimeoutMillis
                                             lastPress = up.uptimeMillis
                                             lastRow = id
                                             choose(setOf(id), id)
@@ -444,64 +445,66 @@ fun <T, K : Any> DataTable(
                         state = list,
                     ) {
                         itemsIndexed(shown, key = { _, row -> key(row) }) { index, row ->
-                            val selected = key(row) in state.selected
-                            val color = when (tone(row)) {
-                                RowTone.Normal -> palette.text
-                                RowTone.Faded -> palette.faint
-                            }
-                            val group = category?.invoke(row)
-                            Column(
-                                Modifier.drawWithContent {
-                                    drawContent()
-                                    drawLine(grid, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1f)
-                                    val at = dropAt ?: return@drawWithContent
-                                    val line = 2.dp.toPx()
-                                    if (at == index) drawRect(palette.accent, Offset.Zero, Size(size.width, line))
-                                    if (at == index + 1 && index == shown.lastIndex) drawRect(palette.accent, Offset(0f, size.height - line), Size(size.width, line))
-                                },
-                            ) {
-                                if (group != null && (index == 0 || category(shown[index - 1]) != group)) {
-                                    Text(group.ifEmpty { "—" }, Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 6.dp, vertical = 3.dp), style = Theme.type.strong)
+                            DisableSelection {
+                                val selected = key(row) in state.selected
+                                val color = when (tone(row)) {
+                                    RowTone.Normal -> palette.text
+                                    RowTone.Faded -> palette.faint
                                 }
-                                val background = if (selected) palette.selection else palette.surface
-                                caption(row)?.let {
-                                    Text(
-                                        marked(it, highlight, mark),
-                                        Modifier.fillMaxWidth().background(background).padding(start = 6.dp, top = 3.dp, bottom = 1.dp),
-                                        style = Theme.type.strong,
-                                        color = if (selected) palette.text else palette.muted,
-                                    )
-                                }
-                                if (detail) {
-                                    Row(Modifier.fillMaxWidth().heightIn(min = metrics.row).background(background).padding(vertical = 3.dp)) {
-                                        if (flags != null) Flags(flags(row), flagWidth)
-                                        FlowRow(Modifier.weight(1f).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
-                                            for (column in columns) {
-                                                val value = column.shown(column.value(row))
-                                                if (value.isEmpty()) continue
-                                                val text = buildAnnotatedString {
-                                                    withStyle(SpanStyle(color = palette.muted)) { append(column.title + " ") }
-                                                    append(marked(value, highlight, mark))
-                                                }
-                                                Text(text, color = color)
-                                            }
-                                        }
+                                val group = category?.invoke(row)
+                                Column(
+                                    Modifier.drawWithContent {
+                                        drawContent()
+                                        drawLine(grid, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1f)
+                                        val at = dropAt ?: return@drawWithContent
+                                        val line = 2.dp.toPx()
+                                        if (at == index) drawRect(palette.accent, Offset.Zero, Size(size.width, line))
+                                        if (at == index + 1 && index == shown.lastIndex) drawRect(palette.accent, Offset(0f, size.height - line), Size(size.width, line))
+                                    },
+                                ) {
+                                    if (group != null && (index == 0 || category(shown[index - 1]) != group)) {
+                                        Text(group.ifEmpty { "—" }, Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 6.dp, vertical = 3.dp), style = Theme.type.strong)
                                     }
-                                } else {
-                                    Row(Modifier.fillMaxWidth().height(metrics.row).background(background), verticalAlignment = Alignment.CenterVertically) {
-                                        if (numbers != null) {
-                                            Row(Modifier.width(numberWidth).fillMaxHeight().then(divider).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                if (onMove != null) UnstyledIcon(Lucide.GripVertical, null, Modifier.size(12.dp), tint = palette.faint)
-                                                Text(numbers(row), Modifier.weight(1f).testTag("number"), color = color, singleLine = true, textAlign = TextAlign.End)
+                                    val background = if (selected) palette.selection else palette.surface
+                                    caption(row)?.let {
+                                        Text(
+                                            marked(it, highlight, mark),
+                                            Modifier.fillMaxWidth().background(background).padding(start = 6.dp, top = 3.dp, bottom = 1.dp),
+                                            style = Theme.type.strong,
+                                            color = if (selected) palette.text else palette.muted,
+                                        )
+                                    }
+                                    if (detail) {
+                                        Row(Modifier.fillMaxWidth().heightIn(min = metrics.row).background(background).padding(vertical = 3.dp)) {
+                                            if (flags != null) Flags(flags(row), flagWidth)
+                                            FlowRow(Modifier.weight(1f).padding(horizontal = 6.dp), horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+                                                for (column in columns) {
+                                                    val value = column.shown(column.value(row))
+                                                    if (value.isEmpty()) continue
+                                                    val text = buildAnnotatedString {
+                                                        withStyle(SpanStyle(color = palette.muted)) { append(column.title + " ") }
+                                                        append(marked(value, highlight, mark))
+                                                    }
+                                                    Text(text, color = color)
+                                                }
                                             }
                                         }
-                                        if (flags != null) Flags(flags(row), flagWidth, Modifier.fillMaxHeight().then(divider))
-                                        for (column in columns) {
-                                            val value = column.value(row)
-                                            val icon = column.icon(row, value)
-                                            Row(Modifier.width(width(column)).fillMaxHeight().then(divider).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                if (icon != null) UnstyledIcon(icon.vector, null, Modifier.padding(end = 4.dp).size(metrics.icon).testTag("cell-icon"), tint = palette.tintOf(icon)?.takeIf { color == palette.text } ?: color)
-                                                Text(marked(column.shown(value), highlight, mark), color = color, singleLine = true, overflow = TextOverflow.Ellipsis)
+                                    } else {
+                                        Row(Modifier.fillMaxWidth().height(metrics.row).background(background), verticalAlignment = Alignment.CenterVertically) {
+                                            if (numbers != null) {
+                                                Row(Modifier.width(numberWidth).fillMaxHeight().then(divider).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    if (onMove != null) UnstyledIcon(Lucide.GripVertical, null, Modifier.size(12.dp), tint = palette.faint)
+                                                    Text(numbers(row), Modifier.weight(1f).testTag("number"), color = color, singleLine = true, textAlign = TextAlign.End)
+                                                }
+                                            }
+                                            if (flags != null) Flags(flags(row), flagWidth, Modifier.fillMaxHeight().then(divider))
+                                            for (column in columns) {
+                                                val value = column.value(row)
+                                                val icon = column.icon(row, value)
+                                                Row(Modifier.width(width(column)).fillMaxHeight().then(divider).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                    if (icon != null) UnstyledIcon(icon.vector, null, Modifier.padding(end = 4.dp).size(metrics.icon).testTag("cell-icon"), tint = palette.tintOf(icon)?.takeIf { color == palette.text } ?: color)
+                                                    Text(marked(column.shown(value), highlight, mark), color = color, singleLine = true, overflow = TextOverflow.Ellipsis)
+                                                }
                                             }
                                         }
                                     }

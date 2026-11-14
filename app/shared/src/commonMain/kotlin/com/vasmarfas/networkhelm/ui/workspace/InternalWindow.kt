@@ -24,6 +24,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
@@ -34,6 +36,8 @@ import androidx.compose.ui.input.pointer.PointerIcon
 import androidx.compose.ui.input.pointer.pointerHoverIcon
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.DpSize
@@ -97,37 +101,39 @@ internal fun InternalWindow(
             },
     ) {
         Column(Modifier.fillMaxSize()) {
-            Row(
-                Modifier
-                    .fillMaxWidth()
-                    .height(Theme.metrics.title)
-                    .background(if (active) palette.title ?: palette.accent else inactiveTitle ?: palette.raised, RoundedCornerShape(topStart = radius, topEnd = radius))
-                    .pointerInput(window) {
-                        detectTapGestures(onDoubleTap = { window.maximized = !window.maximized })
-                    }
-                    .pointerInput(window) {
-                        detectDragGestures { change, drag ->
-                            if (window.maximized) return@detectDragGestures
-                            change.consume()
-                            val moved = window.position + with(density) { DpOffset(drag.x.toDp(), drag.y.toDp()) }
-                            window.position = DpOffset(moved.x.coerceAtLeast(0.dp), moved.y.coerceAtLeast(0.dp))
+            FrameGestures {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(Theme.metrics.title)
+                        .background(if (active) palette.title ?: palette.accent else inactiveTitle ?: palette.raised, RoundedCornerShape(topStart = radius, topEnd = radius))
+                        .pointerInput(window) {
+                            detectTapGestures(onDoubleTap = { window.maximized = !window.maximized })
                         }
+                        .pointerInput(window) {
+                            detectDragGestures { change, drag ->
+                                if (window.maximized) return@detectDragGestures
+                                change.consume()
+                                val moved = window.position + with(density) { DpOffset(drag.x.toDp(), drag.y.toDp()) }
+                                window.position = DpOffset(moved.x.coerceAtLeast(0.dp), moved.y.coerceAtLeast(0.dp))
+                            }
+                        }
+                        .padding(start = if (material) 12.dp else 10.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    val titleWidth = if (inTitle == null) Modifier.weight(1f) else Modifier.padding(end = 8.dp).widthIn(max = size.width / 3)
+                    val titleStyle = when {
+                        Theme.classic -> Theme.type.body
+                        material -> Theme.type.strong.copy(fontSize = 14.sp, lineHeight = 20.sp)
+                        else -> Theme.type.strong
                     }
-                    .padding(start = if (material) 12.dp else 10.dp),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                val titleWidth = if (inTitle == null) Modifier.weight(1f) else Modifier.padding(end = 8.dp).widthIn(max = size.width / 3)
-                val titleStyle = when {
-                    Theme.classic -> Theme.type.body
-                    material -> Theme.type.strong.copy(fontSize = 14.sp, lineHeight = 20.sp)
-                    else -> Theme.type.strong
+                    DisableSelection { Text(window.title, titleWidth, style = titleStyle, color = titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                    inTitle?.let { Row(Modifier.weight(1f).fillMaxHeight()) { DisableSelection { it(window, titleColor) } } }
+                    onDetach?.let { TitleButton(Lucide.ExternalLink, titleColor, it) }
+                    TitleButton(Lucide.Minus, titleColor, onMinimize)
+                    TitleButton(if (window.maximized) Lucide.Minimize2 else Lucide.Maximize2, titleColor) { window.maximized = !window.maximized }
+                    TitleButton(Lucide.X, titleColor, onClose)
                 }
-                DisableSelection { Text(window.title, titleWidth, style = titleStyle, color = titleColor, maxLines = 1, overflow = TextOverflow.Ellipsis) }
-                inTitle?.let { Row(Modifier.weight(1f).fillMaxHeight()) { DisableSelection { it(window, titleColor) } } }
-                onDetach?.let { TitleButton(Lucide.ExternalLink, titleColor, it) }
-                TitleButton(Lucide.Minus, titleColor, onMinimize)
-                TitleButton(if (window.maximized) Lucide.Minimize2 else Lucide.Maximize2, titleColor) { window.maximized = !window.maximized }
-                TitleButton(Lucide.X, titleColor, onClose)
             }
             Box(Modifier.fillMaxWidth().weight(1f)) { SelectionContainer { content(window) } }
         }
@@ -153,12 +159,25 @@ private fun TitleButton(icon: ImageVector, tint: Color, onClick: () -> Unit) {
 @Composable
 private fun ResizeHandle(modifier: Modifier, window: WindowState, x: Int, y: Int) {
     val density = LocalDensity.current
-    Spacer(
-        modifier.pointerHoverIcon(resizeIcon(x, y)).pointerInput(window) {
-            detectDragGestures { change, drag ->
-                change.consume()
-                with(density) { window.resize(x, y, drag.x.toDp(), drag.y.toDp()) }
-            }
-        },
-    )
+    FrameGestures {
+        Spacer(
+            modifier.pointerHoverIcon(resizeIcon(x, y)).pointerInput(window) {
+                detectDragGestures { change, drag ->
+                    change.consume()
+                    with(density) { window.resize(x, y, drag.x.toDp(), drag.y.toDp()) }
+                }
+            },
+        )
+    }
+}
+
+// the title and the edges are dragged on purpose: they keep the slop of a phone where the lists of a Quest get a wider one
+@Composable
+private fun FrameGestures(content: @Composable () -> Unit) {
+    val inherited = LocalViewConfiguration.current
+    val slop = with(LocalDensity.current) { 8.dp.toPx() }
+    val frame = remember(inherited, slop) {
+        if (inherited.touchSlop <= slop) inherited else object : ViewConfiguration by inherited { override val touchSlop = slop }
+    }
+    CompositionLocalProvider(LocalViewConfiguration provides frame, content = content)
 }

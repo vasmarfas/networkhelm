@@ -3,7 +3,9 @@ package com.vasmarfas.networkhelm.ui.workspace
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
-import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -84,8 +86,15 @@ fun Workspace(
                 .filter { !it.minimized && !it.maximized }
                 .fold(viewport) { acc, w -> DpSize(max(acc.width, w.position.x + w.size.width), max(acc.height, w.position.y + w.size.height)) }
             Box(Modifier.fillMaxSize().horizontalScroll(horizontal).verticalScroll(vertical)) {
-                // detectTapGestures instead of clickable, which would merge the semantics of every window
-                Box(Modifier.size(extent).pointerInput(Unit) { detectTapGestures { focus.requestFocus() } }) {
+                // clickable would merge the semantics of every window, detectTapGestures takes the touch a list in a window waits on
+                Box(
+                    Modifier.size(extent).pointerInput(Unit) {
+                        awaitEachGesture {
+                            awaitFirstDown()
+                            if (waitForUpOrCancellation() != null) focus.requestFocus()
+                        }
+                    },
+                ) {
                     for (window in state.windows) {
                         key(window.id) {
                             if (!window.minimized) {
