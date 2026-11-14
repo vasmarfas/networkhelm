@@ -412,6 +412,7 @@
     <string name="tools_split">Subnet splitter</string>
     <string name="tools_transfer">Transfer time</string>
     <string name="tools_ports_ref">Port reference</string>
+    <string name="tools_hex">IP ↔ HEX</string>
     <string name="tools_start">Start</string>
     <string name="tools_stop">Stop</string>
     <string name="tools_host">Host</string>
@@ -467,6 +468,14 @@
     <string name="tools_mac_not_found">not found: unregistered or random</string>
     <string name="tools_mac_registry_failed">The bundled registry did not load.</string>
     <string name="tools_mac_registry">IEEE registry of %1$s</string>
+    <string name="tools_hex_input">IP or HEX</string>
+    <string name="tools_hex_value">Option value</string>
+    <string name="tools_hex_code">Sub-option code</string>
+    <string name="tools_hex_code_hint">Option 43 carries the address in a sub-option: 1 for UniFi, 241 (0xF1) for Cisco WLC.</string>
+    <string name="tools_hex_wrapped">With sub-option %1$s</string>
+    <string name="tools_hex_addresses">IP addresses</string>
+    <string name="tools_hex_sub_options">Sub-options</string>
+    <string name="tools_hex_text">Text</string>
     <string name="settings_terminal">Terminal buffer</string>
     <string name="settings_theme">Theme</string>
     <string name="settings_look">Look</string>

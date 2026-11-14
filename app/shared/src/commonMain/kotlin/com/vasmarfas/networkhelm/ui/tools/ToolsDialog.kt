@@ -53,6 +53,7 @@ import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.tools_close
 import networkhelm.app.shared.generated.resources.tools_dns
+import networkhelm.app.shared.generated.resources.tools_hex
 import networkhelm.app.shared.generated.resources.tools_ip_info
 import networkhelm.app.shared.generated.resources.tools_lan_scan
 import networkhelm.app.shared.generated.resources.tools_mac
@@ -89,6 +90,7 @@ enum class NetTool(val title: StringResource) {
     TransferTime(Res.string.tools_transfer),
     PortsRef(Res.string.tools_ports_ref),
     Mac(Res.string.tools_mac),
+    Hex(Res.string.tools_hex),
 }
 
 suspend fun bundledVendors(): MacRegistry = withContext(Dispatchers.Default) {
@@ -111,7 +113,7 @@ fun ToolsDialog(vendors: suspend () -> MacRegistry = ::bundledVendors, onClose: 
             NetTool.Ports, NetTool.Dns -> tcpListening
             NetTool.Whois -> http != null || tcpListening
             NetTool.IpInfo, NetTool.Speed -> http != null
-            NetTool.Subnet, NetTool.Split, NetTool.TransferTime, NetTool.PortsRef, NetTool.Mac -> true
+            NetTool.Subnet, NetTool.Split, NetTool.TransferTime, NetTool.PortsRef, NetTool.Mac, NetTool.Hex -> true
         }
     }
     var chosen by remember { mutableStateOf(tools.first()) }
@@ -169,6 +171,7 @@ private fun Pane(tool: NetTool, ops: HostOps?, http: PublicHttp?, vendors: suspe
                 NetTool.TransferTime -> TransferPane()
                 NetTool.PortsRef -> PortsReferencePane()
                 NetTool.Mac -> MacPane(vendors)
+                NetTool.Hex -> HexPane()
             }
         }
     }

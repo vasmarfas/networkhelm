@@ -412,6 +412,7 @@
     <string name="tools_split">Разбиение подсетей</string>
     <string name="tools_transfer">Время передачи</string>
     <string name="tools_ports_ref">Справочник портов</string>
+    <string name="tools_hex">IP ↔ HEX</string>
     <string name="tools_start">Старт</string>
     <string name="tools_stop">Стоп</string>
     <string name="tools_host">Хост</string>
@@ -467,6 +468,14 @@
     <string name="tools_mac_not_found">не найден: не зарегистрирован или случайный</string>
     <string name="tools_mac_registry_failed">Встроенный реестр не загрузился.</string>
     <string name="tools_mac_registry">Реестр IEEE от %1$s</string>
+    <string name="tools_hex_input">IP или HEX</string>
+    <string name="tools_hex_value">Значение опции</string>
+    <string name="tools_hex_code">Код подопции</string>
+    <string name="tools_hex_code_hint">Опция 43 передаёт адрес в подопции: 1 у UniFi, 241 (0xF1) у Cisco WLC.</string>
+    <string name="tools_hex_wrapped">С подопцией %1$s</string>
+    <string name="tools_hex_addresses">IP-адреса</string>
+    <string name="tools_hex_sub_options">Подопции</string>
+    <string name="tools_hex_text">Текст</string>
     <string name="settings_terminal">Буфер терминала</string>
     <string name="settings_theme">Тема</string>
     <string name="settings_look">Вид</string>

@@ -182,6 +182,23 @@ class ToolsDialogTest {
     }
 
     @Test
+    fun theHexPaneWritesAnAddressForAnOptionAndReadsTheOptionBack() = runDesktopComposeUiTest(1000, 800) {
+        Locale.setDefault(Locale.ENGLISH)
+        showPane { HexPane() }
+        waitUntil(timeoutMillis = 5_000) { shown("0x0A6700FA") }
+        onNodeWithTag("hex-code").performTextInput("1")
+        waitUntil(timeoutMillis = 5_000) { shown("0x01040A6700FA") }
+        onNodeWithText("With sub-option 1").assertExists()
+        onNodeWithTag("hex-input").performTextClearance()
+        onNodeWithTag("hex-input").performTextInput("0x01040A6700FA")
+        waitUntil(timeoutMillis = 5_000) { shown("1: 10.103.0.250") }
+        assertTrue(onAllNodes(hasText("IP addresses")).fetchSemanticsNodes().isEmpty())
+        onNodeWithTag("hex-input").performTextClearance()
+        onNodeWithTag("hex-input").performTextInput("0A6700FA 0A000001")
+        waitUntil(timeoutMillis = 5_000) { shown("10.103.0.250, 10.0.0.1") }
+    }
+
+    @Test
     fun everyPortOfTheReferenceHasItsDescription() {
         assertEquals(WellKnownPorts.all.map { it.port }, PortDescriptions.keys.toList())
     }

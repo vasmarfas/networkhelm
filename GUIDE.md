@@ -174,8 +174,9 @@ The "Network tools" button in the connection window and the wrench in the top ba
 | Transfer time | Gives the third of size, speed and time when two are typed: sizes from B to TiB (decimal and binary), speeds from bit/s to GB/s, time in hours, minutes and seconds. Overhead in per cent is the share of the speed that carries no data. For a known size the time at 10 Mbit/s, 100 Mbit/s and 1 Gbit/s is listed under the result | Everywhere |
 | Port reference | 109 well-known TCP and UDP ports with the protocol, the service and a short description in the language of the interface. The filter takes the start of a number, a part of the service, the protocol or a word of the description. The port scanner names open ports from the same list | Everywhere |
 | MAC vendor lookup | Finds the vendor in the IEEE registry that comes with the program (58 623 blocks of 2026-09-25); the longest prefix wins | Everywhere |
+| IP ↔ HEX | Turns IPv4 addresses into the hex value of a DHCP option as RouterOS takes it (`10.103.0.250` → `0x0A6700FA`); with a sub-option code it adds the code and the length, as option 43 wants them (`1` gives `0x01040A6700FA`). A hex value is read back as addresses, as sub-options in code-length-value form and as text | Everywhere |
 
-A browser can open no sockets, so the page shows the calculator, the splitter, the port reference, the transfer time and the MAC lookup. On iOS the echoes of the ping, the traceroute and the LAN scanner go through an ICMP socket that needs no privileges.
+A browser can open no sockets, so the page shows the calculator, the splitter, the port reference, the transfer time, the MAC lookup and IP ↔ HEX. On iOS the echoes of the ping, the traceroute and the LAN scanner go through an ICMP socket that needs no privileges.
 
 RDAP, IP info and the speed test send requests to third-party hosts, which the line under their form lists. They need HTTPS with the certificate check of the system, which the desktop and Android have; on iOS only the port 43 whois remains of the three, in a browser none.
 
