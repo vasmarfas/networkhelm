@@ -208,7 +208,7 @@ internal fun formTabs(form: UiForm, names: (UiField, UiTab) -> List<String>): Li
             fields += name
         }
     }
-    while (fields.lastOrNull() == GROUP_LINE) fields.removeLast()
+    while (fields.lastOrNull() == GROUP_LINE) fields.removeAt(fields.lastIndex)
     if (fields.isEmpty()) null else PackFormTab(tab.title, fields, inline = tab.inline)
 }
 
