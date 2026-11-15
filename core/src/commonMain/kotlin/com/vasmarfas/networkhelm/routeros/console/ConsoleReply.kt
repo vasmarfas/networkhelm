@@ -46,7 +46,17 @@ internal fun decode(bytes: ByteArray, from: Int, to: Int): String = buildString(
     }
 }
 
-internal class Answer(val ok: Boolean, val text: String)
+internal class Answer(val ok: Boolean, val text: String, val word: String? = null)
+
+// a console that names no word it refuses, as 7.22 does for detail of /system/identity/print, tells where the line stopped:
+// the column counts from the start of the typed line, before the line of the call
+private val STOPPED = Regex("expected end of command \\(line 1 column (\\d+)\\)")
+
+internal fun stoppedAt(text: String, line: String, before: Int): String? {
+    val at = (STOPPED.find(text)?.groupValues?.get(1)?.toIntOrNull() ?: return null) - 1 - before
+    if (at !in line.indices) return null
+    return line.substring(at).takeWhile { !it.isWhitespace() && it != ']' && it != ';' }.substringBefore('=').ifEmpty { null }
+}
 
 internal fun answer(raw: String, begin: String, end: String): Answer {
     val lines = clean(raw).split('\n').filterNot { ECHOED.containsMatchIn(it) || BUSY.containsMatchIn(it) }

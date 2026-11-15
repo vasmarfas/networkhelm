@@ -221,16 +221,22 @@ class InspectSchema(
 
     private suspend fun cached(request: String, path: List<String>): List<Map<String, String>> {
         val key = request + ":" + path.joinToString(",")
-        lock.withLock { answers()[key] }?.let { return it }
+        lock.withLock { answers()[key] }?.takeIf { whole(request, it) }?.let { return it }
         val gate = lock.withLock { asking.getOrPut(key) { Mutex() } }
         return gate.withLock {
-            lock.withLock { answers()[key] }?.let { return@withLock it }
+            lock.withLock { answers()[key] }?.takeIf { whole(request, it) }?.let { return@withLock it }
             val rows = link.call("/console/inspect", "=request=$request", "=path=" + path.joinToString(",")).rows
-            lock.withLock { answers()[key] = rows }
-            changed()
+            if (whole(request, rows)) {
+                lock.withLock { answers()[key] = rows }
+                changed()
+            }
             rows
         }
     }
+
+    // an answer about the children of a menu without the menu itself was cut short, by a console that lost the line in the middle:
+    // kept, it would leave the menu missing on this build for good, so it is asked again the next time
+    private fun whole(request: String, rows: List<Map<String, String>>) = request != "child" || rows.any { it["type"] == "self" }
 
     private suspend fun answers() = answers ?: cache.load(build).toMutableMap().also { answers = it }
 

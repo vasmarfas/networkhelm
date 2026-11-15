@@ -65,6 +65,22 @@ class InspectSchemaTest {
     )
 
     @Test
+    fun anAnswerCutShortIsNotKeptAndTheMenuIsAskedForAgain() = runTest {
+        val cache = MemorySchemaCache()
+        val btest = "child:tool,bandwidth-test"
+        cache.store("7.22.2 x86_64 routeros", mapOf(btest to emptyList()))
+        val router = Router(mapOf(btest to child("self cmd bandwidth-test", "child arg address", "child arg direction"), "syntax:tool,bandwidth-test,address" to syntax("0||"), "syntax:tool,bandwidth-test,direction" to syntax("0||"), "completion:tool,bandwidth-test,direction" to completion("both", "receive", "transmit"), "completion:tool,bandwidth-test,address" to completion()))
+        val schema = InspectSchema(router, cache, "7.22.2 x86_64 routeros").describe(MenuPath.parse("tool/bandwidth-test"))
+        assertEquals(NodeKind.Command, schema.kind)
+        assertEquals(listOf("address", "direction"), schema.arguments.map { it.name })
+        assertEquals(1, router.asked.count { it == btest })
+        val empty = Router(mapOf(btest to emptyList()))
+        val fresh = MemorySchemaCache()
+        runCatching { InspectSchema(empty, fresh, "7.22.2").describe(MenuPath.parse("tool/bandwidth-test")) }
+        assertEquals(emptyMap(), fresh.load("7.22.2"))
+    }
+
+    @Test
     fun listTakesFieldsOfAddThenSetAndAsksOnlyVariantsTheSecondTime() = runTest {
         val cache = MemorySchemaCache()
         val first = Router(vlan)

@@ -20,6 +20,9 @@ import kotlinx.coroutines.CoroutineScope
 internal const val CONSOLE_COLUMNS = 4000
 internal const val CONSOLE_ROWS = 100
 
+private val SERIALIZING = RouterOsVersion(7, 17)
+private const val SERIALIZE_TRIES = 3
+
 suspend fun connectRouterOsConsole(
     ssh: SshSession,
     user: String,
@@ -51,14 +54,22 @@ suspend fun connectRouterOsConsole(
     return null
 }
 
-private suspend fun understood(client: ConsoleClient, dialect: Dialect) = try {
-    when (dialect) {
-        Dialect.Serialize -> client.call("/system/identity/print").rows.isNotEmpty()
-        Dialect.Classic -> RouterOsVersion.parse(client.call("/system/resource/print").rows.firstOrNull()?.get("version").orEmpty())?.major in 6..7
-    }
+internal suspend fun understood(client: ConsoleClient, dialect: Dialect): Boolean = when (dialect) {
+    // a router of 7.17 or later whose console missed a line is asked again: the classic dialect leaves its menus undescribed
+    Dialect.Serialize -> identified(client) || answers { serializes(client) } && (1 until SERIALIZE_TRIES).any { identified(client) }
+    Dialect.Classic -> answers { RouterOsVersion.parse(client.call("/system/resource/print").rows.firstOrNull()?.get("version").orEmpty())?.major in 6..7 }
+}
+
+private suspend fun identified(client: ConsoleClient) = answers { client.call("/system/identity/print").rows.isNotEmpty() }
+
+private suspend fun answers(probe: suspend () -> Boolean) = try {
+    probe()
 } catch (e: ApiTrapException) {
     false
 }
+
+private suspend fun serializes(client: ConsoleClient) =
+    RouterOsVersion.parse(client.call(listOf("/execute", "=script=:put [/system resource get version]")).done["ret"].orEmpty())?.let { it >= SERIALIZING } == true
 
 private fun capabilities(device: DeviceInfo, dialect: Dialect): Capabilities {
     val version = RouterOsVersion.parse(device.version)

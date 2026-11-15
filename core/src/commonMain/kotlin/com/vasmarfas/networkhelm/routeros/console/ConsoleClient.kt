@@ -175,7 +175,7 @@ class ConsoleClient internal constructor(
         while (!answer.ok) {
             val last = answer.text.substringAfterLast('\n')
             val menu = call.menu
-            val word = REFUSAL.find(last)?.groupValues?.get(1)
+            val word = REFUSAL.find(last)?.groupValues?.get(1) ?: answer.word
             call = when {
                 menu != null && word != null && word in call.offered -> {
                     refused.update { it + (menu to it[menu].orEmpty() + word) }

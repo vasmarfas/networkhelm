@@ -39,7 +39,7 @@ private fun bytes(vararg parts: ByteArray) = parts.flatMap { it.asList() }.joinT
 
 private fun latin1(text: String) = ByteArray(text.length) { text[it].code.toByte() }
 
-private class FakeConsole(stale: String = "", banner: Boolean = true, private val bytesOf: (String) -> ByteArray = String::encodeToByteArray, probing: Boolean = false, private val asks: Boolean = true, private val handler: suspend (String) -> String) : ShellChannel {
+private class FakeConsole(stale: String = "", banner: Boolean = true, private val bytesOf: (String) -> ByteArray = String::encodeToByteArray, probing: Boolean = false, private val asks: Boolean = true, private val echoes: Boolean = false, private val handler: suspend (String) -> String) : ShellChannel {
     private val out = Channel<ByteArray>(Channel.UNLIMITED)
     var closed = false
 
@@ -90,13 +90,14 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
         if (line.startsWith("$RELAY\r")) {
             line = line.removePrefix("$RELAY\r")
             typed(RELAY)
-            relayed = if (asks) "$RELAY\r\n\r$ASKING \r\n\r\r\r" else "$RELAY\r\n\rbad command name terminal (line 1 column 12)\r\n$PROMPT_TEXT"
+            relayed = if (asks) "$RELAY\r\n\r$ASKING ${if (echoes) line else ""}\r\n\r\r\r" else "$RELAY\r\n\rbad command name terminal (line 1 column 12)\r\n$PROMPT_TEXT"
             if (!asks) typed(line)
         } else {
             typed(line)
         }
         val (begin, command, end) = checkNotNull(MARKERS.matchEntire(line)).destructured
-        val text = handler(command)
+        // a column the handler gives as {word} is the one that word starts at in the typed line
+        val text = STOPPED_AT.replace(handler(command)) { "column ${line.indexOf(" " + it.groupValues[1]) + 2}" }
         val asking = text.startsWith("?")
         if (text == "~echo") {
             out.trySend(bytesOf(line.take(line.length / 2)))
@@ -121,6 +122,8 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
 }
 
 private val PICK = Regex("\\[:pick \\[[^\\]]*] (\\d+) (\\d+)]")
+
+private val STOPPED_AT = Regex("column \\{([a-z-]+)}")
 
 // answers a line one piece at a time, with a pause before each
 private class DrippingConsole(private val chunks: Int, private val millis: Long) : ShellChannel {
@@ -232,6 +235,35 @@ class ConsoleClientTest {
         assertEquals(listOf(mapOf("name" to "CHR")), client.call(listOf("/system/identity/print")).rows)
     }
 
+    @Test
+    fun aConsoleOfARouterThatSerializesIsAskedAgainAfterAMissedLine() = runTest {
+        var versioned = false
+        val client = client { command ->
+            when {
+                "/system/identity/print" in command -> if (versioned) """{"name":"CHR"}""" else "!syntax error (line 1 column 30)"
+                command == ":put [/system resource get version]" -> "7.25.1 (stable)".also { versioned = true }
+                else -> "!unexpected $command"
+            }
+        }
+        assertTrue(understood(client, Dialect.Serialize))
+        assertTrue(versioned)
+    }
+
+    @Test
+    fun aRouterOlderThanSerializingIsLeftToTheClassicDialect() = runTest {
+        val asked = mutableListOf<String>()
+        val client = client { command ->
+            asked += command
+            when {
+                "/system/identity/print" in command -> "!syntax error (line 1 column 30)"
+                command == ":put [/system resource get version]" -> "7.12.1 (stable)"
+                else -> "!unexpected $command"
+            }
+        }
+        assertFalse(understood(client, Dialect.Serialize))
+        assertEquals(":put [/system resource get version]", asked.last())
+    }
+
     private fun router(sent: MutableList<String>, refuses: Set<String>, vararg views: String): suspend (String) -> String = handler@{ command ->
         if ("count-only" in command) return@handler "!bad parameter count-only (line 1 column 25)"
         sent += command
@@ -252,6 +284,22 @@ class ConsoleClientTest {
             listOf(mapOf(".id" to "*1", "chain" to "input", "dst-port" to "25", "bytes" to "10"), mapOf(".id" to "*2", "chain" to "forward", "bytes" to "0")),
             client.call(listOf("/ip/firewall/filter/print")).rows,
         )
+    }
+
+    // CHR 7.22.2 answers detail of /system/identity/print with the column the line stopped at, not with the word
+    @Test
+    fun aWordTheConsoleStopsAtWithoutNamingItIsFoundByItsColumnAndTheDialectHolds() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(size = 1) { command ->
+            sent += command
+            val parts = command.split("; ")
+            if (parts.any { " detail" in it }) "!expected end of command (line 1 column {detail})" else parts.joinToString("\n") { "[{\"name\":\"CHR-sber\"}]" }
+        }
+        assertTrue(understood(client, Dialect.Serialize))
+        assertEquals(1, sent.count { " detail" in it }, sent.joinToString("\n"))
+        val before = sent.size
+        assertEquals(listOf(mapOf("name" to "CHR-sber")), client.call(listOf("/system/identity/print")).rows)
+        assertTrue(sent.drop(before).none { " detail" in it }, sent.joinToString("\n"))
     }
 
     @Test
@@ -398,6 +446,20 @@ class ConsoleClientTest {
         val client = client(size = 1) { "[]" }
         repeat(3) { client.call(listOf("/ip/address/print")) }
         client.call(listOf("/ip/route/print"))
+        assertEquals(listOf(RELAY), consoles.single().history)
+    }
+
+    @Test
+    fun aRouterThatEchoesTheLineBesideItsQuestionStillGetsItThroughAsk() = runTest {
+        val client = ConsoleClient(1) { FakeConsole(echoes = true) { "[]" }.also { consoles += it } }
+        repeat(3) { client.call(listOf("/ip/address/print")) }
+        assertEquals(listOf(RELAY), consoles.single().history)
+    }
+
+    @Test
+    fun theClassicDialectGoesThroughAskTooAndLeavesOneLine() = runTest {
+        val client = classic { command -> if (command.startsWith(":global")) "" else "\u0001.id\u0002id\u0002*1\n\u0003" }
+        repeat(3) { client.call(listOf("/ip/address/print")) }
         assertEquals(listOf(RELAY), consoles.single().history)
     }
 
