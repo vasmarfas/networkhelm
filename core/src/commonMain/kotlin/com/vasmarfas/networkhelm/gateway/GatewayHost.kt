@@ -40,6 +40,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.JsonNull
@@ -127,6 +128,7 @@ class GatewayHost(
                 is Request.Link -> stream(id, LinkState.serializer(), session(request.session).link)
                 is Request.Packs -> value(id, ListSerializer(Pack.serializer()), session(request.session).packs(store))
                 is Request.Native -> value(id, NativeMenu.serializer().nullable, session(request.session).nativeMenu())
+                is Request.Words -> value(id, MapSerializer(String.serializer(), String.serializer()), session(request.session).words())
                 is Request.SafeModeActive -> stream(id, Boolean.serializer(), safeMode(request.session).active)
                 is Request.SafeModeActions -> stream(id, Int.serializer(), safeMode(request.session).actions)
                 is Request.EnterSafeMode -> value(id, Boolean.serializer(), safeMode(request.session).enter())
@@ -134,7 +136,7 @@ class GatewayHost(
                 is Request.RollbackSafeMode -> value(id, Unit.serializer(), safeMode(request.session).rollback())
                 is Request.SafeModeStranded -> stream(id, Boolean.serializer(), safeMode(request.session).stranded)
                 is Request.SettleSafeMode -> value(id, Unit.serializer(), safeMode(request.session).settle(request.keep))
-                is Request.Exec -> value(id, ExecResult.serializer(), ssh(request.session).exec(request.command))
+                is Request.Exec -> value(id, ExecResult.serializer(), request.input?.let { ssh(request.session).exec(request.command, it) } ?: ssh(request.session).exec(request.command))
                 is Request.Shell -> shell(id, ssh(request.session).shell(request.term, request.columns, request.rows))
                 is Request.SshReachable -> value(id, SshReach.serializer(), ssh(request.session).reach(request.fresh))
                 is Request.SftpList -> value(id, ListSerializer(RemoteFile.serializer()), files(request.session, request.own) { it.list(request.path) })

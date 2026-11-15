@@ -243,7 +243,7 @@ class SshLabTest {
                 val resource = host.get(MenuPath.parse("system/resource"), null)
                 assertTrue(resource?.get("version").orEmpty().startsWith("OpenWrt "), resource.toString())
                 assertTrue((resource?.get("total-memory")?.toLongOrNull() ?: 0) > 100_000_000, resource.toString())
-                assertTrue(rows("system/storage").any { it["description"] == "/" })
+                assertTrue(rows("system/storage").any { it["mount-point"] == "/" })
                 assertTrue(rows("system/process").any { it["pid"] == "1" && "procd" in it["command"].orEmpty() })
                 assertTrue(rows("log").isNotEmpty())
                 assertFailsWith<DeviceException> { host.describe(MenuPath.parse("system/service")) }
@@ -270,7 +270,7 @@ class SshLabTest {
                 assertEquals("true", ssh["running"], ssh.values.toString())
                 val processes = rows("system/process")
                 assertTrue(processes.any { it["pid"] == "1" } && processes.any { "systemd-journald" in it["command"].orEmpty() })
-                assertTrue(rows("system/storage").any { it["description"] == "/" })
+                assertTrue(rows("system/storage").any { it["mount-point"] == "/" })
                 val files = MenuPath.parse("file")
                 val sftp = host.ssh.sftp()
                 try {

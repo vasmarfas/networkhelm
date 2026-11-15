@@ -58,6 +58,9 @@ interface DeviceSession {
 
     suspend fun nativeMenu(): NativeMenu? = null
 
+    // the titles and labels of the bundled windows as the router's own interface names them, in the language of the app
+    suspend fun words(store: TextStore? = null): Map<String, String> = emptyMap()
+
     // the router asked for a new password at login; the session works until one is given
     val passwordExpired: Boolean get() = false
 

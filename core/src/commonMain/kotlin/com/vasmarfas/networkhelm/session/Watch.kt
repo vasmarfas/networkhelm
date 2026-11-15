@@ -22,8 +22,10 @@ import kotlinx.coroutines.flow.runningFold
 import kotlinx.coroutines.flow.shareIn
 import kotlinx.coroutines.flow.transform
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.math.ceil
 import kotlin.time.Clock
 import kotlin.time.Duration
+import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 fun Flow<ListEvent>.rows(): Flow<List<Item>> = filterNot { it is ListEvent.Progress }.runningFold(emptyList(), ::folded)
@@ -96,7 +98,8 @@ fun Flow<Item>.rounds(key: (Item) -> String?): Flow<Map<String, Map<String, Stri
 }
 
 // a read takes at most a tenth of the time, so a slow table is asked less often than the period; a change asks at once
-fun polled(period: Duration, again: Flow<Unit> = emptyFlow(), read: suspend () -> List<Item>): Flow<ListEvent> = channelFlow {
+// ticks: the reads of every list of a session wait for the same beats of the period from this mark, so they go out together
+fun polled(period: Duration, again: Flow<Unit> = emptyFlow(), ticks: TimeMark? = null, read: suspend () -> List<Item>): Flow<ListEvent> = channelFlow {
     val asked = again.buffer(Channel.CONFLATED).produceIn(this)
     var waiting = true
     var items: List<Item>? = null
@@ -105,7 +108,12 @@ fun polled(period: Duration, again: Flow<Unit> = emptyFlow(), read: suspend () -
         val fresh = read()
         if (fresh != items) send(ListEvent.Snapshot(fresh))
         items = fresh
-        val wait = maxOf(period, started.elapsedNow() * 9)
+        val least = maxOf(period, started.elapsedNow() * 9)
+        // the first beat at least that long after the start of this read, give or take a tenth of the period
+        val wait = ticks?.let { mark ->
+            val offset = mark.elapsedNow()
+            period * ceil((offset - started.elapsedNow() + least - period / 10) / period) - offset
+        } ?: least
         if (!waiting || withTimeoutOrNull(wait) { asked.receiveCatching() }?.isClosed == true) {
             waiting = false
             delay(wait)

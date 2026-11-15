@@ -68,6 +68,9 @@ sealed interface SshReach {
 interface SshSession {
     suspend fun exec(command: String): ExecResult
 
+    // a command that reads what it is given, as sudo -S reads the password
+    suspend fun exec(command: String, input: String): ExecResult = throw DeviceException(ErrorCategory.Unsupported, "this channel gives a command no input")
+
     suspend fun process(command: String): ByteStream
 
     suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel

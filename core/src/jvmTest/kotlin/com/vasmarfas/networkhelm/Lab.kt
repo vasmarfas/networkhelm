@@ -13,12 +13,13 @@ object Lab {
 
     fun require(vararg keys: String): Map<String, String> {
         assumeTrue("lab.properties is missing", properties != null)
-        val values = keys.associateWith { properties?.getProperty(it).orEmpty().trim() }
+        val values = keys.associateWith { optional(it).orEmpty() }
         assumeTrue("lab.properties has no ${values.filterValues(String::isEmpty).keys}", values.values.none(String::isEmpty))
         return values
     }
 
-    fun optional(key: String): String? = properties?.getProperty(key)?.trim()?.ifEmpty { null }
+    // a secret kept out of the file comes from the environment: keenetic.password as LAB_KEENETIC_PASSWORD
+    fun optional(key: String): String? = (properties?.getProperty(key) ?: System.getenv("LAB_" + key.uppercase().replace('.', '_')))?.trim()?.ifEmpty { null }
 
     fun forEachOpenWrt(vararg keys: String, block: (Map<String, String>) -> Unit) {
         val routers = listOf("openwrt", "openwrt24").filter { properties?.getProperty("$it.host").orEmpty().isNotBlank() }

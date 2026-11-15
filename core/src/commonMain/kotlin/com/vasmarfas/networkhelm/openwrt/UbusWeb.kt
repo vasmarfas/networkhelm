@@ -5,16 +5,12 @@ import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.transport.BufferedStream
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.HttpResponse
+import com.vasmarfas.networkhelm.transport.closingUnanswered
 import com.vasmarfas.networkhelm.transport.httpExchange
 import com.vasmarfas.networkhelm.transport.httpLines
 import com.vasmarfas.networkhelm.transport.keepsAlive
 import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineStart
-import kotlinx.coroutines.coroutineScope
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
@@ -74,7 +70,7 @@ class SocketUbusWeb(
 
     private suspend fun exchange(connection: BufferedStream, headers: Map<String, String>, body: ByteArray, reading: Boolean): HttpResponse? {
         val answer = try {
-            inTime(connection) { httpExchange(connection, host, "POST", "/ubus", headers, body) }
+            connection.closingUnanswered(REQUEST_TIME) { httpExchange(connection, host, "POST", "/ubus", headers, body) }
         } catch (e: Throwable) {
             connection.close()
             if (!reading && e !is CancellationException && e is Exception && (e !is DeviceException || e.category == ErrorCategory.ConnectionLost)) throw RequestOutcomeUnknownException(e)
@@ -91,27 +87,6 @@ class SocketUbusWeb(
             else -> connection.close()
         }
         return answer
-    }
-
-    // a blocking read ends only when its connection is closed, which the time and a cancelled caller do;
-    // an answered connection stays open for the pool
-    private suspend fun inTime(connection: BufferedStream, request: suspend () -> HttpResponse?): HttpResponse? = coroutineScope {
-        var answered = false
-        val watchdog = launch(start = CoroutineStart.UNDISPATCHED) {
-            try {
-                delay(REQUEST_TIME)
-            } finally {
-                if (!answered) connection.close()
-            }
-        }
-        try {
-            request().also { answered = true }
-        } catch (e: Exception) {
-            ensureActive()
-            throw e
-        } finally {
-            watchdog.cancel()
-        }
     }
 
     private companion object {

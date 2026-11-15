@@ -46,20 +46,31 @@ class TrustPolicy(private val store: TrustStore, private val ask: suspend (Trust
     }
 }
 
-// the first connection only reads the certificate: the dialog may outlast the time the router waits for a login
-suspend fun openTlsTrusted(host: String, port: Int, policy: TrustPolicy): TlsStream {
-    val known = policy.known(host, port, TrustKind.Tls)
-    val seen = try {
-        if (known != null) return openTls(host, port, known)
-        val probe = openTls(host, port, null)
-        probe.close()
-        probe.certificateSha256
-    } catch (e: CertificateMismatchException) {
-        e.actual
+// the first connection only reads the certificate: the dialog may outlast the time the router waits for a login. A name served
+// by several nodes, as the cloud of KeenDNS, may show another certificate on the next connection, which is asked about too
+suspend fun openTlsTrusted(
+    host: String,
+    port: Int,
+    policy: TrustPolicy,
+    open: suspend (String, Int, String?) -> TlsStream = { h, p, pinned -> openTls(h, p, pinned) },
+): TlsStream {
+    var known = policy.known(host, port, TrustKind.Tls)
+    repeat(TRUST_ROUNDS) {
+        val seen = try {
+            known?.let { return open(host, port, it) }
+            val probe = open(host, port, null)
+            probe.close()
+            probe.certificateSha256
+        } catch (e: CertificateMismatchException) {
+            e.actual
+        }
+        if (!policy.confirm(host, port, TrustKind.Tls, seen, known)) throw rejected(host, seen)
+        known = seen
     }
-    if (!policy.confirm(host, port, TrustKind.Tls, seen, known)) throw rejected(host, seen)
-    return openTls(host, port, seen)
+    return open(host, port, known)
 }
+
+private const val TRUST_ROUNDS = 3
 
 internal fun trustKey(host: String, port: Int, kind: TrustKind) = "$kind $host $port"
 

@@ -34,3 +34,23 @@ internal suspend fun <T> ByteStream.closingAfter(timeout: Duration = Duration.IN
         watchdog.cancel()
     }
 }
+
+// the same for a connection kept for the next request: only one that got no answer in time is closed
+internal suspend fun <T> ByteStream.closingUnanswered(timeout: Duration, block: suspend () -> T): T = coroutineScope {
+    var answered = false
+    val watchdog = launch(start = CoroutineStart.UNDISPATCHED) {
+        try {
+            delay(timeout)
+        } finally {
+            if (!answered) close()
+        }
+    }
+    try {
+        block().also { answered = true }
+    } catch (e: Exception) {
+        ensureActive()
+        throw e
+    } finally {
+        watchdog.cancel()
+    }
+}

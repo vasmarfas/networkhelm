@@ -32,6 +32,8 @@ class LazySsh(private val probe: (suspend () -> SshReach)? = null, private val o
 
     override suspend fun exec(command: String) = session().exec(command)
 
+    override suspend fun exec(command: String, input: String) = session().exec(command, input)
+
     override suspend fun process(command: String) = session().process(command)
 
     override suspend fun shell(term: String, columns: Int, rows: Int) = session().shell(term, columns, rows)

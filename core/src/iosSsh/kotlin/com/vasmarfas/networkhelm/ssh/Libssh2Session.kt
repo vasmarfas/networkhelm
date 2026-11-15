@@ -39,6 +39,7 @@ import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_process_startup
 import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_read_ex
 import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_request_pty_ex
 import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_request_pty_size_ex
+import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_send_eof
 import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_wait_closed
 import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_channel_write_ex
 import com.vasmarfas.networkhelm.ssh.libssh2.libssh2_hostkey_hash
@@ -93,7 +94,9 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.Buffer
@@ -198,6 +201,9 @@ private fun lastError() = strerror(errno)?.toKString() ?: "errno $errno"
 
 private class Libssh2Session(private val session: CPointer<LIBSSH2_SESSION>, private val socket: Int) : SshSession {
     private val lock = Mutex()
+
+    // OpenSSH opens ten channels on one connection (MaxSessions): commands take six at most, the console and the files the rest
+    private val commands = Semaphore(6)
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var freed = false
@@ -330,10 +336,18 @@ private class Libssh2Session(private val session: CPointer<LIBSSH2_SESSION>, pri
         throw e
     }
 
-    override suspend fun exec(command: String): ExecResult {
+    override suspend fun exec(command: String): ExecResult = commands.withPermit { execute(command, null) }
+
+    override suspend fun exec(command: String, input: String): ExecResult = commands.withPermit { execute(command, input.encodeToByteArray()) }
+
+    private suspend fun execute(command: String, input: ByteArray?): ExecResult {
         val channel = channel()
         val result = started(channel) {
             call("exec") { libssh2_channel_process_startup(channel, "exec", 4u, command, command.encodeToByteArray().size.convert()).toLong() }
+            if (input != null) {
+                write(channel, input)
+                call("exec") { libssh2_channel_send_eof(channel).toLong() }
+            }
             val output = Buffer()
             val error = Buffer()
             val buffer = ByteArray(16_384)

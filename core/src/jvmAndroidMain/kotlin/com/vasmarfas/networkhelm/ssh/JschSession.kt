@@ -29,7 +29,10 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
 import java.io.InputStream
@@ -100,6 +103,8 @@ private const val SERVER_ALIVE_MILLIS = 15_000
 private const val SERVER_ALIVE_MISSES = 3
 private const val CHANNEL_OPEN_MILLIS = 10_000
 
+private const val EXEC_CHANNELS = 6
+
 private fun InputStream.readAtMost(limit: Int): ByteArray {
     val bytes = ByteArrayOutputStream()
     val buffer = ByteArray(8 * 1024)
@@ -116,9 +121,20 @@ private class JschSession(private val session: Session) : SshSession {
     // it swallows that after its cipher has moved on, the router drops the session, so they are sent from here
     private val later = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
-    override suspend fun exec(command: String): ExecResult = withContext(Dispatchers.IO) {
+    // OpenSSH opens ten channels on one connection (MaxSessions), and the windows that poll each run a command:
+    // with more at once the next command and the console get channel is not opened
+    private val commands = Semaphore(EXEC_CHANNELS)
+
+    override suspend fun exec(command: String): ExecResult = execute(command, null)
+
+    override suspend fun exec(command: String, input: String): ExecResult = execute(command, input)
+
+    private suspend fun execute(command: String, input: String?): ExecResult = commands.withPermit { inChannel(command, input) }
+
+    private suspend fun inChannel(command: String, input: String?): ExecResult = withContext(Dispatchers.IO) {
         val channel = open<ChannelExec>("exec")
         channel.setCommand(command)
+        input?.let { channel.setInputStream(ByteArrayInputStream(it.encodeToByteArray())) }
         val out = channel.inputStream
         val err = channel.errStream
         try {

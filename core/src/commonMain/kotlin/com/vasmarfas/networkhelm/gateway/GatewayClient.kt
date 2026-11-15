@@ -44,6 +44,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.MapSerializer
 import kotlinx.serialization.builtins.nullable
 import kotlinx.serialization.builtins.serializer
 
@@ -286,6 +287,8 @@ class RemoteDeviceSession internal constructor(private val client: GatewayClient
 
     override suspend fun nativeMenu() = client.call(Request.Native(session), NativeMenu.serializer().nullable)
 
+    override suspend fun words(store: TextStore?) = client.call(Request.Words(session), MapSerializer(String.serializer(), String.serializer()))
+
     override val safeMode: SafeMode? = if (opened.safeMode) RemoteSafeMode(client, session) else null
 
     override val ssh: SshSession? = if (opened.ssh) RemoteSsh(client, session, opened.fileStore, opened.canForward) else null
@@ -318,6 +321,8 @@ private class RemoteSsh(
     override val canForward: Boolean,
 ) : SshSession {
     override suspend fun exec(command: String) = client.call(Request.Exec(session, command), ExecResult.serializer())
+
+    override suspend fun exec(command: String, input: String) = client.call(Request.Exec(session, command, input), ExecResult.serializer())
 
     override suspend fun process(command: String): ByteStream = throw DeviceException(ErrorCategory.Unsupported, "no SSH process through the gateway")
 

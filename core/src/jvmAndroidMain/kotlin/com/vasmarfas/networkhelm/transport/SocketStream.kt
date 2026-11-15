@@ -15,6 +15,7 @@ import java.security.MessageDigest
 import java.security.cert.Certificate
 import java.security.cert.CertificateException
 import java.security.cert.X509Certificate
+import java.util.concurrent.ConcurrentHashMap
 import javax.net.ssl.SSLContext
 import javax.net.ssl.SSLSocket
 import javax.net.ssl.X509TrustManager
@@ -92,36 +93,67 @@ actual suspend fun openUdp(host: String, port: Int): UdpLink = withContext(Dispa
     }
 }
 
+// the handshake is a part of the attempt, and every address is tried twice: a node of the KeenDNS cloud took the
+// connection and never answered it, and through a proxy one handshake in five stood still while the next took a second
 actual suspend fun openTls(host: String, port: Int, pinnedSha256: String?, timeoutMillis: Int): TlsStream {
     val trust = PinnedCertificate(pinnedSha256)
     val context = SSLContext.getInstance("TLS").apply { init(null, arrayOf(trust), null) }
-    val tcp = openSocket(host, port, timeoutMillis)
-    val socket = context.socketFactory.createSocket(tcp, host, port, true) as SSLSocket
-    try {
-        socket.soTimeout = timeoutMillis
-        withContext(Dispatchers.IO) { socket.startHandshake() }
-        socket.soTimeout = 0
-    } catch (e: Exception) {
-        tcp.close()
-        val mismatch = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<PinMismatch>().firstOrNull()
-        throw mismatch?.let { CertificateMismatchException(it.expected, it.actual) } ?: e
+    return firstAnswering(host, timeoutMillis, passes = 2) { address, share ->
+        val tcp = connected(address, port, share)
+        try {
+            val socket = context.socketFactory.createSocket(tcp, host, port, true) as SSLSocket
+            socket.soTimeout = share
+            socket.startHandshake()
+            socket.soTimeout = 0
+            TlsSocketStream(socket, tcp, sha256(socket.session.peerCertificates.first()))
+        } catch (e: Exception) {
+            tcp.close()
+            val mismatch = generateSequence<Throwable>(e) { it.cause }.filterIsInstance<PinMismatch>().firstOrNull()
+            throw mismatch?.let { CertificateMismatchException(it.expected, it.actual) } ?: e
+        }
     }
-    return TlsSocketStream(socket, tcp, sha256(socket.session.peerCertificates.first()))
 }
 
 private fun sha256(certificate: Certificate) =
     MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString("") { "%02x".format(it) }
 
-private suspend fun openSocket(host: String, port: Int, timeoutMillis: Int): Socket {
+// the address that answered last, by host name
+private val answered = ConcurrentHashMap<String, InetAddress>()
+
+private suspend fun openSocket(host: String, port: Int, timeoutMillis: Int): Socket = firstAnswering(host, timeoutMillis) { address, share -> connected(address, port, share) }
+
+private fun connected(address: InetAddress, port: Int, timeoutMillis: Int): Socket {
     val socket = Socket()
     try {
-        withContext(Dispatchers.IO) { socket.connect(InetSocketAddress(host, port), timeoutMillis) }
+        socket.connect(InetSocketAddress(address, port), timeoutMillis)
         socket.tcpNoDelay = true
     } catch (e: Exception) {
         socket.close()
         throw e
     }
     return socket
+}
+
+// a name may have dead addresses among its own, as the cloud of KeenDNS has had one of its three: each address gets its
+// share of the time in turn, and the one that answered goes first next time. A certificate other than the pinned one is
+// the answer of the host itself and is not tried on another address
+internal suspend fun <T> firstAnswering(host: String, timeoutMillis: Int, passes: Int = 1, attempt: (InetAddress, Int) -> T): T = withContext(Dispatchers.IO) {
+    val all = InetAddress.getAllByName(host).toList()
+    val first = answered[host]?.takeIf { it in all }
+    val addresses = listOfNotNull(first) + (all - setOfNotNull(first))
+    val tries = (1..passes).flatMap { addresses }
+    val share = if (tries.size == 1) timeoutMillis else maxOf(timeoutMillis / tries.size, 2_000)
+    var failure: Exception? = null
+    for (address in tries) {
+        try {
+            return@withContext attempt(address, share).also { answered[host] = address }
+        } catch (e: CertificateMismatchException) {
+            throw e
+        } catch (e: Exception) {
+            failure = e
+        }
+    }
+    throw failure ?: SocketTimeoutException("$host has no address")
 }
 
 private class PinMismatch(val expected: String, val actual: String) : CertificateException("certificate SHA-256 $actual, expected $expected")

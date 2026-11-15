@@ -22,7 +22,7 @@ import kotlinx.serialization.json.JsonElement
 
 // one JSON message per WebSocket text frame; an Ask gets one Value, or Next frames and then Done
 // bytes of a terminal or a file travel as base64 inside the JSON
-const val GATEWAY_PROTOCOL = 2
+const val GATEWAY_PROTOCOL = 3
 
 internal val gatewayJson = Json { ignoreUnknownKeys = true }
 
@@ -191,6 +191,10 @@ sealed interface Request {
     class Native(val session: Long) : Request
 
     @Serializable
+    @SerialName("words")
+    class Words(val session: Long) : Request
+
+    @Serializable
     @SerialName("safe-mode")
     class SafeModeActive(val session: Long) : Request
 
@@ -220,7 +224,7 @@ sealed interface Request {
 
     @Serializable
     @SerialName("exec")
-    class Exec(val session: Long, val command: String) : Request
+    class Exec(val session: Long, val command: String, val input: String? = null) : Request
 
     @Serializable
     @SerialName("shell")
