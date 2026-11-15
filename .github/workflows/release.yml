@@ -82,20 +82,36 @@ jobs:
       version_name: ${{ steps.resolve.outputs.version_name }}
       version_code: ${{ steps.resolve.outputs.version_code }}
     steps:
-      # the stores get the build without a second test run, so the commit must already be green in CI
+      # the stores get the build without a second test run, so the commit must already be green in CI; CI of a push takes about
+      # 20 minutes, and a release started right after the push waits for it instead of failing
       - name: Check CI on this commit
+        timeout-minutes: 70
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -eu
-          run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA" \
-            --jq '.workflow_runs[0] // {} | "\(.status // "") \(.conclusion // "")"')
-          case "$run" in
-            'completed success') ;;
-            ' ') echo "::error::CI has not run on $GITHUB_SHA. Run the CI workflow manually on a branch or tag at this commit, wait for success, then start the release again"; exit 1 ;;
-            completed*) echo "::error::CI ended with '${run#completed }' on $GITHUB_SHA"; exit 1 ;;
-            *) echo "::error::CI is still running on $GITHUB_SHA, start the release after it finishes"; exit 1 ;;
-          esac
+          started=$(date +%s)
+          while :; do
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA" \
+              --jq '.workflow_runs[0] // {} | "\(.status // "") \(.conclusion // "")"')
+            waited=$(( $(date +%s) - started ))
+            case "$run" in
+              'completed success') break ;;
+              completed*) echo "::error::CI ended with '${run#completed }' on $GITHUB_SHA"; exit 1 ;;
+              ' ')
+                if [ "$waited" -ge 180 ]; then
+                  echo "::error::CI has not run on $GITHUB_SHA. Run the CI workflow manually on a branch or tag at this commit, wait for success, then start the release again"
+                  exit 1
+                fi ;;
+            esac
+            if [ "$waited" -ge 3600 ]; then
+              echo "::error::CI is still running on $GITHUB_SHA after an hour"
+              exit 1
+            fi
+            state=${run% }
+            echo "CI on $GITHUB_SHA: ${state:-not started yet}, waited ${waited} s"
+            sleep 30
+          done
 
       - name: Resolve
         id: resolve
