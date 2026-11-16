@@ -4,8 +4,68 @@ menu: [System, Storage]
 window:
   title: Storage
   tabs:
-    - { title: Storage, path: system/storage }
+    - { title: Mounted, path: system/storage }
+    - { title: Disks, path: system/storage/disk }
+    - { title: fstab, path: system/storage/fstab }
+    - { title: SMART, path: system/storage/smart }
 paths:
   system/storage:
-    columns: [description, file-system, size, used, free]
+    columns: [mount-point, device, type, size, used, free, use, options]
     bytes: [size, used, free]
+    quick: type
+    form: mount
+  system/storage/disk:
+    columns: [name, type, size, file-system, label, mount-point, model, transport, parent]
+    bytes: [size]
+    quick: type
+    form: disk
+  system/storage/fstab:
+    columns: [device, mount-point, type, options, dump, pass, mounted]
+    form: fstab
+    actions:
+      - { title: Mount All, command: mount-all, confirm: true }
+  system/storage/smart:
+    columns: [device, model, capacity, health, temperature, power-on-hours, reallocated, pending, uncorrectable, wear, life-left]
+    bytes: [capacity]
+    form: smart
+    actions:
+      - { title: Short Test, command: short-test, selection: true, argument: number, output: output }
+forms:
+  mount:
+    title: "Mount <{mount-point}>"
+    tabs:
+      - title: General
+        fields: [device, mount-point, type, options, read-only, create, fstab, "-", size, used, free, use]
+  disk:
+    title: "Disk <{name}>"
+    tabs:
+      - title: General
+        readonly: true
+        fields: [name, path, type, size, model, serial, transport, rotational, removable, read-only, parent, "-", file-system, label, uuid, mount-point]
+  fstab:
+    title: "fstab <{mount-point}>"
+    tabs:
+      - title: General
+        fields: [device, mount-point, type, options, dump, pass, mounted]
+  smart:
+    title: "SMART <{device}>"
+    tabs:
+      - title: General
+        readonly: true
+        fields: [device, type, model, serial, firmware, capacity, smart-enabled, health, message]
+      - title: Attributes
+        readonly: true
+        fields: [temperature, power-on-hours, power-cycles, reallocated, pending, uncorrectable, wear, life-left]
+labels:
+  use: Use, %
+  create: Create Directory
+  fstab: Add to fstab
+  uuid: UUID
+  pass: fsck Order
+  smart-enabled: SMART Enabled
+  temperature: Temperature, °C
+  reallocated: Reallocated Sectors
+  pending: Pending Sectors
+  uncorrectable: Uncorrectable Sectors
+  wear: Wear, %
+  life-left: Life Left, %

@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [IP, Sockets]
+window:
+  title: Sockets
+  tabs:
+    - { title: Listening Ports, path: ip/socket/listen }
+    - { title: Sockets, path: ip/socket }
+paths:
+  ip/socket/listen:
+    columns: [protocol, address, port, process, pid, user, interface]
+    quick: protocol
+  ip/socket:
+    columns: [protocol, state, local-address, local-port, remote-address, remote-port, process, receive-queue, send-queue]
+    quick: state
+labels:
+  local-address: Local Address
+  local-port: Local Port
+  remote-address: Remote Address
+  remote-port: Remote Port
+  receive-queue: Recv-Q
+  send-queue: Send-Q
+  pid: PID

@@ -7,4 +7,14 @@ window:
     - { title: Services, path: system/service }
 paths:
   system/service:
-    columns: [name, status, load, description]
+    columns: [name, enabled, status, load, description]
+    quick: enabled
+    actions:
+      - { title: Start, command: start, selection: true }
+      - { title: Restart, command: restart, selection: true }
+      - { title: Reload, command: reload, selection: true }
+      - { title: Stop, command: stop, selection: true, confirm: true }
+      - { title: Enable, command: enable, selection: true }
+      - { title: Disable, command: disable, selection: true, confirm: true }
+labels:
+  enabled: Start at Boot

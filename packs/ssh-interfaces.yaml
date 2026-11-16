@@ -5,6 +5,7 @@ window:
   title: Interfaces
   tabs:
     - { title: Interface, path: interface }
+    - { title: Virtual, path: interface/virtual }
 paths:
   interface:
     columns: [name, type, mtu, mac-address, master, tx-bits-per-second, rx-bits-per-second, tx-packets-per-second, rx-packets-per-second]
@@ -12,13 +13,15 @@ paths:
     category: type
     monitor: { command: interface/monitor-traffic, argument: interface }
     form: interface
+  interface/virtual:
+    columns: [name, type, parent, vlan-id, mtu, mac-address, running]
+    form: virtual
 forms:
   interface:
     title: Interface
     tabs:
       - title: General
-        readonly: true
-        fields: [name, type, mtu, mac-address, master, parent, comment]
+        fields: [name, type, mtu, mac-address, master, parent, comment, persist]
       - title: Traffic
         readonly: true
         fields: [tx-bits-per-second, rx-bits-per-second, tx-packets-per-second, rx-packets-per-second]
@@ -27,5 +30,12 @@ forms:
       - title: Statistics
         readonly: true
         fields: [tx-byte, rx-byte, tx-packet, rx-packet, tx-drop, rx-drop, tx-error, rx-error]
+  virtual:
+    title: "Interface <{name}>"
+    tabs:
+      - title: General
+        fields: [type, name, parent, vlan-id, persist]
 labels:
   mtu: MTU
+  vlan-id: VLAN ID
+  persist: Keep After Reboot

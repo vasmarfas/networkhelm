@@ -10,6 +10,16 @@ paths:
   ip/route:
     columns: [dst-address, gateway, interface, metric, protocol, routing-table, pref-src]
     quick: routing-table
+    form: route
   ipv6/route:
     columns: [dst-address, gateway, interface, metric, protocol, routing-table]
     quick: routing-table
+    form: route
+forms:
+  route:
+    title: "Route <{dst-address}>"
+    tabs:
+      - title: General
+        fields: [dst-address, gateway, interface, metric, routing-table, protocol, pref-src, type, persist]
+labels:
+  persist: Keep After Reboot

@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [System, Packages]
+window:
+  title: Packages
+  tabs:
+    - { title: Installed, path: system/package }
+    - { title: Updates, path: system/package/update }
+paths:
+  system/package:
+    columns: [name, version, architecture, size, description]
+    bytes: [size]
+    form: package
+    actions:
+      - { title: Refresh Lists, command: refresh, output: output }
+  system/package/update:
+    columns: [name, version, new-version, architecture, repository]
+    actions:
+      - { title: Upgrade, command: upgrade, selection: true, confirm: true, output: output }
+      - { title: Upgrade All, command: upgrade-all, confirm: true, output: output }
+      - { title: Refresh Lists, command: refresh, output: output }
+forms:
+  package:
+    title: "Package <{name}>"
+    tabs:
+      - title: General
+        fields: [name, version, architecture, size, description]
+labels:
+  new-version: New Version

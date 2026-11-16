@@ -22,6 +22,7 @@ import com.vasmarfas.networkhelm.transport.TrustPolicy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
 import kotlin.time.Duration
@@ -35,6 +36,9 @@ class SshHostSession(
     private val linux: Boolean = false,
     private val pollInterval: Duration = 3.seconds,
     private val time: TimeSource = TimeSource.Monotonic,
+    val password: String? = null,
+    // a new login with the address and the credentials of the session, closed at once
+    login: (suspend () -> Unit)? = null,
 ) : DeviceSession {
     override val capabilities = Capabilities(
         subscriptions = false,
@@ -48,31 +52,35 @@ class SshHostSession(
     )
     override val safeMode: SafeMode? = null
 
-    private val host = LinuxHost(ssh)
+    private val host = LinuxHost(ssh, password, login)
     private val files = HostFiles(ssh)
+    private val changed = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
+
+    private suspend fun table(path: MenuPath): HostTable? = if (linux) host.tables[path.toString()]?.takeIf { it.present() } else null
 
     override suspend fun describe(path: MenuPath): MenuSchema = calls {
-        val known = schemas.keys.filter { it == FILES || linux && host.has(it) }
+        val known = listOf(FILES) + if (linux) host.tables.filter { it.value.present() }.keys.map(MenuPath::parse) else emptyList()
         val children = known.flatMap { key -> (1..key.segments.size).map { MenuPath(key.segments.take(it)) } }.filter { it.parent == path }.map { it.segments.last() }.distinct().sorted()
-        val arguments = schemas[path]?.takeIf { path in known }
+        val table = if (path == FILES) null else table(path)
         when {
-            arguments != null -> MenuSchema(
-                path, if (path.toString() in settings) NodeKind.Settings else NodeKind.List, emptyList(),
-                when (path.toString()) {
-                    "interface" -> listOf("print", "monitor-traffic")
-                    "file" -> listOf("print", "remove")
-                    else -> listOf("print")
-                },
-                arguments.map { Argument(it, ValueType.Text(), readOnly = true) },
-            )
+            path == FILES -> MenuSchema(path, NodeKind.List, emptyList(), listOf("print", "remove"), FILE_FIELDS.map { Argument(it, ValueType.Text(), readOnly = true) })
+            table != null -> {
+                val typed = table.arguments()
+                MenuSchema(
+                    path, if (table.settings) NodeKind.Settings else NodeKind.List, children,
+                    listOf("print") + listOfNotNull("add".takeIf { table.add != null }, "set".takeIf { table.set != null }, "remove".takeIf { table.remove != null }, "move".takeIf { table.move != null }) + table.commands,
+                    table.fields.map { field -> typed.firstOrNull { it.name == field } ?: Argument(field, ValueType.Text(), readOnly = true) } + typed.filter { it.name !in table.fields },
+                )
+            }
             children.isNotEmpty() || path == MenuPath.Root -> MenuSchema(path, NodeKind.Directory, children, emptyList(), emptyList())
             else -> throw DeviceException(ErrorCategory.MissingItem, "$path is not on this host")
         }
     }
 
+    // what needs root is read seldom, so sudo does not fill the log of the host, and again at once after a change made here
     override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
-        if (path != FILES && (!linux || path !in schemas)) throw DeviceException(ErrorCategory.MissingItem, "$path is not on this host")
-        emitAll(polled(pollInterval) { calls { read(path) }.filter { filter?.matches(it) != false } })
+        val table = if (path == FILES) null else calls { table(path) } ?: throw DeviceException(ErrorCategory.MissingItem, "$path is not on this host")
+        emitAll(polled(if (table?.slow == true) SLOW else pollInterval, changed) { calls { read(path) }.filter { filter?.matches(it) != false } })
     }
 
     override suspend fun get(path: MenuPath, id: String?, properties: List<String>?): Item? =
@@ -81,25 +89,32 @@ class SshHostSession(
     override suspend fun count(path: MenuPath, filter: Filter?): Int =
         if (linux || path == FILES) calls { read(path).count { filter?.matches(it) != false } } else 0
 
-    private suspend fun read(path: MenuPath) = if (path == FILES) files.read() else host.read(path)
+    private suspend fun read(path: MenuPath) = if (path == FILES) files.read() else (table(path) ?: throw DeviceException(ErrorCategory.MissingItem, "$path is not on this host")).read()
 
-    override suspend fun add(path: MenuPath, values: Map<String, String>): String = throw readOnly()
+    override suspend fun add(path: MenuPath, values: Map<String, String>): String = changing { (writable(path).add ?: throw readOnly(path))(values) }
 
     override suspend fun set(path: MenuPath, id: String?, changes: Map<String, String?>) {
-        throw readOnly()
+        changing { (writable(path).set ?: throw readOnly(path))(id, changes) }
     }
 
     override suspend fun remove(path: MenuPath, ids: List<String>) {
-        if (path != FILES) throw readOnly()
-        calls { files.remove(ids) }
+        if (path == FILES) calls { files.remove(ids) } else changing { (writable(path).remove ?: throw readOnly(path))(ids) }
     }
 
     override suspend fun move(path: MenuPath, ids: List<String>, before: String?) {
-        throw readOnly()
+        changing { (writable(path).move ?: throw readOnly(path))(ids, before) }
     }
 
     override fun run(path: MenuPath, command: String, arguments: Map<String, String>): Flow<Item> = flow {
-        if (!linux || path.toString() != "interface" || command != "monitor-traffic") throw DeviceException(ErrorCategory.MissingItem, "$path/$command is not on this host")
+        if (linux && path.toString() == "interface" && command == "monitor-traffic") {
+            emitAll(traffic(arguments))
+            return@flow
+        }
+        val action = calls { table(path) }?.takeIf { command in it.commands }?.run ?: throw DeviceException(ErrorCategory.MissingItem, "$path/$command is not on this host")
+        changing { action(command, arguments) }.forEach { emit(it) }
+    }
+
+    private fun traffic(arguments: Map<String, String>): Flow<Item> = flow {
         val wanted = arguments["interface"].orEmpty().split(',').filter { it.isNotEmpty() }
         var before: Pair<Map<String, List<Long>>, TimeMark>? = null
         var round = 0
@@ -123,11 +138,22 @@ class SshHostSession(
         }
     }
 
-    override suspend fun export(path: MenuPath): String = throw readOnly()
+    override suspend fun export(path: MenuPath): String = throw readOnly(path)
 
     override fun close() = ssh.close()
 
-    private fun readOnly() = DeviceException(ErrorCategory.Unsupported, "only the files of a host reached over SSH alone can be changed here")
+    private suspend fun writable(path: MenuPath) = calls { table(path) } ?: throw readOnly(path)
+
+    private suspend fun <T> changing(block: suspend () -> T): T = try {
+        calls { block() }
+    } finally {
+        changed.tryEmit(Unit)
+    }
+
+    private fun readOnly(path: MenuPath) = DeviceException(
+        ErrorCategory.Unsupported,
+        if (linux) "$path of this host cannot be changed here" else "only the files of a host reached over SSH alone can be changed here",
+    )
 
     private suspend fun <T> calls(block: suspend () -> T): T = try {
         block()
@@ -140,33 +166,14 @@ class SshHostSession(
     }
 
     private companion object {
-        val settings = setOf("system/resource", "system/clock")
-
         val FILES = MenuPath.parse("file")
-
-        val schemas = mapOf(
-            "interface" to listOf(
-                "name", "type", "mtu", "mac-address", "running", "disabled", "comment", "master", "parent", "rx-byte", "tx-byte", "rx-packet", "tx-packet",
-                "rx-drop", "tx-drop", "rx-error", "tx-error",
-            ),
-            "ip/address" to listOf("address", "network", "interface", "scope", "dynamic"),
-            "ipv6/address" to listOf("address", "interface", "scope", "dynamic"),
-            "ip/route" to listOf("dst-address", "gateway", "interface", "protocol", "metric", "routing-table", "pref-src", "type", "active", "connect", "static", "dynamic"),
-            "ipv6/route" to listOf("dst-address", "gateway", "interface", "protocol", "metric", "routing-table", "pref-src", "type", "active", "connect", "static", "dynamic"),
-            "ip/arp" to listOf("address", "mac-address", "interface", "status", "dynamic", "complete"),
-            "ipv6/neighbor" to listOf("address", "mac-address", "interface", "status", "dynamic", "complete", "router"),
-            "system/resource" to listOf("uptime", "load", "cpu-load", "cpu-count", "total-memory", "free-memory", "version", "architecture-name", "board-name"),
-            "system/clock" to listOf("date", "time", "gmt-offset"),
-            "system/storage" to listOf("description", "file-system", "size", "used", "free"),
-            "system/process" to listOf("pid", "user", "cpu", "memory", "vsz", "stat", "command"),
-            "system/service" to listOf("name", "load", "status", "running", "disabled", "description"),
-            "log" to listOf("time", "topics", "message"),
-            "file" to listOf("name", "type", "size", "last-modified"),
-        ).mapKeys { MenuPath.parse(it.key) }
+        val FILE_FIELDS = listOf("name", "type", "size", "last-modified")
+        val SLOW = 30.seconds
     }
 }
 
-suspend fun connectSshHost(host: String, port: Int, user: String, auth: SshAuth, trust: TrustPolicy): SshHostSession {
+// the password of the login, given with a key as well, is what sudo asks for
+suspend fun connectSshHost(host: String, port: Int, user: String, auth: SshAuth, trust: TrustPolicy, password: String? = (auth as? SshAuth.Password)?.password): SshHostSession {
     val ssh = connectSshTrusted(host, port, user, auth, trust)
     val uname = try {
         ssh.exec("uname -snrm").takeIf { it.exitStatus == 0 }?.output?.trim()?.split(' ').orEmpty()
@@ -184,5 +191,5 @@ suspend fun connectSshHost(host: String, port: Int, user: String, auth: SshAuth,
         emptySet(),
         setOf("read", "write"),
     )
-    return SshHostSession(ssh, device, linux = named && uname[0] == "Linux")
+    return SshHostSession(ssh, device, linux = named && uname[0] == "Linux", password = password) { connectSshTrusted(host, port, user, auth, trust).close() }
 }

@@ -4,10 +4,32 @@ menu: [Log]
 window:
   title: Log
   tabs:
-    - { title: Log, path: log }
+    - { title: System, path: log }
+    - { title: Kernel, path: log/kernel }
+    - { title: Authentication, path: log/auth }
+    - { title: Errors, path: log/errors }
+    - { title: Previous Boot, path: log/boot }
 paths:
   log:
     columns: [time, topics, message]
     quick: topics
     follow: true
+    log: true
+  log/kernel:
+    columns: [time, topics, message]
+    follow: true
+    log: true
+  log/auth:
+    columns: [time, topics, message]
+    quick: topics
+    follow: true
+    log: true
+  log/errors:
+    columns: [time, topics, message]
+    quick: topics
+    follow: true
+    log: true
+  log/boot:
+    columns: [time, topics, message]
+    quick: topics
     log: true

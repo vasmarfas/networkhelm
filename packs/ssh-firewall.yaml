@@ -1,0 +1,117 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [IP, Firewall]
+window:
+  title: Firewall
+  tabs:
+    - { title: Overview, path: firewall }
+    - { title: UFW, path: firewall/ufw }
+    - { title: UFW Settings, path: firewall/ufw/settings }
+    - { title: firewalld, path: firewall/firewalld }
+    - { title: Zones, path: firewall/firewalld/zone }
+    - { title: nftables, path: firewall/nftables }
+    - { title: nftables Chains, path: firewall/nftables/chain }
+    - { title: iptables, path: firewall/iptables }
+    - { title: iptables Chains, path: firewall/iptables/chain }
+    - { title: ip6tables, path: firewall/ip6tables }
+    - { title: ip6tables Chains, path: firewall/ip6tables/chain }
+paths:
+  firewall:
+    form: overview
+  firewall/ufw:
+    columns: [number, action, direction, protocol, to, to-port, from, from-port, interface, comment, v6]
+    form: ufw
+  firewall/ufw/settings:
+    form: ufw-settings
+  firewall/firewalld:
+    columns: [zone, kind, value, active]
+    quick: zone
+    form: firewalld
+    actions:
+      - { title: Reload, command: reload, confirm: true }
+      - { title: Keep Runtime as Permanent, command: runtime-to-permanent }
+  firewall/firewalld/zone:
+    columns: [name, default, active, target, interfaces, sources, services, ports, masquerade]
+    form: zone
+    actions:
+      - { title: Make Default, command: set-default, selection: true, argument: number, confirm: true }
+  firewall/nftables:
+    columns: [family, table, chain, handle, rule, comment, packets, bytes]
+    quick: chain
+    form: nft
+    actions:
+      - { title: Save for Boot, command: save, confirm: true }
+  firewall/nftables/chain:
+    columns: [family, table, chain, type, hook, priority, policy, rules]
+  firewall/iptables:
+    columns: [table, chain, number, rule, target, comment, packets, bytes]
+    quick: chain
+    form: ipt
+    actions:
+      - { title: Save for Boot, command: save, confirm: true }
+  firewall/iptables/chain:
+    columns: [table, chain, policy, rules, packets, bytes]
+    form: ipt-chain
+  firewall/ip6tables:
+    columns: [table, chain, number, rule, target, comment, packets, bytes]
+    quick: chain
+    form: ipt
+    actions:
+      - { title: Save for Boot, command: save, confirm: true }
+  firewall/ip6tables/chain:
+    columns: [table, chain, policy, rules, packets, bytes]
+    form: ipt-chain
+forms:
+  overview:
+    title: Firewall
+    tabs:
+      - title: Overview
+        readonly: true
+        fields: [manager, ufw, firewalld, nftables-rules, iptables-rules, ip6tables-rules, iptables-backend]
+  ufw:
+    title: "UFW Rule <{number}>"
+    tabs:
+      - title: General
+        fields: [action, direction, protocol, to, to-port, from, from-port, interface, comment, position]
+  ufw-settings:
+    title: UFW
+    tabs:
+      - title: General
+        fields: [enabled, default-incoming, default-outgoing, default-routed, logging]
+  firewalld:
+    title: "firewalld <{zone}>"
+    tabs:
+      - title: General
+        fields: [zone, kind, value, active]
+  zone:
+    title: "Zone <{name}>"
+    tabs:
+      - title: General
+        fields: [name, target, masquerade, default, active, interfaces, sources, services, ports, forward]
+  nft:
+    title: "nftables Rule <{handle}>"
+    tabs:
+      - title: General
+        fields: [family, table, chain, rule, comment, packets, bytes]
+  ipt:
+    title: "Rule <{chain}>"
+    tabs:
+      - title: General
+        fields: [table, chain, position, rule, target, comment, packets, bytes]
+  ipt-chain:
+    title: "Chain <{chain}>"
+    tabs:
+      - title: General
+        fields: [table, chain, policy, rules, packets, bytes]
+labels:
+  manager: Managed By
+  ufw: UFW
+  firewalld: firewalld
+  nftables-rules: nftables Rules
+  iptables-rules: iptables Rules
+  ip6tables-rules: ip6tables Rules
+  iptables-backend: iptables Backend
+  default-incoming: Incoming
+  default-outgoing: Outgoing
+  default-routed: Routed
+  v6: IPv6

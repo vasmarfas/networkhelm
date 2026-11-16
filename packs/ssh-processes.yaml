@@ -8,6 +8,11 @@ window:
 paths:
   system/process:
     columns: [pid, user, cpu, memory, vsz, stat, command]
+    bytes: [memory, vsz]
+    actions:
+      - { title: Hang Up, command: hang-up, selection: true }
+      - { title: Terminate, command: terminate, selection: true }
+      - { title: Kill, command: kill, selection: true, confirm: true }
 labels:
   pid: PID
   cpu: CPU

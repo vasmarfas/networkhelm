@@ -9,5 +9,13 @@ window:
 paths:
   ip/arp:
     columns: [address, mac-address, interface, status]
+    form: neighbour
   ipv6/neighbor:
     columns: [address, mac-address, interface, status, router]
+    form: neighbour
+forms:
+  neighbour:
+    title: "Neighbour <{address}>"
+    tabs:
+      - title: General
+        fields: [address, mac-address, interface, status]

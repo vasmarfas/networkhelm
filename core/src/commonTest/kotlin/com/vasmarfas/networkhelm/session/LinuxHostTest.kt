@@ -74,7 +74,8 @@ class LinuxHostTest {
             "ip -j -4 neigh show" to """[{"dst":"192.0.2.1","dev":"eth1","lladdr":"00:00:5e:00:53:01","state":["REACHABLE"]},{"dst":"192.0.2.9","dev":"eth1","state":["FAILED"]}]""",
             "ip -j -6 neigh show" to "[]",
             "cat /proc/net/dev" to dev(220, 2),
-            "df -P -k" to "Filesystem           1024-blocks    Used Available Capacity Mounted on\n/dev/root              2049192    125856   1906952   6% /\ntmpfs 504880 2736 502144 1% /tmp\n",
+            "cat /proc/mounts" to "/dev/root / squashfs ro,relatime 0 0\ntmpfs /tmp tmpfs rw,nosuid,nodev,noatime 0 0\n--nh-section--\n" +
+                "Filesystem           1024-blocks    Used Available Capacity Mounted on\n/dev/root              2049192    125856   1906952   6% /\ntmpfs 504880 2736 502144 1% /tmp\n",
             "ps w" to "  PID USER       VSZ STAT COMMAND\n    1 root      1656 S    /sbin/procd\n 2603 root      1088 S    /usr/sbin/dropbear -F -P /var/run/dropbear.1.pid\n",
             "logread -l 500" to "Fri Oct 23 17:41:46 2026 authpriv.info dropbear[2657]: Child connection from 192.0.2.2:1184\n" +
                 "Fri Oct 23 17:41:46 2026 authpriv.info dropbear[2657]: Child connection from 192.0.2.2:1184\n",
@@ -125,7 +126,7 @@ class LinuxHostTest {
         assertEquals(listOf("2026-10-23", "17:41:47"), listOf("date", "time").map { session.get(MenuPath.parse("system/clock"), null)?.get(it) })
 
         val root = session.rows("system/storage").first()
-        assertEquals(listOf("/", "/dev/root", "2098372608", "128876544", "1952718848"), listOf("description", "file-system", "size", "used", "free").map { root[it] })
+        assertEquals(listOf("/", "/dev/root", "2098372608", "128876544", "1952718848"), listOf("mount-point", "device", "size", "used", "free").map { root[it] })
 
         val processes = session.rows("system/process")
         assertEquals(listOf("1", "2603"), processes.map { it.id })
@@ -143,8 +144,7 @@ class LinuxHostTest {
     fun theJournalAndTheServicesOfSystemd() = runTest {
         val host = Host(
             listOf(
-                "command -v journalctl" to "/usr/bin/journalctl\n",
-                "command -v systemctl" to "/usr/bin/systemctl\n",
+                "for t in" to "systemctl\njournalctl\n",
                 "date +%z" to "+0300\n--rd-section--\n" +
                     """{"__CURSOR":"s=1;i=2","__REALTIME_TIMESTAMP":"1792766506000000","PRIORITY":"6","SYSLOG_FACILITY":"3","SYSLOG_IDENTIFIER":"sshd","MESSAGE":"Accepted publickey for rd-test"}""" + "\n" +
                     """{"__CURSOR":"s=1;i=3","__REALTIME_TIMESTAMP":"1792766507000000","PRIORITY":"3","MESSAGE":[208,159,209,128,208,184]}""" + "\n",

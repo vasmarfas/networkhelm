@@ -9,5 +9,15 @@ window:
 paths:
   ip/address:
     columns: [address, network, interface, scope]
+    form: address
   ipv6/address:
     columns: [address, interface, scope]
+    form: address
+forms:
+  address:
+    title: "Address <{address}>"
+    tabs:
+      - title: General
+        fields: [address, interface, network, scope, persist]
+labels:
+  persist: Keep After Reboot
