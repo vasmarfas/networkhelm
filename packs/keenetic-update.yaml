@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, System Settings]
+window:
+  title: System Settings
+  tabs:
+    - { title: Firmware, path: system/update }
+paths:
+  system/update:
+    form: update
+    autoset: [channel, auto-update]
+    blank: [latest-version]
+    actions:
+      - { title: Check for Updates, command: check-update }
+      - { title: Update KeeneticOS, command: install, confirm: true, depends: [{ update-available: "true" }] }
+    labels:
+      installed-version: Installed version
+      release: Build
+      channel: Update Channel
+      auto-update: Automatic updates
+      schedule: Install updates
+      latest-version: Available version
+      update-available: Update available
+      progress: Progress
+forms:
+  update:
+    title: Firmware
+    tabs:
+      - title: Firmware
+        fields: [installed-version, release, channel, "-", latest-version, update-available, progress, "-", auto-update, schedule]

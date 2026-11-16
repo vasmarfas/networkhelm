@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [My Networks, Segments]
+window:
+  title: Segments
+  tabs:
+    - { title: Segments, path: segments }
+paths:
+  segments:
+    columns: [interface-name, name, address, mask, dhcp, nat, wifi, clients, running, description]
+    form: segment
+forms:
+  segment:
+    title: "Segment <{interface-name}>"
+    tabs:
+      - title: General
+        fields: [interface-name, description]
+      - title: Network
+        readonly: true
+        fields: [name, address, mask, dhcp, nat, wifi, members, clients, security-level, running, uptime, mac]
+labels:
+  interface-name: Segment
+  name: Interface
+  address: IP Address
+  dhcp: DHCP Range
+  nat: NAT
+  wifi: Wi-Fi Networks
+  members: Ports and Networks
+  mac: MAC Address

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, Wireless ACL]
+window:
+  title: Wireless ACL
+  tabs:
+    - { title: Access Points, path: wifi/acl }
+paths:
+  wifi/acl:
+    columns: [ssid, segment, type, addresses]
+    form: acl
+forms:
+  acl:
+    title: "Wireless ACL <{ssid}>"
+    tabs:
+      - title: General
+        fields: [type, addresses, ssid, segment]
+labels:
+  type: Blocking Mode
+  addresses: MAC Addresses

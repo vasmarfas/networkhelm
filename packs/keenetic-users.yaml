@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, Users and Access]
+window:
+  title: Users and Access
+  tabs:
+    - { title: Users, path: user }
+    - { title: Services, path: show/ip/service }
+paths:
+  user:
+    columns: [name, tag]
+    form: user
+  show/ip/service:
+    columns: [service-name, protocol, port, family, security-level]
+forms:
+  user:
+    title: "User <{name}>"
+    confirm: [password]
+    tabs:
+      - title: General
+        fields: [name, password, tag]
+labels:
+  tag: Access To
+  service-name: Service
+  security-level: Allowed From

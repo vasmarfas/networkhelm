@@ -1,13 +1,13 @@
 # yaml-language-server: $schema=./pack.schema.json
 platform: keenetic
-menu: [IP, ARP]
+menu: [My Networks, ARP]
 window:
   title: ARP
   tabs:
-    - { title: ARP, path: ip/arp }
+    - { title: ARP, path: show/ip/arp }
 paths:
-  ip/arp:
+  show/ip/arp:
     columns: [ip, mac, interface]
 labels:
-  ip: Address
+  ip: IP Address
   mac: MAC Address

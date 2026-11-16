@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Status, Wi-Fi Monitor]
+window:
+  title: Wi-Fi Monitor
+  tabs:
+    - { title: Radios, path: wifi/radio }
+paths:
+  wifi/radio:
+    columns: [band, channel, width, load, clients, standard, temperature, busy-channels, access-points]
+labels:
+  load: Channel Load, %
+  width: Channel Width, MHz
+  temperature: Temperature, °C

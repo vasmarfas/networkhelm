@@ -4,4 +4,10 @@ menu: [Log]
 window:
   title: Log
   tabs:
-    - { title: Log, path: log }
+    - { title: Log, path: show/log }
+paths:
+  show/log:
+    columns: [time, topics, message]
+    quick: topics
+    follow: true
+    log: true

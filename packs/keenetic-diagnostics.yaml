@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, Diagnostics]
+window:
+  title: Diagnostics
+  tabs:
+    - { title: Ping, path: tools/ping }
+    - { title: Traceroute, path: tools/traceroute }
+    - { title: Active Connections, path: show/ip/nat }

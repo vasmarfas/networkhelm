@@ -1,0 +1,108 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, Ethernet Cable]
+window:
+  title: Ethernet Cable
+  tabs:
+    - { title: Connections, path: internet/wired }
+    - { title: Internet Check, path: show/internet/status }
+paths:
+  internet/wired:
+    columns: [title, name, type, connected, address, uptime, default, priority, rx-bits-per-second, tx-bits-per-second, rxbytes, txbytes]
+    readonly: [rx-bits-per-second, tx-bits-per-second]
+    monitor: { command: interface/monitor-traffic, argument: interface }
+    bytes: [rxbytes, txbytes]
+    form: connection
+  show/internet/status:
+    form: check
+forms:
+  connection:
+    title: "Connection <{title}>"
+    tabs:
+      - title: General
+        fields: [description, disabled, schedule, order]
+      - title: IPv4 Settings
+        fields: [ipv4, ip-address, ip-mask, ip-gateway, dns, ignore-dns]
+      - title: IPv6 Settings
+        fields: [ipv6, ipv6-address, ipv6-prefix, ipv6-gateway, dns6, ignore-dns6]
+      - title: ISP Requirements
+        fields: [mac-mode, mac-address, hostname, ip-mtu]
+      - title: ISP Authentication
+        fields: [tunnel, user, password, authentication, server, concentrator, service]
+      - title: 802.1x Authentication
+        fields: [dot1x, dot1x-user, dot1x-password]
+      - title: Ping Check
+        fields: [ping-check, ping-check-host, ping-check-port, ping-check-interval, ping-check-fails]
+      - title: Status
+        readonly: true
+        fields: [name, type, connected, address, mask, uptime, default, priority, security-level, mtu, mac]
+      - title: Traffic
+        readonly: true
+        fields: [rx-bits-per-second, tx-bits-per-second]
+        monitor: { command: interface/monitor-traffic, argument: interface }
+        chart: true
+      - title: Statistics
+        readonly: true
+        fields: [rxbytes, txbytes, rxpackets, txpackets, rxerrors, txerrors, rxdropped, txdropped]
+  check:
+    title: Internet Check
+    tabs:
+      - title: Status
+        readonly: true
+        fields: [internet, gateway-accessible, dns-accessible, captive-accessible, reliable, checked, gateway.interface, gateway.failures, captive.host, captive.response]
+labels:
+  title: Connection
+  name: Interface
+  default: Default Route
+  address: IP Address
+  mac: MAC Address
+  mtu: MTU
+  rx-bits-per-second: Receiving
+  tx-bits-per-second: Sending
+  rxbytes: Received
+  txbytes: Sent
+  rxpackets: Rx Packets
+  txpackets: Tx Packets
+  rxerrors: Rx Errors
+  txerrors: Tx Errors
+  rxdropped: Rx Dropped
+  txdropped: Tx Dropped
+  internet: Internet Access
+  dns-accessible: DNS Accessible
+  gateway.interface: Gateway Interface
+  gateway.failures: Gateway Failures
+  captive.host: Captive Portal Check
+  captive.response: Captive Portal Answer
+  schedule: Schedule
+  order: Connection Priority
+  ipv4: IPv4 Configuration
+  ip-address: IPv4 Address
+  ip-mask: IPv4 Subnet Mask
+  ip-gateway: IPv4 Default Gateway
+  dns: IPv4 DNS Servers
+  ignore-dns: Ignore DNSv4 from ISP
+  ipv6: IPv6 Configuration
+  ipv6-address: IPv6 Address
+  ipv6-prefix: IPv6 Prefix
+  ipv6-gateway: IPv6 Default Gateway
+  dns6: IPv6 DNS Servers
+  ignore-dns6: Ignore DNSv6 from ISP
+  mac-mode: MAC Address Mode
+  mac-address: MAC Address
+  hostname: Device Name
+  ip-mtu: MTU Size
+  tunnel: Type (Protocol)
+  user: User Name
+  password: Password
+  authentication: Authentication Method
+  server: Server Address
+  concentrator: Access Concentrator
+  service: Service Name
+  dot1x: 802.1x Method
+  dot1x-user: 802.1x User Name
+  dot1x-password: 802.1x Password
+  ping-check: Check Mode
+  ping-check-host: Address or Domain to Check
+  ping-check-port: TCP Port
+  ping-check-interval: Check Interval, s
+  ping-check-fails: Failure Threshold

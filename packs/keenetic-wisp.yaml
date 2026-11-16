@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, Wireless ISP]
+window:
+  title: Wireless ISP
+  tabs:
+    - { title: Connections, path: internet/wisp }
+paths:
+  internet/wisp:
+    columns: [title, name, type, connected, address, uptime, default, priority, rx-bits-per-second, tx-bits-per-second, rxbytes, txbytes]
+    readonly: [rx-bits-per-second, tx-bits-per-second]
+    monitor: { command: interface/monitor-traffic, argument: interface }
+    bytes: [rxbytes, txbytes]
+    form: connection
+forms:
+  connection:
+    title: "Connection <{title}>"
+    tabs:
+      - title: General
+        fields: [description, disabled, schedule, order, connection-type, idle-timeout]
+      - title: Wireless Connection
+        fields: [ssid, security, psk, channel, bssid]
+      - title: IPv4 Settings
+        fields: [ipv4, ip-address, ip-mask, ip-gateway, dns, ignore-dns, ttl-in, ttl-out]
+      - title: IPv6 Settings
+        fields: [ipv6, ipv6-address, ipv6-prefix, ipv6-gateway, dns6, ignore-dns6]
+      - title: Ping Check
+        fields: [ping-check, ping-check-host, ping-check-port, ping-check-interval, ping-check-fails]
+      - title: Status
+        readonly: true
+        fields: [name, type, connected, address, mask, uptime, default, priority, security-level, mtu, mac]
+      - title: Traffic
+        readonly: true
+        fields: [rx-bits-per-second, tx-bits-per-second]
+        monitor: { command: interface/monitor-traffic, argument: interface }
+        chart: true
+      - title: Statistics
+        readonly: true
+        fields: [rxbytes, txbytes, rxpackets, txpackets, rxerrors, txerrors, rxdropped, txdropped]
+labels:
+  title: Connection
+  name: Interface
+  default: Default Route
+  address: IP Address
+  mac: MAC Address
+  mtu: MTU
+  rx-bits-per-second: Receiving
+  tx-bits-per-second: Sending
+  rxbytes: Received
+  txbytes: Sent
+  rxpackets: Rx Packets
+  txpackets: Tx Packets
+  rxerrors: Rx Errors
+  txerrors: Tx Errors
+  rxdropped: Rx Dropped
+  txdropped: Tx Dropped
+  schedule: Schedule
+  order: Connection Priority
+  connection-type: Connection Type
+  idle-timeout: Idle Timeout, s
+  ssid: Network Name (SSID)
+  security: Network Security
+  psk: Wi-Fi Password
+  channel: Channel
+  bssid: BSSID (Access Point MAC)
+  ipv4: IPv4 Configuration
+  ip-address: IPv4 Address
+  ip-mask: IPv4 Subnet Mask
+  ip-gateway: IPv4 Default Gateway
+  dns: IPv4 DNS Servers
+  ignore-dns: Ignore DNSv4 from ISP
+  ttl-in: Inbound TTL
+  ttl-out: Outbound TTL
+  ipv6: IPv6 Configuration
+  ipv6-address: IPv6 Address
+  ipv6-prefix: IPv6 Prefix
+  ipv6-gateway: IPv6 Default Gateway
+  dns6: IPv6 DNS Servers
+  ignore-dns6: Ignore DNSv6 from ISP
+  ping-check: Check Mode
+  ping-check-host: Address or Domain to Check
+  ping-check-port: TCP Port
+  ping-check-interval: Check Interval, s
+  ping-check-fails: Failure Threshold

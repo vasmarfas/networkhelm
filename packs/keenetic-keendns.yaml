@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, Domain Name]
+window:
+  title: Domain Name
+  tabs:
+    - { title: KeenDNS, path: show/ndns }
+paths:
+  show/ndns:
+    form: keendns
+forms:
+  keendns:
+    title: KeenDNS
+    tabs:
+      - title: Name
+        readonly: true
+        fields: [name, domain, access, address, address6, updated, ttp.direct, ttp.interface, ttp.address]
+labels:
+  address6: IPv6 Address
+  ttp.direct: Direct Access
+  ttp.interface: Tunnel Interface
+  ttp.address: Tunnel Address

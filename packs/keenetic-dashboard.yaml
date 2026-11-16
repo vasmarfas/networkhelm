@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Status, System Dashboard]
+window:
+  title: System Dashboard
+  tabs:
+    - { title: Dashboard, path: status }
+paths:
+  status:
+    form: dashboard
+    bytes: [used-memory, total-memory, rxbytes, txbytes]
+    bits: [rxspeed, txspeed]
+    gauges: { used-memory: total-memory }
+forms:
+  dashboard:
+    title: System Dashboard
+    tabs:
+      - title: Internet
+        readonly: true
+        fields: [internet, connection, connection-type, address, connected, rxspeed, txspeed, rxbytes, txbytes, dns-servers, keendns, keendns-access]
+      - title: About the System
+        readonly: true
+        fields: [model, firmware, channel, hostname, uptime, time, cpu-load, used-memory, total-memory]
+      - title: Networks
+        readonly: true
+        fields: [wifi, clients-online, clients-registered]
+labels:
+  internet: Internet Access
+  connection-type: Type
+  address: IP Address
+  connected: Connected For
+  rxspeed: Receiving
+  txspeed: Sending
+  rxbytes: Received
+  txbytes: Sent
+  dns-servers: DNS Servers
+  keendns: KeenDNS Name
+  keendns-access: KeenDNS Access
+  firmware: KeeneticOS
+  channel: Update Channel
+  hostname: Host Name
+  time: Router Time
+  cpu-load: CPU Load, %
+  used-memory: Memory Used
+  total-memory: Memory
+  wifi: Wi-Fi Networks
+  clients-online: Clients Online
+  clients-registered: Registered Clients

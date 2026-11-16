@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.journal
 
+import com.vasmarfas.networkhelm.keenetic.keeneticCall
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.openwrt.uciCli
@@ -33,7 +34,8 @@ fun command(platform: Platform, path: MenuPath, kind: EditKind, ids: List<String
     Platform.Opnsense -> opnsenseCall(path, kind, ids, values, moveBefore)
     Platform.Pfsense -> pfsenseCall(path, kind, ids, values)
     Platform.Vyos -> vyosCli(path, kind, ids, values)
-    Platform.RouterOs, Platform.Ssh, Platform.Snmp, Platform.Upnp, Platform.Keenetic -> cli(path, kind, ids, values, moveBefore)
+    Platform.Keenetic -> keeneticCall(path, kind, ids, values, moveBefore)
+    Platform.RouterOs, Platform.Ssh, Platform.Snmp, Platform.Upnp -> cli(path, kind, ids, values, moveBefore)
 }
 
 fun EditRecord.command(platform: Platform) = command(platform, path, kind, ids, after, moveBefore)

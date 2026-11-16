@@ -20,13 +20,21 @@ suspend fun recognize(host: String, open: Set<Int>, timeoutMillis: Int): Platfor
     recognized(open, null, pages + more)?.also { banner.cancel() } ?: recognized(open, banner.await(), pages + more)
 }
 
+// the domains KeenDNS and CrazeDNS give routers of Keenetic and Netcraze; through the cloud a router takes HTTPS only
+private val keeneticClouds = listOf("keenetic.link", "keenetic.pro", "keenetic.name", "keenetic.io", "netcraze.link", "netcraze.pro", "netcraze.club", "netcraze.io", "crazedns.ru")
+
+fun keeneticCloud(host: String): Boolean {
+    val name = host.lowercase().trimEnd('.')
+    return keeneticClouds.any { name.endsWith(".$it") }
+}
+
 fun recognized(open: Set<Int>, banner: String?, pages: List<String>): Platform? {
     val text = pages.joinToString("\n").lowercase()
     return when {
         8728 in open || 8729 in open || banner?.contains("ROSSSH") == true || "routeros" in text || "webfig" in text -> Platform.RouterOs
         "opnsense" in text -> Platform.Opnsense
         "pfsense" in text -> Platform.Pfsense
-        "keenetic" in text -> Platform.Keenetic
+        "keenetic" in text || "netcraze" in text -> Platform.Keenetic
         "welcome to vyos" in text -> Platform.Vyos
         "cgi-bin/luci" in text || "openwrt" in text || banner?.contains("dropbear", ignoreCase = true) == true -> Platform.OpenWrt
         else -> null

@@ -1,0 +1,49 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, DSL]
+window:
+  title: DSL
+  tabs:
+    - { title: Line, path: internet/dsl }
+paths:
+  internet/dsl:
+    form: line
+forms:
+  line:
+    title: DSL
+    tabs:
+      - title: Line
+        readonly: true
+        fields: [name, line, opmode, standard, profile, "-", ds_intd_rate, us_intd_rate, ds_fast_rate, us_fast_rate, ds_attain, us_attain, "-", ds_noise, us_noise, ds_atten, us_atten, ds_power, us_power, no-carrier, uptime]
+      - title: Line Settings
+        readonly: true
+        fields: [operating-mode.mode, operating-mode.annex, vdsl.profile, vdsl.carrier, adsl.snr-margin-offset, vdsl.snr-margin, dsl.ginp, vdsl.gvector, vdsl.upbo, dsl.disconnect-report]
+labels:
+  name: Interface
+  line: Line State
+  opmode: Current Mode
+  standard: Standard
+  profile: Profile
+  ds_intd_rate: Downstream Rate
+  us_intd_rate: Upstream Rate
+  ds_fast_rate: Downstream Rate (Fast Path)
+  us_fast_rate: Upstream Rate (Fast Path)
+  ds_attain: Attainable Downstream Rate
+  us_attain: Attainable Upstream Rate
+  ds_noise: Downstream Noise Margin
+  us_noise: Upstream Noise Margin
+  ds_atten: Downstream Attenuation
+  us_atten: Upstream Attenuation
+  ds_power: Downstream Power
+  us_power: Upstream Power
+  no-carrier: Carrier Losses
+  operating-mode.mode: Operating Mode
+  operating-mode.annex: Annex
+  vdsl.profile: VDSL Profiles
+  vdsl.carrier: Carrier
+  adsl.snr-margin-offset: ADSL SNR Margin
+  vdsl.snr-margin: VDSL SNR Margin
+  dsl.ginp: G.INP
+  vdsl.gvector: G.Vector
+  vdsl.upbo: UPBO
+  dsl.disconnect-report: Disconnect Report

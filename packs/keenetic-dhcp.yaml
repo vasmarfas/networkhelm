@@ -1,11 +1,33 @@
 # yaml-language-server: $schema=./pack.schema.json
 platform: keenetic
-menu: [IP, DHCP Bindings]
+menu: [My Networks, DHCP Server]
 window:
-  title: DHCP Bindings
+  title: DHCP Server
   tabs:
-    - { title: Bindings, path: ip/dhcp/bindings }
+    - { title: Pools, path: ip/dhcp/pool }
+    - { title: Leases, path: show/ip/dhcp/bindings }
+    - { title: Static Leases, path: ip/dhcp/host }
+paths:
+  ip/dhcp/pool:
+    columns: [name, interface, begin, end, lease, network, state, size, used]
+    form: pool
+  show/ip/dhcp/bindings:
+    columns: [ip, mac, hostname, name, expires]
+  ip/dhcp/host:
+    columns: [mac, ip]
+forms:
+  pool:
+    title: "DHCP Pool <{name}>"
+    tabs:
+      - title: General
+        fields: [name, interface, begin, end, lease, disabled]
+      - title: Status
+        readonly: true
+        fields: [network, router, state, size, used]
 labels:
-  ip: Address
+  ip: IP Address
   mac: MAC Address
   hostname: Host Name
+  begin: First Address
+  end: Last Address
+  lease: Lease Time

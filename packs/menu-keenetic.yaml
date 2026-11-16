@@ -1,14 +1,52 @@
 # yaml-language-server: $schema=./menu.schema.json
 platform: keenetic
 items:
-  - { title: Interfaces, path: interface }
-  - title: IP
+  - title: Status
     items:
-      - { title: ARP, path: ip/arp }
-      - { title: DHCP Bindings, path: ip/dhcp/bindings }
-      - { title: Hotspot, path: ip/hotspot }
-      - { title: Routes, path: ip/route }
-  - { title: Log, path: log }
-  - title: System
+      - { title: System Dashboard, path: status, window: dashboard }
+      - { title: Traffic Monitor, path: traffic }
+      - { title: Wi-Fi Monitor, path: wifi/radio }
+  - title: Internet
     items:
+      - { title: Ethernet Cable, path: internet/wired }
+      - { title: Mobile, path: internet/mobile }
+      - { title: DSL, path: internet/dsl }
+      - { title: Wireless ISP, path: internet/wisp }
+      - { title: Other Connections, path: vpn }
+      - { title: Connection Policies, path: ip/policy }
+      - { title: SMS, path: internet/sms }
+      - { title: USSD, path: internet/ussd }
+  - title: My Networks
+    items:
+      - { title: Client Lists, path: clients }
+      - { title: Access Points, path: wifi }
+      - { title: Segments, path: segments }
+      - { title: Wi-Fi System, path: mws/member }
+      - { title: IntelliQoS, path: qos }
+      - { title: DHCP Server, path: ip/dhcp/pool }
+      - { title: ARP, path: show/ip/arp }
+  - title: Network Rules
+    items:
+      - { title: Internet Safety, path: rc/dns-proxy/filter }
+      - { title: Firewall, path: firewall }
+      - { title: Port Forwarding, path: ip/static }
+      - { title: Routing, path: show/ip/route }
+      - { title: Domain Name, path: show/ndns }
+      - { title: Wireless ACL, path: wifi/acl }
+      - { title: DNS, path: show/ip/name-server }
+      - { title: NAT, path: ip/nat }
+  - title: Management
+    items:
+      - { title: System Settings, path: system }
+      - { title: Storages and Devices, path: system/storage }
+      - { title: Applications, path: apps }
+      - { title: Users and Access, path: user }
+      - { title: Diagnostics, path: tools/ping }
+      - { title: OPKG, path: system/opkg }
+      - { title: Clock, path: system/clock }
       - { title: Resources, path: system/resource }
+      - { title: Schedules, path: schedule }
+  - { title: Interfaces, path: interface }
+  - { title: IPv6, path: show/ipv6/addresses }
+  - { title: Log, path: show/log }
+  - { title: New Terminal, window: terminal }

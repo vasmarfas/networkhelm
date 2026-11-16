@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, USSD]
+window:
+  title: USSD
+  tabs:
+    - { title: USSD, path: internet/ussd }
+paths:
+  internet/ussd:
+    form: ussd
+forms:
+  ussd:
+    title: USSD
+    tabs:
+      - title: USSD
+        fields: [interface, request, response]
+labels:
+  interface: Modem
+  request: USSD Request
+  response: Response

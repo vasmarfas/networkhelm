@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [My Networks, Wi-Fi System]
+window:
+  title: Wi-Fi System
+  tabs:
+    - { title: Extenders, path: mws/member }
+    - { title: Settings, path: rc/mws }
+    - { title: Backhaul, path: rc/mws/backhaul }

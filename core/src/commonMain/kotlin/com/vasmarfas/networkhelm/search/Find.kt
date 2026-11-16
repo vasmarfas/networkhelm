@@ -141,11 +141,16 @@ private val pfsensePlaces = listOf(
 )
 
 private val keeneticPlaces = listOf(
-    Place("interface", listOf("interface-name", "description", "mac", "address")),
-    Place("ip/hotspot", listOf("ip", "mac", "hostname", "name")),
-    Place("ip/dhcp/bindings", listOf("ip", "mac", "name")),
-    Place("ip/arp", listOf("ip", "mac", "interface")),
-    Place("ip/route", listOf("destination", "gateway")),
+    Place("clients", listOf("name", "ip", "mac", "hostname")),
+    Place("interface", listOf("interface-name", "description", "mac", "address", "ssid")),
+    Place("wifi", listOf("ssid", "name")),
+    Place("segments", listOf("interface-name", "address")),
+    Place("show/ip/dhcp/bindings", listOf("ip", "mac", "name")),
+    Place("ip/dhcp/host", listOf("mac", "ip")),
+    Place("show/ip/arp", listOf("ip", "mac", "interface")),
+    Place("ip/route", listOf("network", "host", "gateway", "comment")),
+    Place("ip/static", listOf("to-address", "port", "comment")),
+    Place("firewall", listOf("source", "destination", "description")),
 )
 
 private val vyosPlaces = listOf(

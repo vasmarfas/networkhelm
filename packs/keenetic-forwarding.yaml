@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, Port Forwarding]
+window:
+  title: Port Forwarding
+  tabs:
+    - { title: Port Forwarding Rules, path: ip/static }
+    - { title: UPnP Port Forwarding Table, path: show/upnp/redirect }
+paths:
+  ip/static:
+    columns: [comment, input, ports, output, schedule]
+    form: forward
+forms:
+  forward:
+    title: "Port Forwarding Rule <{comment}>"
+    tabs:
+      - title: General
+        fields: [disabled, comment, interface, address, mask, to, to-address, protocol, mode, port, end-port, to-port, schedule]
+labels:
+  comment: Description
+  interface: Input
+  input: Input
+  ports: Ports
+  to: Output
+  output: Output
+  to-address: IP Address
+  mode: Rule type
+  port: Open the port
+  end-port: Last port
+  to-port: Redirect to port
+  schedule: Schedule

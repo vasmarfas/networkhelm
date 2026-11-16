@@ -3,7 +3,9 @@ package com.vasmarfas.networkhelm.session
 import com.vasmarfas.networkhelm.model.Platform
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNull
+import kotlin.test.assertTrue
 
 class RecognizeTest {
 
@@ -27,5 +29,17 @@ class RecognizeTest {
         assertEquals(Platform.OpenWrt, recognized(setOf(22, 80, 443), "SSH-2.0-dropbear", emptyList()))
         assertEquals(Platform.Keenetic, recognized(setOf(22, 80), "SSH-2.0-dropbear", listOf("<title>Keenetic Giga</title>")))
         assertNull(recognized(setOf(22, 443), "SSH-2.0-OpenSSH_9.6", listOf("server: nginx\n<title>403 Forbidden</title>")))
+    }
+
+    @Test
+    fun aNameOfKeenDnsOrCrazeDnsIsAKeeneticBehindTheCloud() {
+        assertTrue(keeneticCloud("home.keenetic.link"))
+        assertTrue(keeneticCloud("Router.NetCraze.Link."))
+        assertTrue(keeneticCloud("lab.crazedns.ru"))
+        assertTrue(keeneticCloud("abc.netcraze.io"))
+        assertFalse(keeneticCloud("netcraze.link"))
+        assertFalse(keeneticCloud("my.keenetic.net"))
+        assertFalse(keeneticCloud("keenetic.link.example.org"))
+        assertEquals(Platform.Keenetic, recognized(setOf(443), null, listOf("<title>Netcraze Hopper</title>")))
     }
 }

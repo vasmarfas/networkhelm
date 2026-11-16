@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, Clock]
+window:
+  title: Clock
+  tabs:
+    - { title: Clock, path: system/clock }
+paths:
+  system/clock:
+    form: clock
+forms:
+  clock:
+    title: Clock
+    tabs:
+      - title: Time
+        readonly: true
+        fields: [date, time, time-zone-name, dst]
+      - title: NTP
+        readonly: true
+        fields: [ntp-server, ntp-synchronized, ntp-accurate, ntp-elapsed]
+labels:
+  dst: DST
+  ntp-server: NTP Server
+  ntp-synchronized: Synchronized
+  ntp-accurate: Accurate
+  ntp-elapsed: Since Synchronized, s

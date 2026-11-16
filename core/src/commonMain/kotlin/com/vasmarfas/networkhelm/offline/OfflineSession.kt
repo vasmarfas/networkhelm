@@ -42,6 +42,8 @@ fun openConfig(file: String, bytes: ByteArray): OfflineSession? {
     }
     val export = if (gzip) null else parseExport(text).takeIf { it.menus.isNotEmpty() }
     if (export != null) return OfflineSession(export, exportDevice(export, file), text)
+    val running = if (gzip) null else keeneticConfig(text).takeIf { it.facts.isNotEmpty() }
+    if (running != null) return OfflineSession(running, keeneticDevice(running, file), text)
     val uci = uciConfig(parseUci(text, file.substringBefore('.'))).takeIf { it.menus.isNotEmpty() } ?: return null
     return OfflineSession(uci, openWrtDevice(uci, file), text)
 }

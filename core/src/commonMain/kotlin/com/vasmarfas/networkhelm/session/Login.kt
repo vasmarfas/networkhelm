@@ -45,8 +45,18 @@ sealed interface Login {
 
     @Serializable
     @SerialName("keenetic")
-    class Keenetic(override val host: String, val user: String, val secret: String, val tls: Boolean, val port: Int) : Login {
-        override suspend fun connect(trust: TrustPolicy) = connectKeenetic(KeeneticLogin(host, user, secret, tls, port), trust)
+    class Keenetic(
+        override val host: String,
+        val user: String,
+        val secret: String,
+        val tls: Boolean,
+        val port: Int,
+        val language: String = "en",
+        val sshHost: String = "",
+        val sshPort: Int = 22,
+        val tunnel: Boolean = false,
+    ) : Login {
+        override suspend fun connect(trust: TrustPolicy) = connectKeenetic(KeeneticLogin(host, user, secret, tls, port, language, sshHost, sshPort, tunnel), trust)
     }
 
     @Serializable
@@ -72,6 +82,6 @@ sealed interface Login {
         val agent: Boolean = false,
         val passphrase: String? = null,
     ) : Login {
-        override suspend fun connect(trust: TrustPolicy) = connectSshHost(host, port, user, SshAuth.of(password, key, agent, passphrase), trust)
+        override suspend fun connect(trust: TrustPolicy) = connectSshHost(host, port, user, SshAuth.of(password, key, agent, passphrase), trust, password.ifEmpty { null })
     }
 }

@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, Internet Safety]
+window:
+  title: Internet Safety
+  tabs:
+    - { title: Content Filter, path: rc/dns-proxy/filter }
+    - { title: DNS Configuration, path: ip/name-server }
+    - { title: DNS Interception, path: rc/dns-proxy/intercept }
+    - { title: DNS Proxy, path: rc/dns-proxy }

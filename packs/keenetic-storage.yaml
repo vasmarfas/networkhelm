@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, Storages and Devices]
+window:
+  title: Storages and Devices
+  tabs:
+    - { title: Drives, path: system/storage }
+paths:
+  system/storage:
+    columns: [name, state, size, free, partitions, usb]
+    bytes: [size, free]
+    form: drive
+    actions:
+      - { title: Safely Remove, command: eject, selection: true, confirm: true }
+forms:
+  drive:
+    title: "Drive <{name}>"
+    tabs:
+      - title: General
+        readonly: true
+        fields: [name, state, size, free, partitions, usb, ejectable, serial]
+labels:
+  name: Drive
+  state: Status
+  size: Size
+  free: Free
+  partitions: Partitions
+  usb: USB Port and Version
+  ejectable: Ejectable
+  serial: Serial Number

@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, System Settings]
+window:
+  title: System Settings
+  tabs:
+    - { title: Operation Indicators, path: system/led }
+    - { title: Buttons, path: system/button }
+    - { title: Indicators, path: system/led/binding }
+paths:
+  system/led:
+    form: leds
+    labels:
+      mode: Indicator mode
+      schedule: Work schedule
+  system/button:
+    columns: [button, action, handler, default]
+    form: button
+    labels:
+      button: Button
+      action: Press
+      handler: Action
+      default: By default
+  system/led/binding:
+    columns: [led, control, default]
+    form: led
+    labels:
+      led: Indicator
+      control: Turns on
+      default: By default
+forms:
+  leds:
+    title: Operation Indicators
+    tabs:
+      - title: Operation Indicators
+        fields: [mode, schedule]
+  button:
+    title: "Button <{button}>"
+    tabs:
+      - title: General
+        fields: [button, action, handler, default]
+  led:
+    title: "Indicator <{led}>"
+    tabs:
+      - title: General
+        fields: [led, control, default]

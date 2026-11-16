@@ -1,17 +1,34 @@
 # yaml-language-server: $schema=./pack.schema.json
 platform: keenetic
-menu: [IP, Hotspot]
+menu: [My Networks, Client Lists]
 window:
-  title: Hotspot
+  title: Client Lists
   tabs:
-    - { title: Hosts, path: ip/hotspot }
+    - { title: Clients, path: clients }
 paths:
-  ip/hotspot:
-    columns: [name, hostname, ip, mac, interface.name, active, rxbytes, txbytes, uptime]
+  clients:
+    columns: [name, ip, mac, segment, connection, online, uptime, rxbytes, txbytes, access, static-ip]
+    bytes: [rxbytes, txbytes]
+    quick: segment
+    sort: name
+    form: client
+forms:
+  client:
+    title: "Client <{name}>"
+    tabs:
+      - title: General
+        fields: [name, mac, access, static-ip]
+      - title: Status
+        readonly: true
+        fields: [ip, hostname, segment, connection, online, uptime, rxbytes, txbytes, expires, registered, policy, priority]
 labels:
-  ip: Address
+  ip: IP Address
   mac: MAC Address
   hostname: Host Name
-  interface.name: Interface
-  rxbytes: Rx Bytes
-  txbytes: Tx Bytes
+  connection: Connected Via
+  rxbytes: Rx
+  txbytes: Tx
+  access: Internet Access
+  static-ip: Permanent IP
+  expires: Lease Expires
+  priority: Traffic Priority

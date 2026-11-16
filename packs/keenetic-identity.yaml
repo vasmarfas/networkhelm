@@ -1,0 +1,35 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, System Settings]
+window:
+  title: System Settings
+  tabs:
+    - { title: General, path: system }
+    - { title: Firmware, path: system/update }
+    - { title: Time Synchronization, path: rc/ntp }
+    - { title: Wi-Fi, path: rc/interface/WifiMaster0 }
+    - { title: Configuration, path: rc/system/configuration }
+    - { title: Operation Indicators, path: system/led }
+    - { title: Indicators, path: system/led/binding }
+    - { title: Buttons, path: system/button }
+paths:
+  system:
+    form: identity
+forms:
+  identity:
+    title: System Settings
+    tabs:
+      - title: General
+        fields: [hostname, domainname, description]
+labels:
+  hostname: Host Name
+  domainname: Domain Name
+  description: Model
+  title: KeeneticOS
+  release: Build
+  sandbox: Update Channel
+  web: Web Interface
+  update: Update State
+  hw_id: Hardware ID
+  hw_version: Hardware Version
+  arch: Architecture

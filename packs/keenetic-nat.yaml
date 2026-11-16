@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, NAT]
+window:
+  title: NAT
+  tabs:
+    - { title: Masquerade, path: ip/nat }
+    - { title: Active Connections, path: show/ip/nat }
+paths:
+  ip/nat:
+    columns: [interface]
+  show/ip/nat:
+    columns: [protocol, src, sport, dst, dport, src-out, dport-out, bytes, packets, bytes-out, packets-out]
+    bytes: [bytes, bytes-out]
+labels:
+  src: Src. Address
+  sport: Src. Port
+  dst: Dst. Address
+  dport: Dst. Port
+  src-out: Reply Src. Address
+  dport-out: Reply Dst. Port
+  bytes-out: Reply Bytes
+  packets-out: Reply Packets

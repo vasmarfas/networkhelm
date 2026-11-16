@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [IPv6]
+window:
+  title: IPv6
+  tabs:
+    - { title: Addresses, path: show/ipv6/addresses }
+    - { title: Prefixes, path: show/ipv6/prefixes }
+paths:
+  show/ipv6/addresses:
+    columns: [address, prefix-length, interface, proto, valid-lifetime]
+  show/ipv6/prefixes:
+    columns: [prefix, interface, valid-lifetime, preferred-lifetime, global]

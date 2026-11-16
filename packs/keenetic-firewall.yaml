@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, Firewall]
+window:
+  title: Firewall
+  tabs:
+    - { title: IPv4, path: firewall }
+    - { title: IPv6, path: firewall/ipv6 }
+paths:
+  firewall:
+    columns: [interface, direction, action, protocol, source, source-port, destination, destination-port, description]
+    ordered: true
+    form: rule
+forms:
+  rule:
+    title: "Rule <{action} {protocol}>"
+    tabs:
+      - title: General
+        fields: [interface, direction, action, protocol, source, source-port, destination, destination-port, description, disabled]
+    only:
+      - { fields: [source-port, destination-port], where: { protocol: [tcp, udp] } }
+labels:
+  position: "#"
+  source-port: Src. Port
+  destination-port: Dst. Port
+  acl: Access List

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, Schedules]
+window:
+  title: Schedules
+  tabs:
+    - { title: Schedules, path: schedule }
+paths:
+  schedule:
+    columns: [name, description, actions]
+    form: schedule
+forms:
+  schedule:
+    title: "Schedule editor <{description}>"
+    tabs:
+      - title: General
+        fields: [name, description, actions]
+labels:
+  description: Schedule name
+  actions: Start and Stop

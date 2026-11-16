@@ -1,0 +1,110 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, Other Connections]
+window:
+  title: Other Connections
+  tabs:
+    - { title: Connections, path: vpn }
+    - { title: WireGuard, path: vpn/wireguard }
+    - { title: Peers, path: vpn/wireguard/peer }
+    - { title: OpenVPN, path: vpn/openvpn }
+    - { title: IP Tunnels, path: vpn/tunnel }
+    - { title: IPv6 over IPv4, path: vpn/6in4 }
+paths:
+  vpn:
+    columns: [description, type, server, user, connected, address, uptime, rxbytes, txbytes]
+    form: tunnel
+  vpn/wireguard:
+    columns: [description, name, address, listen-port, peers, connected, global, uptime, rxbytes, txbytes]
+    bytes: [rxbytes, txbytes]
+    form: wireguard
+    actions:
+      - { title: Generate Key Pair, command: generate-keys, selection: true, confirm: true }
+  vpn/wireguard/peer:
+    columns: [connection, comment, public-key, endpoint, allowed-ips, online, last-handshake, rxbytes, txbytes]
+    bytes: [rxbytes, txbytes]
+    form: peer
+  vpn/openvpn:
+    columns: [description, name, connected, address, global, accept-routes, uptime, rxbytes, txbytes]
+    bytes: [rxbytes, txbytes]
+    form: openvpn
+    labels:
+      config: OpenVPN Configuration
+  vpn/tunnel:
+    columns: [description, name, type, address, local, remote, connected, uptime, rxbytes, txbytes]
+    bytes: [rxbytes, txbytes]
+    form: ip-tunnel
+  vpn/6in4:
+    columns: [description, name, server, ipv6-address, ipv6-prefix, connected, uptime]
+    form: broker
+    labels:
+      server: Broker IPv4 Address
+      ipv6-address: Tunnel IPv6 Address
+forms:
+  tunnel:
+    title: "Connection <{description}>"
+    tabs:
+      - title: General
+        fields: [type, description, server, user, password, disabled]
+  wireguard:
+    title: "WireGuard <{description}>"
+    tabs:
+      - title: General
+        fields: [description, config, disabled, global, private-key, public-key, address, listen-port, dns, "-", mtu, adjust-mss, schedule]
+  peer:
+    title: "Peer <{comment}>"
+    tabs:
+      - title: General
+        fields: [interface, comment, public-key, preshared-key, endpoint, allowed-ips, keepalive, via]
+      - title: Status
+        readonly: true
+        fields: [online, last-handshake, rxbytes, txbytes]
+  openvpn:
+    title: "OpenVPN <{description}>"
+    tabs:
+      - title: General
+        fields: [description, disabled, global, config, accept-routes, via, schedule]
+  ip-tunnel:
+    title: "Tunnel <{description}>"
+    tabs:
+      - title: General
+        fields: [type, description, disabled, global, address, destination, source, eoip-id, mtu, schedule]
+      - title: Status
+        readonly: true
+        fields: [name, connected, local, remote, uptime]
+  broker:
+    title: "Tunnel <{description}>"
+    tabs:
+      - title: General
+        fields: [description, disabled, global, server, ipv6-address, ipv6-prefix]
+labels:
+  description: Connection Name
+  server: Server Address
+  user: User Name
+  config: Configuration File
+  global: Use for Accessing the Internet
+  private-key: Private Key
+  public-key: Public Key
+  address: IPv4 Address
+  listen-port: Listen Port
+  dns: IPv4 DNS Servers
+  adjust-mss: TCP MSS Clamping
+  schedule: Schedule
+  peers: Peers
+  connection: Connection
+  comment: Peer Name
+  endpoint: Peer Address and Port
+  allowed-ips: Allowed Subnets
+  keepalive: Persistent Keepalive, s
+  preshared-key: Preshared Key
+  via: Connect Via
+  last-handshake: Last Handshake
+  accept-routes: Obtain Routes from the Remote Side
+  destination: Remote Address
+  source: Source
+  local: Source
+  remote: Destination
+  eoip-id: EoIP Tunnel ID
+  ipv6-prefix: IPv6 Prefix
+  rxbytes: Received
+  txbytes: Sent

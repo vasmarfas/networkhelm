@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, SMS]
+window:
+  title: SMS
+  tabs:
+    - { title: Messages, path: internet/sms }
+paths:
+  internet/sms:
+    columns: [timestamp, from, text, read, interface, storage]
+    form: message
+forms:
+  message:
+    title: "SMS <{from}>"
+    tabs:
+      - title: General
+        fields: [interface, to, message, from, timestamp, text, read]
+labels:
+  interface: Modem
+  to: Send Message To
+  message: Message Text
+  from: From
+  timestamp: Time
+  text: Text
+  read: Read
+  storage: Storage

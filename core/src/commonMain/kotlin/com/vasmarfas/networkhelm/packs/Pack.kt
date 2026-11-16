@@ -273,7 +273,7 @@ class PackOwner(val path: String, val by: String, val title: String)
 class PackMonitor(val command: String, val argument: String? = null)
 
 @Serializable
-class PackAction(
+data class PackAction(
     val title: String,
     val command: String,
     val selection: Boolean = false,
@@ -345,7 +345,8 @@ class Menu(
 
 const val DEFAULT_MENU_PRIO = 500
 
-// fill: values for fields of the window by their labels; start: the window runs its command as it opens; item: a new row of the table at path opens instead of its window
+// fill: values for fields of the window by their labels; start: the window runs its command as it opens; item: a new row of the table at path opens instead of its window;
+// icon: the title the icon of the entry goes by, when the router's words have given it another title
 @Serializable
 class MenuEntry(
     val title: String,
@@ -361,6 +362,7 @@ class MenuEntry(
     val fill: Map<String, String> = emptyMap(),
     val start: Boolean = false,
     val item: Boolean = false,
+    val icon: String? = null,
 )
 
 @Serializable

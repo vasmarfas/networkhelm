@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=./pack.schema.json
 platform: keenetic
-menu: [System, Resources]
+menu: [Management, Resources]
 window:
   title: Resources
   tabs:

@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, Applications]
+window:
+  title: Applications
+  tabs:
+    - { title: Applications, path: apps }
+    - { title: OpenConnect VPN, path: rc/oc-server }
+    - { title: WireGuard VPN, path: rc/wireguard-server }
+paths:
+  apps:
+    columns: [name, status, components]
+labels:
+  name: Application

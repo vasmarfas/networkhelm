@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, DNS]
+window:
+  title: DNS
+  tabs:
+    - { title: Servers, path: show/ip/name-server }
+    - { title: Static Servers, path: ip/name-server }
+paths:
+  show/ip/name-server:
+    columns: [address, domain, interface, service]
+  ip/name-server:
+    columns: [address, domain]
+labels:
+  service: Source

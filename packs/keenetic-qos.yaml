@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [My Networks, IntelliQoS]
+window:
+  title: IntelliQoS
+  tabs:
+    - { title: IntelliQoS, path: qos }
+paths:
+  qos:
+    form: qos
+forms:
+  qos:
+    title: IntelliQoS
+    tabs:
+      - title: IntelliQoS
+        readonly: true
+        fields: [enable]
+labels:
+  enable: Traffic Prioritization

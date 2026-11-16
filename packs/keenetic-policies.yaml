@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, Connection Policies]
+window:
+  title: Connection Policies
+  tabs:
+    - { title: Policies, path: ip/policy }
+paths:
+  ip/policy:
+    columns: [name, description, multipath, connections]
+    form: policy
+forms:
+  policy:
+    title: "Policy <{name}>"
+    tabs:
+      - title: General
+        fields: [name, description, multipath, connections]
+labels:
+  multipath: Multipath
+  connections: Connections

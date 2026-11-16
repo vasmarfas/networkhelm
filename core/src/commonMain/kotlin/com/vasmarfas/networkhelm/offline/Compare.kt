@@ -13,7 +13,8 @@ fun configOf(platform: Platform, text: String): Config = when (platform) {
     Platform.RouterOs -> parseExport(text)
     Platform.OpenWrt -> uciConfig(parseUci(text))
     Platform.Vyos -> vyosConfig(text)
-    Platform.Ssh, Platform.Opnsense, Platform.Snmp, Platform.Upnp, Platform.Pfsense, Platform.Keenetic -> Config(emptyMap())
+    Platform.Keenetic -> keeneticConfig(text)
+    Platform.Ssh, Platform.Opnsense, Platform.Snmp, Platform.Upnp, Platform.Pfsense -> Config(emptyMap())
 }
 
 fun compare(before: Config, after: Config): List<MenuDifference> =

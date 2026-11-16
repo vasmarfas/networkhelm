@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Network Rules, Firewall]
+window:
+  title: Firewall
+  tabs:
+    - { title: IPv6, path: firewall/ipv6 }
+paths:
+  firewall/ipv6:
+    columns: [interface, direction, action, protocol, source, source-port, destination, destination-port, icmp-type, schedule, description]
+    ordered: true
+    form: rule6
+    labels:
+      position: "#"
+      acl: Access List
+      source-port: Src. Port
+      destination-port: Dst. Port
+      icmp-type: Type
+      icmp-code: Code
+forms:
+  rule6:
+    title: "Rule <{action} {protocol}>"
+    tabs:
+      - title: General
+        fields: [interface, direction, action, protocol, source, source-port, destination, destination-port, icmp-type, icmp-code, schedule, description, disabled]
+    only:
+      - { fields: [source-port, destination-port], where: { protocol: [tcp, udp] } }
+      - { fields: [icmp-type, icmp-code], where: { protocol: [icmp] } }

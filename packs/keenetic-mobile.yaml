@@ -1,0 +1,65 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Internet, Mobile]
+window:
+  title: Mobile
+  tabs:
+    - { title: Connections, path: internet/mobile }
+paths:
+  internet/mobile:
+    columns: [title, name, type, connected, address, uptime, default, priority, rx-bits-per-second, tx-bits-per-second, rxbytes, txbytes]
+    readonly: [rx-bits-per-second, tx-bits-per-second]
+    monitor: { command: interface/monitor-traffic, argument: interface }
+    bytes: [rxbytes, txbytes]
+    form: connection
+forms:
+  connection:
+    title: "Connection <{title}>"
+    tabs:
+      - title: General
+        fields: [description, disabled, schedule, order]
+      - title: Operator Settings
+        fields: [apn, user, password, authentication, network-type, roaming]
+      - title: Ping Check
+        fields: [ping-check, ping-check-host, ping-check-port, ping-check-interval, ping-check-fails]
+      - title: Status
+        readonly: true
+        fields: [name, type, connected, address, mask, uptime, default, priority, security-level, mtu, mac]
+      - title: Traffic
+        readonly: true
+        fields: [rx-bits-per-second, tx-bits-per-second]
+        monitor: { command: interface/monitor-traffic, argument: interface }
+        chart: true
+      - title: Statistics
+        readonly: true
+        fields: [rxbytes, txbytes, rxpackets, txpackets, rxerrors, txerrors, rxdropped, txdropped]
+labels:
+  title: Connection
+  name: Interface
+  default: Default Route
+  address: IP Address
+  mac: MAC Address
+  mtu: MTU
+  rx-bits-per-second: Receiving
+  tx-bits-per-second: Sending
+  rxbytes: Received
+  txbytes: Sent
+  rxpackets: Rx Packets
+  txpackets: Tx Packets
+  rxerrors: Rx Errors
+  txerrors: Tx Errors
+  rxdropped: Rx Dropped
+  txdropped: Tx Dropped
+  schedule: Schedule
+  order: Connection Priority
+  apn: Access Point (APN)
+  user: User Name
+  password: Password
+  authentication: Authentication Type
+  network-type: Network Type
+  roaming: Enable Roaming
+  ping-check: Check Mode
+  ping-check-host: Address or Domain to Check
+  ping-check-port: TCP Port
+  ping-check-interval: Check Interval, s
+  ping-check-fails: Failure Threshold

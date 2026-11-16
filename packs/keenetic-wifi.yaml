@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [My Networks, Access Points]
+window:
+  title: Access Points
+  tabs:
+    - { title: Access Points, path: wifi }
+    - { title: Radios, path: wifi/radio }
+paths:
+  wifi:
+    columns: [ssid, band, channel, security, segment, clients, running, name]
+    form: ap
+  wifi/radio:
+    columns: [name, band, channel, width, standard, temperature, rate, busy-channels, access-points, running]
+    bits: [rate]
+forms:
+  ap:
+    title: "Access Point <{ssid}>"
+    tabs:
+      - title: General
+        fields: [ssid, security, psk, disabled, description]
+      - title: Status
+        readonly: true
+        fields: [name, band, channel, segment, clients, running, mac, interface-name]
+    only:
+      - { fields: [psk], where: { security: [wpa2, wpa3] } }
+labels:
+  ssid: Network Name (SSID)
+  psk: Password
+  name: Interface
+  mac: MAC Address
+  width: Channel Width, MHz
+  standard: Standard
+  temperature: Temperature, °C
+  rate: Rate
+  busy-channels: Busy Channels
+  access-points: Access Points

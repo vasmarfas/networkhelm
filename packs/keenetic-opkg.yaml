@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Management, OPKG]
+window:
+  title: OPKG
+  tabs:
+    - { title: OPKG, path: system/opkg }
+paths:
+  system/opkg:
+    form: opkg
+forms:
+  opkg:
+    title: OPKG
+    tabs:
+      - title: OPKG
+        readonly: true
+        fields: [disk, components]
+labels:
+  disk: Drive
+  components: Components

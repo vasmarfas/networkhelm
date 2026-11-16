@@ -7,17 +7,45 @@ window:
     - { title: Interface, path: interface }
 paths:
   interface:
-    columns: [id, interface-name, type, description, link, state, mac, mtu, address, mask, uptime]
+    columns: [interface-name, name, type, description, rx-bits-per-second, tx-bits-per-second, link, state, mac, mtu, address, mask, uptime]
+    readonly: [rx-bits-per-second, tx-bits-per-second]
+    monitor: { command: interface/monitor-traffic, argument: interface }
+    bytes: [rxbytes, txbytes]
     category: type
     form: interface
 forms:
   interface:
-    title: Interface
+    title: "Interface <{name}>"
     tabs:
       - title: General
+        fields: [interface-name, description, disabled, ssid, psk]
+      - title: Status
         readonly: true
-        fields: [id, interface-name, type, description, link, connected, state, mac, mtu, address, mask, uptime]
+        fields: [name, type, link, connected, state, mac, mtu, address, mask, uptime, security-level]
+      - title: Traffic
+        readonly: true
+        fields: [rx-bits-per-second, tx-bits-per-second]
+        monitor: { command: interface/monitor-traffic, argument: interface }
+        chart: true
+      - title: Statistics
+        readonly: true
+        fields: [rxbytes, txbytes, rxpackets, txpackets, rxerrors, txerrors, rxdropped, txdropped]
+    only:
+      - { fields: [ssid, psk], where: { type: [AccessPoint] }, hide: true }
 labels:
-  id: Name
+  interface-name: Name
+  name: Interface
   mac: MAC Address
   mtu: MTU
+  ssid: SSID
+  psk: Wi-Fi Password
+  rx-bits-per-second: Rx Rate
+  tx-bits-per-second: Tx Rate
+  rxbytes: Received
+  txbytes: Sent
+  rxpackets: Rx Packets
+  txpackets: Tx Packets
+  rxerrors: Rx Errors
+  txerrors: Tx Errors
+  rxdropped: Rx Dropped
+  txdropped: Tx Dropped

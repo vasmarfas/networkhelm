@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: keenetic
+menu: [Status, Traffic Monitor]
+window:
+  title: Traffic Monitor
+  tabs:
+    - { title: Top Clients, path: traffic }
+paths:
+  traffic:
+    columns: [name, mac, rx-rate, tx-rate, rxbytes, txbytes, online]
+    bits: [rx-rate, tx-rate]
+labels:
+  rx-rate: Receiving
+  tx-rate: Sending
+  rxbytes: Received
+  txbytes: Sent

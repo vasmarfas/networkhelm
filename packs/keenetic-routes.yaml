@@ -1,10 +1,25 @@
 # yaml-language-server: $schema=./pack.schema.json
 platform: keenetic
-menu: [IP, Routes]
+menu: [Network Rules, Routing]
 window:
-  title: Routes
+  title: Routing
   tabs:
-    - { title: Routes, path: ip/route }
+    - { title: Routes, path: show/ip/route }
+    - { title: Static Routes, path: ip/route }
 paths:
+  show/ip/route:
+    columns: [destination, gateway, interface, metric, proto, flags]
   ip/route:
-    columns: [destination, gateway, interface, metric]
+    columns: [network, mask, host, gateway, interface, metric, auto]
+    form: route
+forms:
+  route:
+    title: "Route <{network}{host}>"
+    tabs:
+      - title: General
+        fields: [network, mask, host, gateway, interface, metric, auto, comment]
+labels:
+  proto: Source
+  host: Host
+  auto: Only While Gateway Is Up
+  comment: Description
