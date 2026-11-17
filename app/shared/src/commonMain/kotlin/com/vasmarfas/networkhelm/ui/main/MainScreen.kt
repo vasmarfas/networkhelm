@@ -66,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.AppWindow
 import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.Box
+import com.composables.icons.lucide.ChevronDown
 import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.EllipsisVertical
@@ -108,9 +109,11 @@ import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.routeros.schema.label
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.SafeMode
+import com.vasmarfas.networkhelm.session.SshHostSession
 import com.vasmarfas.networkhelm.transport.tcpListening
 import com.vasmarfas.networkhelm.ui.files.FileWindow
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
+import com.vasmarfas.networkhelm.ui.files.LocalTransfers
 import com.vasmarfas.networkhelm.ui.kit.Button
 import com.vasmarfas.networkhelm.ui.kit.DropdownItem
 import com.vasmarfas.networkhelm.ui.kit.Hint
@@ -320,7 +323,8 @@ fun MainScreen(
                 Phone(tab, onSecure, Modifier.weight(1f).fillMaxWidth())
             } else {
                 Row(Modifier.weight(1f).fillMaxWidth()) {
-                    LeftMenu(tab, search, Modifier.width(200.dp).fillMaxHeight())
+                    // a group opened downward puts its items into the menu itself, so the menu needs their width
+                    LeftMenu(tab, search, Modifier.width(if (LocalSettings.current.menuBelow) 240.dp else 200.dp).fillMaxHeight())
                     val titleTabs: @Composable (WindowState, Color) -> Unit = { window, colour ->
                         tab.specs[window.id]?.takeIf { it.selector || it.tabs.size > 1 }?.let { spec ->
                             if (spec.selector) Box(Modifier.fillMaxHeight(), contentAlignment = Alignment.CenterStart) { ModeSelect(spec) }
@@ -381,7 +385,7 @@ private fun WindowContent(tab: RouterTab, window: WindowState, onSecure: (suspen
     val close = { tab.workspace.close(window) }
     tab.specs[window.id]?.let { spec ->
         LaunchedEffect(spec) { tab.expand(spec) }
-        CompositionLocalProvider(LocalLogWindows provides tab.logWindows) {
+        CompositionLocalProvider(LocalLogWindows provides tab.logWindows, LocalTransfers provides tab.transfers) {
             PathWindow(tab.session, spec, tab.tables, tab::openItem, tab::open, tabsInTitle = !Theme.classic && !LocalCompact.current, onFit = { tab.workspace.fit(window, it) }, onClose = close)
         }
     }
@@ -394,7 +398,13 @@ private fun WindowContent(tab: RouterTab, window: WindowState, onSecure: (suspen
     tab.logEntries[window.id]?.let { LogEntryView(it, window, tab.logWindows) }
     if (window.id == tab.journalWindow) JournalView(tab.journal, tab.session.device.platform)
     if (window.id == tab.tunnelsWindow) TunnelsView(tab)
-    if (window.id == tab.dashboardWindow) DashboardView(tab)
+    if (window.id == tab.dashboardWindow) {
+        when (tab.session.device.platform) {
+            Platform.Keenetic -> KeeneticDashboardView(tab)
+            Platform.Ssh -> LinuxDashboardView(tab)
+            else -> DashboardView(tab)
+        }
+    }
     if (window.id == tab.topologyWindow) TopologyView(tab)
     tab.comparisons[window.id]?.let { CompareView(tab, it) }
     if (window.id == tab.prepareWindow) PrepareView(tab.session, onSecure)
@@ -402,12 +412,13 @@ private fun WindowContent(tab: RouterTab, window: WindowState, onSecure: (suspen
     if (window.id in tab.terminals) {
         val ssh = tab.session.ssh
         val terminal = LocalTerminal.current
-        if (ssh != null && terminal != null) TerminalView(ssh, terminal = terminal)
+        val sudo = if (tab.session.device.platform == Platform.Ssh) (tab.session as? SshHostSession)?.password.orEmpty() else null
+        if (ssh != null && terminal != null) TerminalView(ssh, tab.consoles, window.id, sudo = sudo, terminal = terminal)
     }
     if (window.id in tab.telnets) {
         val ssh = tab.session.ssh
         val terminal = LocalTerminal.current
-        if (ssh != null && terminal != null) TelnetView(ssh, terminal, tab.telnetCalls[window.id])
+        if (ssh != null && terminal != null) TelnetView(ssh, tab.consoles, window.id, terminal, tab.telnetCalls[window.id])
     }
 }
 
@@ -599,7 +610,7 @@ private fun Toolbar(
             problem?.let { Text(deviceMessage(it), color = palette.danger, style = Theme.type.small, singleLine = true, overflow = TextOverflow.Ellipsis) }
         }
         if (tab.session.device.platform == Platform.OpenWrt) {
-            tab.viewProblem?.let { Text(it, color = palette.danger, style = Theme.type.small, singleLine = true, overflow = TextOverflow.Ellipsis) }
+            tab.viewProblem?.let { Text(deviceMessage(it), color = palette.danger, style = Theme.type.small, singleLine = true, overflow = TextOverflow.Ellipsis) }
             val views = MenuView.entries.filter { it != MenuView.Native || tab.session.capabilities.nativeMenu }
             Select(tab.view, views, { viewLabel(it) }, { view -> scope.launch { tab.changeView(view) } }, Modifier.width(if (compact) 110.dp else 150.dp).testTag("view"), hint = { viewHint(it) })
         }
@@ -847,13 +858,13 @@ private fun locked(device: DeviceInfo, entry: MenuEntry): String? {
 @Composable
 private fun MenuItem(entry: MenuEntry, device: DeviceInfo, open: (MenuEntry) -> Unit) {
     if (entry.items.isEmpty()) {
-        MenuRow(entry.title, false, icon = menuIcon(entry.title), locked = locked(device, entry)) { open(entry) }
+        MenuRow(entry.title, false, icon = menuIcon(entry.icon ?: entry.title), locked = locked(device, entry)) { open(entry) }
         return
     }
     val palette = Theme.palette
     var expanded by remember { mutableStateOf(false) }
-    if (LocalCompact.current) {
-        MenuRow(entry.title, true, active = expanded, icon = menuIcon(entry.title)) { expanded = !expanded }
+    if (LocalCompact.current || LocalSettings.current.menuBelow) {
+        MenuRow(entry.title, true, active = expanded, icon = menuIcon(entry.icon ?: entry.title), open = expanded) { expanded = !expanded }
         if (expanded) for (child in entry.items) MenuRow(child.title, false, inner = true, locked = locked(device, child)) { open(child) }
         return
     }
@@ -880,12 +891,12 @@ private fun MenuItem(entry: MenuEntry, device: DeviceInfo, open: (MenuEntry) -> 
                 }
             }
         },
-        anchor = { MenuRow(entry.title, true, active = expanded, icon = menuIcon(entry.title)) { expanded = true } },
+        anchor = { MenuRow(entry.title, true, active = expanded, icon = menuIcon(entry.icon ?: entry.title)) { expanded = true } },
     )
 }
 
 @Composable
-private fun MenuRow(title: String, group: Boolean, active: Boolean = false, inner: Boolean = false, highlight: String = "", icon: ThemeIcon? = null, locked: String? = null, onClick: () -> Unit) {
+private fun MenuRow(title: String, group: Boolean, active: Boolean = false, inner: Boolean = false, highlight: String = "", icon: ThemeIcon? = null, locked: String? = null, open: Boolean = false, onClick: () -> Unit) {
     val palette = Theme.palette
     val divider = if (Theme.classic) Modifier.drawBehind { drawLine(palette.divider ?: palette.line, Offset(0f, size.height - 0.5f), Offset(size.width, size.height - 0.5f), 1.dp.toPx()) } else Modifier
     val pill = if (Theme.material) Modifier.background(palette.raised).padding(horizontal = 8.dp).clip(RoundedCornerShape(50)) else Modifier
@@ -905,9 +916,10 @@ private fun MenuRow(title: String, group: Boolean, active: Boolean = false, inne
                 Modifier.weight(1f),
                 color = if (locked != null) palette.muted else Color.Unspecified,
                 maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
             )
             if (locked != null) UnstyledIcon(Lucide.Lock, locked, Modifier.size(12.dp).testTag("menu-locked"), tint = palette.muted)
-            if (group) UnstyledIcon(Lucide.ChevronRight, null, Modifier.size(14.dp), tint = Theme.palette.muted)
+            if (group) UnstyledIcon(if (open) Lucide.ChevronDown else Lucide.ChevronRight, null, Modifier.size(14.dp), tint = Theme.palette.muted)
         }
     }
 }

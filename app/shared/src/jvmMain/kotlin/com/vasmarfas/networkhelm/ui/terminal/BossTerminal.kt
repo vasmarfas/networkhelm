@@ -1,13 +1,22 @@
 package com.vasmarfas.networkhelm.ui.terminal
 
 import ai.rever.bossterm.compose.EmbeddableTerminal
+import ai.rever.bossterm.compose.EmbeddableTerminalState
 import ai.rever.bossterm.compose.PlatformServices
 import ai.rever.bossterm.compose.getPlatformServices
 import ai.rever.bossterm.compose.rememberEmbeddableTerminalState
 import ai.rever.bossterm.compose.settings.TerminalSettingsOverride
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.input.pointer.pointerInput
 import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import kotlinx.coroutines.CompletableDeferred
@@ -19,13 +28,35 @@ import java.nio.charset.CodingErrorAction
 fun BossTerminal(shell: ShellChannel, modifier: Modifier) {
     val services = remember(shell) { SshPlatformServices(shell) }
     val lines = LocalSettings.current.terminalLines
-    EmbeddableTerminal(
-        state = rememberEmbeddableTerminalState(),
-        modifier = modifier,
-        autoFocus = true,
-        platformServices = services,
-        settingsOverride = remember(lines) { TerminalSettingsOverride(bufferMaxLines = lines) },
-    )
+    // the screen of a console its window keeps lives as long as the console, so the window comes back as it was left
+    val kept = shell as? KeptShell
+    val opened = remember(kept) { kept?.screen == null }
+    val state = if (kept == null) {
+        rememberEmbeddableTerminalState()
+    } else {
+        remember(kept) { kept.screen as? EmbeddableTerminalState ?: EmbeddableTerminalState().also { kept.screen = it; kept.release = it::dispose } }
+    }
+    val focus = remember { FocusRequester() }
+    // the screen of a new console comes once its shell is connected, and the keyboard goes to it then
+    val connected = state.isConnected
+    LaunchedEffect(kept, connected) { if (opened && connected) focus.requestFocus() }
+    // the console takes the press: left to the workspace behind, it would take the keyboard back on release
+    Box(
+        modifier.focusRequester(focus).pointerInput(Unit) {
+            awaitEachGesture {
+                awaitFirstDown(requireUnconsumed = false).consume()
+                focus.requestFocus()
+            }
+        },
+    ) {
+        EmbeddableTerminal(
+            state = state,
+            modifier = Modifier.fillMaxSize(),
+            autoFocus = true,
+            platformServices = services,
+            settingsOverride = remember(lines) { TerminalSettingsOverride(bufferMaxLines = lines) },
+        )
+    }
 }
 
 internal actual val terminalScrollback = true

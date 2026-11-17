@@ -66,6 +66,23 @@ class SettingsTest {
     }
 
     @Test
+    fun twoCopiesOfTheAppKeepWhatTheOtherChangedAndShowTheirOwn() = runTest {
+        val storage = MemoryStorage()
+        val first = AppSettings(storage).also { it.load() }
+        val second = AppSettings(storage).also { it.load() }
+        first.change { it.copy(rowSpacing = 4) }
+        first.keep(ThemeFile("First"))
+        second.change { it.copy(confirmRemoval = false) }
+        second.arrange { it.copy(listsBelow = true) }
+        second.keep(ThemeFile("Second"))
+        assertEquals(0, second.current.rowSpacing)
+
+        val reread = AppSettings(storage).also { it.load() }
+        assertEquals(Settings(rowSpacing = 4, confirmRemoval = false, listsBelow = true), reread.current)
+        assertEquals(listOf("First", "Second"), reread.themes.map { it.name })
+    }
+
+    @Test
     fun unreadableThemesAreNotOverwritten() = runTest {
         val storage = MemoryStorage()
         storage.write("themes.json", "[{\"name\": ")

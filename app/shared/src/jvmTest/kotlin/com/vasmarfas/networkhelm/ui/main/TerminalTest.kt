@@ -162,7 +162,7 @@ class TerminalTest {
                 first.get().getOutputStream().write("[rd-test@MikroTik] > ".encodeToByteArray())
                 waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("MikroTik", substring = true)).fetchSemanticsNodes().isNotEmpty() }
                 first.get().apply { setSoLinger(true, 0) }.close()
-                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection to the router is closed")).fetchSemanticsNodes().isNotEmpty() }
+                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection is closed")).fetchSemanticsNodes().isNotEmpty() }
                 val second = CompletableFuture.supplyAsync { server.accept() }
                 onNodeWithTag("terminal-reopen").performClick()
                 waitUntil(timeoutMillis = 5_000) { second.isDone }
@@ -189,7 +189,7 @@ class TerminalTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("New Terminal")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("New Terminal").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Could not open the console", substring = true)).fetchSemanticsNodes().isNotEmpty() }
-        onNodeWithText("Could not open the console: The connection to the router is lost, reconnecting…").assertExists()
+        onNodeWithText("Could not open the console: The connection is lost, reconnecting…").assertExists()
     }
 
     @Test

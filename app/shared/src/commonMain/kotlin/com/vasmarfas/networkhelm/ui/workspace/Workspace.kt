@@ -103,9 +103,10 @@ fun Workspace(
                                     active = state.active === window,
                                     viewport = viewport,
                                     scroll = { horizontal.value to vertical.value },
-                                    onFocus = {
+                                    // a window that holds the keyboard keeps it: a press on its title or frame would leave a console without it
+                                    onFocus = { holding ->
                                         state.bringToFront(window)
-                                        focus.requestFocus()
+                                        if (!holding) focus.requestFocus()
                                     },
                                     onMinimize = { state.minimize(window) },
                                     onDetach = onDetach?.takeIf { detachable(window) }?.let { detach -> { detach(window) } },

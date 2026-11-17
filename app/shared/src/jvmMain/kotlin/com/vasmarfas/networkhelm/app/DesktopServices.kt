@@ -17,7 +17,8 @@ fun desktopServices(): Services {
     val directory = applicationDirectory()
     val storage = FileStorage(directory)
     val trust = FileTrustStore(File(directory, "known-routers"))
-    val secrets = KSafeSecrets(KSafe(fileName = "routers", baseDir = File(directory, "secrets")))
+    val vault = File(directory, "secrets")
+    val secrets = FolderSecrets(vault) { KSafe(fileName = "routers", baseDir = vault) }
     val schemas = FileSchemaCache(File(directory, "schema"))
     return Services(
         storage,

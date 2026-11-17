@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ui.terminal
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
@@ -66,7 +67,7 @@ class SnippetsTest {
         setContent {
             NetworkHelmTheme(dark = true) {
                 CompositionLocalProvider(LocalSnippets provides snippets, LocalCompact provides compact) {
-                    TerminalView(Ssh(console)) { _, modifier -> Text("console", modifier) }
+                    TerminalView(Ssh(console), remember { Consoles() }, 1L) { _, modifier -> Text("console", modifier) }
                 }
             }
         }
@@ -74,16 +75,29 @@ class SnippetsTest {
     }
 
     @Test
+    fun theEditorKeepsWhatAnotherCopyOfTheAppAddedAndRemovedMeanwhile() = runBlocking {
+        val storage = MemoryStorage()
+        val mine = Snippets(storage)
+        val other = Snippets(storage)
+        mine.save(emptyList(), listOf(Snippet("a", "1"), Snippet("b", "2")))
+        other.load()
+        val opened = mine.all.value
+        other.save(other.all.value, listOf(Snippet("a", "1"), Snippet("c", "3")))
+        mine.save(opened, listOf(Snippet("a", "1 changed"), Snippet("b", "2"), Snippet("d", "4")))
+        assertEquals(listOf(Snippet("a", "1 changed"), Snippet("d", "4"), Snippet("c", "3")), mine.all.value)
+    }
+
+    @Test
     fun aSnippetIsTypedIntoTheConsoleAndTheEditorKeepsThem() = runDesktopComposeUiTest(1000, 700) {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
         val snippets = Snippets(storage)
-        runBlocking { snippets.save(listOf(Snippet("Interfaces", "/interface print\n"))) }
+        runBlocking { snippets.save(emptyList(), listOf(Snippet("Interfaces", "/interface print\n"))) }
         val console = Console()
         setContent {
             NetworkHelmTheme(dark = true) {
                 CompositionLocalProvider(LocalSnippets provides snippets) {
-                    TerminalView(Ssh(console)) { _, modifier -> Text("console", modifier) }
+                    TerminalView(Ssh(console), remember { Consoles() }, 1L) { _, modifier -> Text("console", modifier) }
                 }
             }
         }

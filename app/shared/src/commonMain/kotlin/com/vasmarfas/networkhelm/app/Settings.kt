@@ -9,6 +9,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.graphics.Color
 import com.vasmarfas.networkhelm.session.keep
+import com.vasmarfas.networkhelm.session.peek
 import com.vasmarfas.networkhelm.ui.table.CommentMode
 import com.vasmarfas.networkhelm.ui.theme.BundledThemes
 import com.vasmarfas.networkhelm.ui.theme.DefaultAccent
@@ -38,6 +39,7 @@ data class Settings(
     val columnLines: Boolean = true,
     val comments: CommentMode = CommentMode.Above,
     val listsBelow: Boolean = false,
+    val menuBelow: Boolean = false,
     val connectSplit: Float? = null,
     val resourceBar: Boolean = true,
     val barOrder: List<BarItem> = BarItem.entries,
@@ -96,14 +98,26 @@ class AppSettings(private val storage: Storage) {
     }
 
     suspend fun change(edit: (Settings) -> Settings) {
-        use(edit(current))
-        storage.write(SETTINGS, json.encodeToString(Settings.serializer(), current))
+        val before = current
+        use(edit(before))
+        storage.write(SETTINGS, json.encodeToString(Settings.serializer(), edit(stored(storage.read(SETTINGS)) ?: before)))
     }
 
     // a part of a screen is moved at once; settings that could not be written go to the file whole with the next change that is
     suspend fun arrange(edit: (Settings) -> Settings) {
-        use(edit(current))
-        storage.keep(SETTINGS, json.encodeToString(Settings.serializer(), current))
+        val before = current
+        use(edit(before))
+        storage.keep(SETTINGS, json.encodeToString(Settings.serializer(), edit(stored(storage.peek(SETTINGS)) ?: before)))
+    }
+
+    // another copy of the app writes the same file: an edit goes onto the settings as the file has them now, and this copy shows
+    // only its own edits until it starts again; a file it cannot read is written over, as before
+    private fun stored(text: String?): Settings? = text?.let {
+        try {
+            json.decodeFromString(Settings.serializer(), it)
+        } catch (e: IllegalArgumentException) {
+            null
+        }
     }
 
     // the language goes to the platform before the shell reads the new settings, so that it composes in it
@@ -122,7 +136,8 @@ class AppSettings(private val storage: Storage) {
 
     private suspend fun update(edit: (List<ThemeFile>) -> List<ThemeFile>) {
         check(!themesUnread) { "$THEMES could not be read, not overwriting it" }
-        val changed = edit(themes.toList())
+        // another copy of the app may have kept or removed a theme since this one read the list
+        val changed = edit(storage.read(THEMES)?.let { json.decodeFromString(serializer, it) } ?: themes.toList())
         storage.write(THEMES, json.encodeToString(serializer, changed))
         themes.clear()
         themes.addAll(changed)

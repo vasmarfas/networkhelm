@@ -99,6 +99,8 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
     fun disconnect(tab: RouterTab) {
         detached.removeAll { it.tab === tab }
         tab.tunnels.closeAll()
+        tab.consoles.closeAll()
+        tab.transfers.close()
         tab.session.close()
         routers.remove(tab)
         selected = selected.coerceAtMost(routers.size)

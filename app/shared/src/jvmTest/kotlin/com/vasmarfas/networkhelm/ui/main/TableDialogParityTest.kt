@@ -161,7 +161,7 @@ class TableDialogParityTest {
         val router = router()
         val store = AppSettings(MemoryStorage())
         rulesList(router, FakeClipboard(), store)
-        val question = "Remove 1 item from the router?"
+        val question = "Remove 1 item?"
 
         onNodeWithText("drop").performClick()
         onNodeWithTag("table").performKeyInput { pressKey(Key.Delete) }

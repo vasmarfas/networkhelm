@@ -380,9 +380,9 @@ class ToolbarTest {
         }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("NetworkHelm")).fetchSemanticsNodes().isNotEmpty() }
         shell.add(FakeRouter(), "192.0.2.1")
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Connect to another router")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Connect to another device")).fetchSemanticsNodes().isNotEmpty() }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Disconnect")).fetchSemanticsNodes().isNotEmpty() }
-        assertEquals(1, onAllNodes(hasText("Connect to another router")).fetchSemanticsNodes().size)
+        assertEquals(1, onAllNodes(hasText("Connect to another device")).fetchSemanticsNodes().size)
         picture("titlebar-tabs")
     }
 

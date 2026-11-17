@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.app
 
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.remember
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -21,6 +22,7 @@ import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.ui.table.TableLayout
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
+import com.vasmarfas.networkhelm.ui.terminal.Consoles
 import com.vasmarfas.networkhelm.ui.terminal.TerminalView
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.awaitCancellation
@@ -83,7 +85,7 @@ class RefusedWriteTest {
         setContent {
             NetworkHelmTheme(dark = true) {
                 CompositionLocalProvider(LocalSnippets provides snippets) {
-                    TerminalView(Ssh()) { _, modifier -> Text("console", modifier) }
+                    TerminalView(Ssh(), remember { Consoles() }, 1L) { _, modifier -> Text("console", modifier) }
                 }
             }
         }

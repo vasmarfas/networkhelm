@@ -354,7 +354,7 @@ class FilesTest {
         onNodeWithText("Restore").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Start")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Start").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Restore on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Restore?")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(router.ran.isEmpty(), "nothing runs before the answer")
         onAllNodes(hasText("Restore")).onLast().performClick()
         waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }
@@ -442,7 +442,7 @@ class FilesTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rc.local")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("rc.local").performClick()
         onNodeWithText("Download").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("File transfer failed: the router does not accept SSH connections", substring = true)).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("File transfer failed: SSH connections are not accepted", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(onAllNodes(hasText("ConnectException", substring = true)).fetchSemanticsNodes().isEmpty(), "no text of the socket error")
     }
 

@@ -130,7 +130,7 @@ class QuickSetFormTest {
         val asking = pack.paths.getValue(path).copy(actions = listOf(PackAction("Reconnect", "13", confirm = true, below = "identity", row = 1)))
         val router = opened("false", quick = Pack(menu = pack.menu, window = pack.window, paths = mapOf(path to asking), forms = pack.forms, prio = pack.prio))
         onNodeWithTag("action-13").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reconnect on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reconnect?")).fetchSemanticsNodes().isNotEmpty() }
         assertTrue(router.ran.isEmpty())
         onAllNodes(hasText("Reconnect")).onLast().performClick()
         waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }

@@ -23,6 +23,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.CornerRadius
@@ -40,11 +41,15 @@ import com.composeunstyled.Text
 import com.composeunstyled.UnstyledIcon
 import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
+import com.vasmarfas.networkhelm.ui.main.deviceText
 import com.vasmarfas.networkhelm.ui.terminal.sshFailure
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -75,6 +80,19 @@ class Transfer(val name: String, val upload: Boolean, val run: suspend () -> Lon
     var job: Job? = null
 }
 
+// the transfers of the file windows of a router, by path: they go on while a window is minimized or another router is shown,
+// and end with the session
+class TransferQueues {
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+    private val queues = HashMap<String, Transfers>()
+
+    fun of(path: String): Transfers = queues.getOrPut(path) { Transfers(scope) }
+
+    fun close() = scope.cancel()
+}
+
+val LocalTransfers = staticCompositionLocalOf<TransferQueues?> { null }
+
 @Stable
 class Transfers(private val scope: CoroutineScope) {
     val list = mutableStateListOf<Transfer>()
@@ -95,7 +113,7 @@ class Transfers(private val scope: CoroutineScope) {
                 transfer.state = TransferState.Cancelled
                 throw e
             } catch (e: Exception) {
-                transfer.state = TransferState.Failed(if (e is NoChannelException) bulkText(e.why, e.port) else getString(Res.string.files_failed, sshFailure(e)?.let { getString(it) } ?: e.message ?: e.toString()))
+                transfer.state = TransferState.Failed(if (e is NoChannelException) bulkText(e.why, e.port) else getString(Res.string.files_failed, sshFailure(e)?.let { getString(it) } ?: e.message?.let { deviceText(it) } ?: e.toString()))
             }
         }
     }

@@ -106,11 +106,9 @@ import com.vasmarfas.networkhelm.ui.main.WindowTab
 import com.vasmarfas.networkhelm.ui.main.bytes
 import com.vasmarfas.networkhelm.ui.main.output
 import com.vasmarfas.networkhelm.ui.main.present
-import com.vasmarfas.networkhelm.ui.table.SavedSort
-import com.vasmarfas.networkhelm.ui.table.SortKey
 import com.vasmarfas.networkhelm.ui.table.TableLayout
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
-import com.vasmarfas.networkhelm.ui.table.TableState
+import com.vasmarfas.networkhelm.ui.table.rememberKeptTable
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.tint
 import kotlinx.coroutines.CancellationException
@@ -202,7 +200,8 @@ internal fun FilesView(
     val backend = remember(session, path) { FileBackend(session, path) }
     val exchange = LocalFileExchange.current
     val copier = rememberCopier()
-    val transfers = remember(session, path) { Transfers(scope) }
+    val queues = LocalTransfers.current
+    val transfers = remember(session, path, queues) { queues?.of(name) ?: Transfers(scope) }
     val routerOs = session.device.platform == Platform.RouterOs
     val bulk by backend.bulk.collectAsState()
     val ready = bulk is Bulk.Ready
@@ -211,21 +210,11 @@ internal fun FilesView(
     var refresh by remember { mutableIntStateOf(0) }
     var problem by remember { mutableStateOf<String?>(null) }
     val arrived = remember(session, path, refresh) {
-        session.watch(path).rows().drop(1).atMostEvery(150.milliseconds).catch { (it as? DeviceException)?.let { e -> problem = e.message } }
+        session.watch(path).rows().drop(1).atMostEvery(150.milliseconds).catch { (it as? DeviceException)?.let { e -> problem = fileFailure(e) } }
     }.collectAsState(null).value
     val feed = remember(arrived) { arrived.orEmpty().mapNotNull(::entryOf) }
 
-    val saved = remember(name) { tables[name] }
-    val state = remember(name) {
-        TableState<String>().apply {
-            sort = saved?.sort?.map { SortKey(it.column, it.ascending) }.orEmpty()
-            saved?.widths?.forEach { (column, width) -> widths[column] = width.dp }
-        }
-    }
-    LaunchedEffect(name) {
-        snapshotFlow { TableLayout(widths = state.widths.mapValues { it.value.value }, sort = state.sort.map { SavedSort(it.column, it.ascending) }) }
-            .drop(1).collect { tables[name] = it }
-    }
+    val state = rememberKeptTable<String>(tables, name)
     val kept = "files-tree/${session.device.id ?: session.device.identity}"
     val expanded = remember(kept) { mutableStateSetOf<String>().apply { addAll(tables[kept]?.expanded.orEmpty()) } }
     LaunchedEffect(kept) {

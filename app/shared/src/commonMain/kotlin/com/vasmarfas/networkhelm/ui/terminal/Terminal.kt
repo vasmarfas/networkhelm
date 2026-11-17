@@ -49,6 +49,7 @@ import com.composables.icons.lucide.ArrowLeft
 import com.composables.icons.lucide.ArrowRight
 import com.composables.icons.lucide.ArrowUp
 import com.composables.icons.lucide.Code
+import com.composables.icons.lucide.KeyRound
 import com.composables.icons.lucide.Lucide
 import com.composables.icons.lucide.RotateCw
 import com.composables.icons.lucide.X
@@ -69,9 +70,14 @@ import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
 import com.vasmarfas.networkhelm.ui.kit.dialogPanel
 import com.vasmarfas.networkhelm.ui.kit.scrim
 import com.vasmarfas.networkhelm.ui.main.ActionsMenu
+import com.vasmarfas.networkhelm.ui.main.deviceMessage
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.launch
+import kotlin.concurrent.Volatile
+import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
+import kotlin.time.TimeSource
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
@@ -101,44 +107,68 @@ import networkhelm.app.shared.generated.resources.terminal_key_tab
 import networkhelm.app.shared.generated.resources.terminal_key_up
 import networkhelm.app.shared.generated.resources.terminal_opening
 import networkhelm.app.shared.generated.resources.terminal_reopen
+import networkhelm.app.shared.generated.resources.terminal_root
 
 val LocalTerminal = staticCompositionLocalOf<(@Composable (ShellChannel, Modifier) -> Unit)?> { null }
 
 internal expect val terminalScrollback: Boolean
 
+// the consoles of the terminal windows of a router, by window: a console stays open while the tab of another router is shown
+// and goes with its window, with Reopen and with the session
+class Consoles {
+    private val kept = HashMap<Long, KeptShell>()
+
+    internal fun of(id: Long, ssh: SshSession): KeptShell? = kept[id]?.takeIf { it.ssh === ssh && !it.cut }
+
+    internal suspend fun open(id: Long, ssh: SshSession, startup: String?): KeptShell {
+        of(id, ssh)?.let { return it }
+        close(id)
+        val opened = KeptShell(ssh.shell("xterm-256color", 120, 40), ssh)
+        kept[id] = opened
+        startup?.let { opened.write("$it\r".encodeToByteArray()) }
+        return opened
+    }
+
+    fun close(id: Long) {
+        kept.remove(id)?.close()
+    }
+
+    fun closeAll() {
+        kept.keys.toList().forEach(::close)
+    }
+}
+
+// sudo: the password of the login for the button that makes the console root, empty when the host did not get one; null, no button
 @Composable
-fun TerminalView(ssh: SshSession, startup: String? = null, terminal: @Composable (ShellChannel, Modifier) -> Unit) {
+fun TerminalView(ssh: SshSession, consoles: Consoles, id: Long, startup: String? = null, sudo: String? = null, terminal: @Composable (ShellChannel, Modifier) -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
-    var cut by remember { mutableStateOf(false) }
-    val shell by produceState<Result<ShellChannel>?>(null, ssh, attempt) {
-        value = null
-        cut = false
-        val opened = try {
-            ssh.shell("xterm-256color", 120, 40).also { channel -> startup?.let { channel.write("$it\r".encodeToByteArray()) } }
+    val shell by produceState(consoles.of(id, ssh)?.let { Result.success(it) }, ssh, attempt) {
+        value = try {
+            Result.success(consoles.open(id, ssh, startup))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            value = Result.failure(e)
-            return@produceState
+            Result.failure(e)
         }
-        value = Result.success(GuardedShell(opened) { cut = true })
-        awaitDispose { opened.close() }
     }
     val result = shell
     val snippets = LocalSnippets.current
     var editing by remember { mutableStateOf(false) }
-    val reopen: () -> Unit = { attempt++ }
+    val reopen: () -> Unit = {
+        consoles.close(id)
+        attempt++
+    }
     when {
         result == null -> Note(stringResource(Res.string.terminal_opening))
         result.isFailure -> {
             val e = result.exceptionOrNull()
-            Failure(stringResource(Res.string.terminal_failed, e?.let { sshFailure(it, ssh.canForward) }?.let { stringResource(it) } ?: e?.message.orEmpty()), reopen)
+            Failure(stringResource(Res.string.terminal_failed, e?.let { sshFailure(it, ssh.canForward) }?.let { stringResource(it) } ?: deviceMessage(e?.message.orEmpty())), reopen)
         }
-        cut -> Failure(stringResource(Res.string.link_closed), reopen)
+        result.getOrThrow().cut -> Failure(stringResource(Res.string.link_closed), reopen)
         snippets == null -> key(result.getOrThrow()) { terminal(result.getOrThrow(), Modifier.fillMaxSize()) }
         else -> Box(Modifier.fillMaxSize()) {
             Column(Modifier.fillMaxSize()) {
-                SnippetBar(snippets, result.getOrThrow(), reopen) { editing = true }
+                SnippetBar(snippets, result.getOrThrow(), reopen, sudo) { editing = true }
                 if (LocalCompact.current) KeysBar(result.getOrThrow())
                 key(result.getOrThrow()) { terminal(result.getOrThrow(), Modifier.weight(1f).fillMaxWidth()) }
             }
@@ -153,12 +183,13 @@ class TelnetCall(val address: String, val mac: Boolean)
 
 // the router connects: the address goes to its own telnet client, as the Telnet window of WinBox does; a call connects at once
 @Composable
-fun TelnetView(ssh: SshSession, terminal: @Composable (ShellChannel, Modifier) -> Unit, call: TelnetCall? = null) {
+fun TelnetView(ssh: SshSession, consoles: Consoles, id: Long, terminal: @Composable (ShellChannel, Modifier) -> Unit, call: TelnetCall? = null) {
     val address = remember { TextFieldState(call?.address.orEmpty()) }
     var target by remember { mutableStateOf(call?.address?.takeIf { telnetAddress.matches(it) }) }
     val started = target
-    if (started != null) {
-        TerminalView(ssh, "${if (call?.mac == true) "/tool mac-telnet" else "/system telnet"} $started", terminal)
+    // a console the window kept is already connected
+    if (started != null || consoles.of(id, ssh) != null) {
+        TerminalView(ssh, consoles, id, "${if (call?.mac == true) "/tool mac-telnet" else "/system telnet"} ${started.orEmpty()}", terminal = terminal)
         return
     }
     val typed = address.text.toString().trim()
@@ -194,7 +225,7 @@ internal fun sshFailure(e: Throwable, own: Boolean = true): StringResource? {
 }
 
 @Composable
-private fun SnippetBar(snippets: Snippets, channel: ShellChannel, onReopen: () -> Unit, onEdit: () -> Unit) {
+private fun SnippetBar(snippets: Snippets, channel: ShellChannel, onReopen: () -> Unit, sudo: String?, onEdit: () -> Unit) {
     val all by snippets.all.collectAsState()
     val scope = rememberCoroutineScope()
     val edit = stringResource(Res.string.snippets_edit)
@@ -206,7 +237,12 @@ private fun SnippetBar(snippets: Snippets, channel: ShellChannel, onReopen: () -
         ActionsMenu(stringResource(Res.string.snippets_title), Lucide.Code, all + null, { true }, { it?.title ?: edit }, Modifier.testTag("snippets")) { snippet ->
             if (snippet == null) onEdit() else scope.launch { channel.write(snippet.text.replace("\r\n", "\n").replace('\n', '\r').encodeToByteArray()) }
         }
-        ToolbarButton(stringResource(Res.string.terminal_reopen), Lucide.RotateCw, onReopen, Modifier.testTag("terminal-reopen"), iconOnly = true)
+        Row {
+            if (sudo != null && channel is KeptShell) {
+                ToolbarButton(stringResource(Res.string.terminal_root), Lucide.KeyRound, { scope.launch { channel.elevate(sudo) } }, Modifier.testTag("terminal-root"), iconOnly = true)
+            }
+            ToolbarButton(stringResource(Res.string.terminal_reopen), Lucide.RotateCw, onReopen, Modifier.testTag("terminal-reopen"), iconOnly = true)
+        }
     }
 }
 
@@ -243,7 +279,8 @@ private fun SnippetEditor(snippets: Snippets, onClose: () -> Unit) {
     val palette = Theme.palette
     val shape = RoundedCornerShape(Theme.metrics.radius)
     val scope = rememberCoroutineScope()
-    val rows = remember { snippets.all.value.map { TextFieldState(it.name) to TextFieldState(it.text) }.toMutableStateList() }
+    val opened = remember { snippets.all.value }
+    val rows = remember { opened.map { TextFieldState(it.name) to TextFieldState(it.text) }.toMutableStateList() }
     var failure by remember { mutableStateOf<String?>(null) }
     val unreadable = stringResource(Res.string.snippets_unreadable)
     Box(Modifier.fillMaxSize().scrim(palette.workspace.copy(alpha = 0.6f)), contentAlignment = Alignment.Center) {
@@ -280,7 +317,7 @@ private fun SnippetEditor(snippets: Snippets, onClose: () -> Unit) {
                     val kept = rows.map { (name, text) -> Snippet(name.text.toString().trim(), text.text.toString()) }.filter { it.name.isNotEmpty() || it.text.isNotBlank() }
                     scope.launch {
                         try {
-                            snippets.save(kept)
+                            snippets.save(opened, kept)
                             onClose()
                         } catch (e: CancellationException) {
                             throw e
@@ -310,13 +347,46 @@ private fun Failure(text: String, onRetry: () -> Unit) {
 }
 
 // the terminals read and type in effects that catch nothing, so a console cut off under them would end the app; the window says so instead
-private class GuardedShell(private val shell: ShellChannel, private val onCut: () -> Unit) : ShellChannel by shell {
+internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession) : ShellChannel by shell {
+    var cut by mutableStateOf(false)
+        private set
+
+    // what the platform keeps to draw the console again when its window comes back, and how it lets it go
+    var screen: Any? = null
+    var release: () -> Unit = {}
+
+    private var closed = false
+
+    // sudo asks with a prompt of its own: the typed line shows it with %u, the question itself with the name of the user
+    @Volatile
+    private var asking: Pair<String, TimeMark>? = null
+    private val heard = StringBuilder()
+
+    suspend fun elevate(password: String) {
+        if (password.isNotEmpty()) asking = password to TimeSource.Monotonic.markNow()
+        write("sudo -p '$SUDO_PROMPT' -s\r".encodeToByteArray())
+    }
+
+    private suspend fun answer(text: String) {
+        val (password, since) = asking ?: return
+        heard.append(text)
+        if (heard.length > 1024) heard.deleteRange(0, heard.length - 256)
+        when {
+            since.elapsedNow() > 30.seconds -> asking = null
+            SUDO_ASKS.containsMatchIn(heard) -> {
+                asking = null
+                heard.clear()
+                write("$password\r".encodeToByteArray())
+            }
+        }
+    }
+
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = try {
-        shell.read(buffer, offset, length)
+        shell.read(buffer, offset, length).also { if (it > 0) answer(buffer.decodeToString(offset, offset + it)) }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
-        onCut()
+        cut = true
         -1
     }
 
@@ -326,7 +396,18 @@ private class GuardedShell(private val shell: ShellChannel, private val onCut: (
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            onCut()
+            cut = true
         }
     }
+
+    // the screen closes its process, which comes back here
+    override fun close() {
+        if (closed) return
+        closed = true
+        release()
+        shell.close()
+    }
 }
+
+private const val SUDO_PROMPT = "NetworkHelm sudo for %u: "
+private val SUDO_ASKS = Regex("NetworkHelm sudo for [^%\\s]+: ")

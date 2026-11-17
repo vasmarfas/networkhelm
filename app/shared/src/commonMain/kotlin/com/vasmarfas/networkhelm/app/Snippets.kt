@@ -30,10 +30,14 @@ class Snippets(private val storage: Storage) {
         }
     }
 
-    suspend fun save(snippets: List<Snippet>) {
+    // the editor changes the list it opened with; what another copy of the app added or removed since stays so
+    suspend fun save(opened: List<Snippet>, edited: List<Snippet>) {
+        load()
         failure?.let { throw IllegalStateException("the snippets could not be read, not overwriting them", it) }
-        storage.write(FILE, json.encodeToString(serializer, snippets))
-        list.value = snippets
+        val stored = list.value
+        val merged = edited.filter { it in stored || it !in opened } + stored.filter { it !in opened && it !in edited }
+        storage.write(FILE, json.encodeToString(serializer, merged))
+        list.value = merged
     }
 
     companion object {

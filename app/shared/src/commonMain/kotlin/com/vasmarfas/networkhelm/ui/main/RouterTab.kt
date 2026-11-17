@@ -37,6 +37,7 @@ import com.vasmarfas.networkhelm.packs.opensTable
 import com.vasmarfas.networkhelm.packs.packName
 import com.vasmarfas.networkhelm.packs.tablesWindow
 import com.vasmarfas.networkhelm.packs.withTablesAsTabs
+import com.vasmarfas.networkhelm.packs.worded
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsVersion
 import com.vasmarfas.networkhelm.routeros.schema.label
@@ -45,11 +46,13 @@ import com.vasmarfas.networkhelm.session.keep
 import com.vasmarfas.networkhelm.session.watchSettings
 import com.vasmarfas.networkhelm.ui.files.FILE_WINDOW
 import com.vasmarfas.networkhelm.ui.files.FileSpec
+import com.vasmarfas.networkhelm.ui.files.TransferQueues
 import com.vasmarfas.networkhelm.ui.form.FormState
 import com.vasmarfas.networkhelm.ui.log.LogEntryWindow
 import com.vasmarfas.networkhelm.ui.log.LogRequest
 import com.vasmarfas.networkhelm.ui.log.LogWindows
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
+import com.vasmarfas.networkhelm.ui.terminal.Consoles
 import com.vasmarfas.networkhelm.ui.terminal.TelnetCall
 import com.vasmarfas.networkhelm.ui.workspace.WindowState
 import com.vasmarfas.networkhelm.ui.workspace.WorkspaceState
@@ -169,6 +172,7 @@ class RouterTab(
         terminals -= id
         telnets -= id
         telnetCalls -= id
+        consoles.close(id)
     }
     val specs = mutableStateMapOf<Long, WindowSpec>()
     val items = mutableStateMapOf<Long, ItemSpec>()
@@ -178,7 +182,13 @@ class RouterTab(
     val terminals = mutableStateListOf<Long>()
     val telnets = mutableStateListOf<Long>()
     val telnetCalls = mutableStateMapOf<Long, TelnetCall>()
+    val consoles = Consoles()
+    val transfers = TransferQueues()
     var menu by mutableStateOf<List<MenuEntry>?>(null)
+
+    // the router's own words for the bundled windows and the texts of its dashboard
+    var words by mutableStateOf<Map<String, String>>(emptyMap())
+        private set
     var view by mutableStateOf(MenuView.WinBox)
         private set
     var viewProblem by mutableStateOf<String?>(null)
@@ -603,9 +613,16 @@ class RouterTab(
         }.orEmpty()
     }
 
-    suspend fun keepTunnel(tunnel: SavedTunnel) = writeTunnels(listOf(tunnel) + (savedTunnels - tunnel))
+    // another copy of the app may have kept or forgotten a tunnel of the same router since this one read them
+    suspend fun keepTunnel(tunnel: SavedTunnel) {
+        readTunnels()
+        writeTunnels(listOf(tunnel) + (savedTunnels - tunnel))
+    }
 
-    suspend fun forgetTunnel(tunnel: SavedTunnel) = writeTunnels(savedTunnels - tunnel)
+    suspend fun forgetTunnel(tunnel: SavedTunnel) {
+        readTunnels()
+        writeTunnels(savedTunnels - tunnel)
+    }
 
     private suspend fun writeTunnels(tunnels: List<SavedTunnel>) {
         savedTunnels = tunnels
@@ -662,7 +679,13 @@ class RouterTab(
             return
         }
         session = base
-        plainPacks = shown(base.device.platform)
+        // a menu read without the router's words stays in the words of the packs
+        words = try {
+            base.words(storage)
+        } catch (e: DeviceException) {
+            emptyMap()
+        }
+        plainPacks = shown(base.device.platform).map { it.worded(words) }
         val native = if (view == MenuView.Native) {
             try {
                 base.nativeMenu()
@@ -675,7 +698,7 @@ class RouterTab(
         }
         if (native == null) {
             view = MenuView.WinBox
-            loadMenu(bundledMenu(base.device.platform))
+            loadMenu(bundledMenu(base.device.platform).worded(words))
             return
         }
         plainPacks = plainPacks + native.packs.filter { own -> plainPacks.none { it.menu == own.menu } }
@@ -776,7 +799,7 @@ class RouterTab(
             if (lacksPackage(entry.requires)) return null
             if (entry.items.isNotEmpty()) {
                 val children = entry.items.mapNotNull(::visible)
-                return if (children.isEmpty()) null else MenuEntry(entry.title, entry.path, children, entry.requires, prio = entry.prio)
+                return if (children.isEmpty()) null else MenuEntry(entry.title, entry.path, children, entry.requires, prio = entry.prio, icon = entry.icon)
             }
             if (entry.page != null || entry.window != null && entry.path == null) return entry
             val path = entry.path?.let(MenuPath::parse) ?: return null
@@ -837,8 +860,8 @@ class RouterTab(
     private fun rewired(entries: List<MenuEntry>, group: String?, own: List<Pack>): List<MenuEntry> = entries.map { entry ->
         val pack = own.firstOrNull { it.menu == listOfNotNull(group, entry.title) }?.takeIf { it.window.tabs.firstOrNull()?.path?.startsWith("$NATIVE_PATHS/") == true }
         when {
-            entry.items.isNotEmpty() -> MenuEntry(entry.title, entry.path, rewired(entry.items, entry.title, own), entry.requires, entry.window, entry.since, entry.until, entry.page, entry.arguments, entry.prio)
-            pack != null && entry.path != null -> MenuEntry(entry.title, pack.window.tabs.first().path, entry.items, entry.requires, entry.window, entry.since, entry.until, entry.page, entry.arguments, entry.prio)
+            entry.items.isNotEmpty() -> MenuEntry(entry.title, entry.path, rewired(entry.items, entry.title, own), entry.requires, entry.window, entry.since, entry.until, entry.page, entry.arguments, entry.prio, icon = entry.icon)
+            pack != null && entry.path != null -> MenuEntry(entry.title, pack.window.tabs.first().path, entry.items, entry.requires, entry.window, entry.since, entry.until, entry.page, entry.arguments, entry.prio, icon = entry.icon)
             else -> entry
         }
     }
@@ -855,7 +878,7 @@ class RouterTab(
                     val directory = directoryOf(group)?.takeIf { it !in windows } ?: return@async group
                     val found = describedOrNull(directory)?.children.orEmpty().map(directory::child).filter { !known.covers(it) && !hides(it) }
                         .map { path -> async { path.takeIf { holdsWindow(it) } } }.awaitAll().filterNotNull()
-                    if (found.isEmpty()) group else MenuEntry(group.title, group.path, group.items.withEntries(found.map { MenuEntry(label(it.segments.last()), it.toString()) }), group.requires, prio = group.prio)
+                    if (found.isEmpty()) group else MenuEntry(group.title, group.path, group.items.withEntries(found.map { MenuEntry(label(it.segments.last()), it.toString()) }), group.requires, prio = group.prio, icon = group.icon)
                 }
             }.awaitAll()
         }
@@ -882,16 +905,19 @@ class RouterTab(
         if (at < 0) items + entry else items.take(at) + entry + items.drop(at)
     }
 
+    // the icon of a title in the router's words is the one of the title the pack has
+    private fun english(title: String): String? = words.entries.firstOrNull { it.value == title }?.key
+
     private fun withPacks(entries: List<MenuEntry>, own: List<Pack>): List<MenuEntry> {
         val (alone, grouped) = own.partition { pack -> pack.menu.size == 1 && entries.none { it.title == pack.menu.first() } }
-        val added = grouped.groupBy({ it.menu.first() }, { MenuEntry(it.menu.last(), it.window.tabs.first().path) }).mapValues { (_, items) -> items.sortedBy { it.title } }
+        val added = grouped.groupBy({ it.menu.first() }, { MenuEntry(it.menu.last(), it.window.tabs.first().path, icon = english(it.menu.last())) }).mapValues { (_, items) -> items.sortedBy { it.title } }
         val grown = entries.map { entry ->
-            added[entry.title]?.let { MenuEntry(entry.title, entry.path, entry.items + it, entry.requires, entry.window, entry.since, entry.until, prio = entry.prio) } ?: entry
+            added[entry.title]?.let { MenuEntry(entry.title, entry.path, entry.items + it, entry.requires, entry.window, entry.since, entry.until, prio = entry.prio, icon = entry.icon) } ?: entry
         }
         val groups = added.filterKeys { group -> entries.none { it.title == group } }.map { (group, items) ->
-            MenuEntry(group, items = items, prio = grouped.filter { it.menu.first() == group }.mapNotNull { it.prio }.minOrNull())
+            MenuEntry(group, items = items, prio = grouped.filter { it.menu.first() == group }.mapNotNull { it.prio }.minOrNull(), icon = english(group))
         }
-        return (groups + alone.map { MenuEntry(it.menu.first(), it.window.tabs.first().path, prio = it.prio) }).fold(grown) { menu, entry -> menu.placed(entry) }
+        return (groups + alone.map { MenuEntry(it.menu.first(), it.window.tabs.first().path, prio = it.prio, icon = english(it.menu.first())) }).fold(grown) { menu, entry -> menu.placed(entry) }
     }
 
     // WinBox sorts the top level by the priority the router's descriptions give, and by title among equals

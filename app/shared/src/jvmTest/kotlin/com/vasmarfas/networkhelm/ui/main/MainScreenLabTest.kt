@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ui.main
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
@@ -53,6 +54,7 @@ import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
 import com.vasmarfas.networkhelm.ui.kit.HintHost
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.terminal.BossTerminal
+import com.vasmarfas.networkhelm.ui.terminal.Consoles
 import com.vasmarfas.networkhelm.ui.terminal.TerminalView
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.CoroutineScope
@@ -598,7 +600,7 @@ class MainScreenLabTest {
                 picture("lab-address-disabled")
                 onNodeWithText("192.0.2.10").performClick()
                 onNodeWithTag("table").performKeyInput { pressKey(Key.Delete) }
-                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Remove 1 item from the router?")).fetchSemanticsNodes().isNotEmpty() }
+                waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Remove 1 item?")).fetchSemanticsNodes().isNotEmpty() }
                 onAllNodes(hasText("Remove"))[1].performClick()
                 waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("192.0.2.10")).fetchSemanticsNodes().isEmpty() }
                 assertNull(runBlocking { session.get(path, id) })
@@ -1162,7 +1164,7 @@ class MainScreenLabTest {
                 val ssh = Recorded(assertNotNull(session.ssh))
                 runDesktopComposeUiTest(1100, 700) {
                     val started = System.currentTimeMillis()
-                    setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh) { channel, modifier -> BossTerminal(channel, modifier) } } }
+                    setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh, remember { Consoles() }, 1L) { channel, modifier -> BossTerminal(channel, modifier) } } }
                     waitUntil(timeoutMillis = 25_000) { "] > " in Regex("\u001b\\[[0-9;?]*[A-Za-z]").replace(ssh.output, "") }
                     assertTrue(System.currentTimeMillis() - started < 8_000, "the prompt of round $round came late")
                     assertTrue(Regex("\u001b\\[\\d+;\\d+R").containsMatchIn(ssh.input), "round $round: the terminal answers the cursor queries")
@@ -1175,7 +1177,7 @@ class MainScreenLabTest {
     fun aTerminalEchoesWhatIsTyped() = runDesktopComposeUiTest(1100, 700) {
         labRouter { session, _ ->
             val ssh = Recorded(assertNotNull(session.ssh))
-            setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh) { channel, modifier -> BossTerminal(channel, modifier) } } }
+            setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh, remember { Consoles() }, 1L) { channel, modifier -> BossTerminal(channel, modifier) } } }
             waitUntil(timeoutMillis = 25_000) { "] > " in Regex("\u001b\\[[0-9;?]*[A-Za-z]").replace(ssh.output, "") }
             val heard = ssh.output.length
             // the first terminal of a run is not in focus yet when its prompt comes
@@ -1193,7 +1195,7 @@ class MainScreenLabTest {
     private fun SkikoComposeUiTest.console(session: DeviceSession, shot: String) {
         val ssh = Recorded(assertNotNull(session.ssh))
         val started = System.currentTimeMillis()
-        setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh) { channel, modifier -> BossTerminal(channel, modifier) } } }
+        setContent { NetworkHelmTheme(dark = true) { TerminalView(ssh, remember { Consoles() }, 1L) { channel, modifier -> BossTerminal(channel, modifier) } } }
         waitUntil(timeoutMillis = 25_000) { "] > " in Regex("\u001b\\[[0-9;?]*[A-Za-z]").replace(ssh.output, "") }
         val prompt = System.currentTimeMillis() - started
         assertTrue(prompt < 8_000, "the prompt came after $prompt ms")

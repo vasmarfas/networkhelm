@@ -25,10 +25,14 @@ import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.PointerEventPass
@@ -65,7 +69,7 @@ internal fun InternalWindow(
     active: Boolean,
     viewport: DpSize,
     scroll: () -> Pair<Int, Int>,
-    onFocus: () -> Unit,
+    onFocus: (holding: Boolean) -> Unit,
     onMinimize: () -> Unit,
     onDetach: (() -> Unit)?,
     onClose: () -> Unit,
@@ -79,6 +83,7 @@ internal fun InternalWindow(
     val inactiveTitle = palette.inactiveTitle
     val titleColor = if ((!material || palette.title == null) && (active || inactiveTitle != null)) palette.onAccent else palette.text
     val size = if (window.maximized) viewport else window.size
+    var holding by remember { mutableStateOf(false) }
     Box(
         Modifier
             .offset {
@@ -93,10 +98,11 @@ internal fun InternalWindow(
             .shadow(if (active) 8.dp else 2.dp, RoundedCornerShape(radius))
             .background(if (Theme.classic) palette.raised else palette.surface, RoundedCornerShape(radius))
             .border(1.dp, palette.frame ?: if (active && palette.title == null) palette.accent else palette.line, RoundedCornerShape(radius))
+            .onFocusChanged { holding = it.hasFocus }
             .pointerInput(window) {
                 awaitEachGesture {
                     awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-                    onFocus()
+                    onFocus(holding)
                 }
             },
     ) {

@@ -909,11 +909,11 @@ class WindowKindsTest {
         show(router, MenuEntry("Reboot", reboot.toString()))
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Start")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Start").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reboot on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reboot?")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(emptyList(), router.ran.toList(), "nothing runs before the answer")
         onNodeWithText("Cancel").performClick()
         onNodeWithText("Start").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reboot on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reboot?")).fetchSemanticsNodes().isNotEmpty() }
         onAllNodes(hasText("Reboot")).onLast().performClick()
         waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }
         assertEquals(listOf("system/reboot" to emptyMap<String, String>()), router.ran.toList())
@@ -931,7 +931,7 @@ class WindowKindsTest {
         assertEquals(top.sorted(), top)
         assertTrue(top.last() < onNodeWithText("Start").fetchSemanticsNode().boundsInRoot.top)
         onNodeWithText("Start").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reset Configuration on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Reset Configuration?")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(emptyList(), router.ran.toList(), "nothing runs before the answer")
         onAllNodes(hasText("Reset Configuration")).onLast().performClick()
         waitUntil(timeoutMillis = 5_000) { router.ran.isNotEmpty() }

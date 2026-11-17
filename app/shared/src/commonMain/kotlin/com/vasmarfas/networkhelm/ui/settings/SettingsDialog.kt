@@ -117,6 +117,8 @@ import networkhelm.app.shared.generated.resources.settings_look
 import networkhelm.app.shared.generated.resources.settings_look_dark
 import networkhelm.app.shared.generated.resources.settings_look_light
 import networkhelm.app.shared.generated.resources.settings_look_system
+import networkhelm.app.shared.generated.resources.settings_menu_below
+import networkhelm.app.shared.generated.resources.settings_menu_below_hint
 import networkhelm.app.shared.generated.resources.settings_not_theme
 import networkhelm.app.shared.generated.resources.settings_probe
 import networkhelm.app.shared.generated.resources.settings_probe_hint
@@ -274,6 +276,9 @@ fun SettingsDialog(
                 }
                 Toggle(current.tablesAsTabs, stringResource(Res.string.settings_tables_as_tabs), stringResource(Res.string.settings_tables_as_tabs_hint), "tables-as-tabs") { on ->
                     act { settings.change { it.copy(tablesAsTabs = on) } }
+                }
+                Toggle(current.menuBelow, stringResource(Res.string.settings_menu_below), stringResource(Res.string.settings_menu_below_hint), "menu-below") { on ->
+                    act { settings.change { it.copy(menuBelow = on) } }
                 }
                 Toggle(current.resourceBar, stringResource(Res.string.settings_resource_bar), null, "resource-bar") { on -> act { settings.change { it.copy(resourceBar = on) } } }
                 if (current.resourceBar) {

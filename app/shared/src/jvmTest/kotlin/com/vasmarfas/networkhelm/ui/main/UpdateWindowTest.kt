@@ -196,7 +196,7 @@ class UpdateWindowTest {
         opened(router)
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("7.26beta5")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithTag("action-install").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Download & Install on the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Run Download & Install?")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(emptyList(), router.ran)
         onNodeWithTag("confirm").performKeyInput { pressKey(Key.Escape) }
         waitUntil(timeoutMillis = 5_000) { onAllNodesWithTag("confirm").fetchSemanticsNodes().isEmpty() }

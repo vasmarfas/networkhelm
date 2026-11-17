@@ -332,7 +332,7 @@ class ListWindowTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("1 of 3 items")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("accept").performClick()
         onNodeWithTag("table").performKeyInput { pressKey(Key.Delete) }
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Remove 1 item from the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Remove 1 item?")).fetchSemanticsNodes().isNotEmpty() }
         picture("list-remove")
         onAllNodes(hasText("Remove"))[1].performClick()
         waitUntil(timeoutMillis = 5_000) { router.removed.isNotEmpty() }
@@ -381,7 +381,7 @@ class ListWindowTest {
         onNodeWithTag("table").performKeyInput { pressKey(Key.Delete) }
         waitUntil(timeoutMillis = 5_000) { router.removed.isNotEmpty() }
         assertEquals(listOf(listOf("*1")), router.removed)
-        assertTrue(onAllNodes(hasText("Remove 1 item from the router?")).fetchSemanticsNodes().isEmpty())
+        assertTrue(onAllNodes(hasText("Remove 1 item?")).fetchSemanticsNodes().isEmpty())
     }
 
     @Test
@@ -635,10 +635,10 @@ class ListWindowTest {
 
         val polled = router.polled.size
         router.link.value = LinkState.Reconnecting
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection to the router is lost, reconnecting…")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection is lost, reconnecting…")).fetchSemanticsNodes().isNotEmpty() }
         picture("list-link-lost")
         router.link.value = LinkState.Up
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection to the router is lost, reconnecting…")).fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The connection is lost, reconnecting…")).fetchSemanticsNodes().isEmpty() }
         waitUntil(timeoutMillis = 5_000) { router.polled.size > polled }
     }
 
@@ -703,7 +703,7 @@ class ListWindowTest {
         assertEquals("/ip firewall filter add chain=forward protocol=tcp dst-port=443 comment=web", runBlocking { clip.readText() })
 
         onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.V) } }
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Add 1 item from the clipboard to the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Add 1 item from the clipboard?")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Paste").performClick()
         waitUntil(timeoutMillis = 5_000) { router.added.isNotEmpty() }
         assertEquals(mapOf("chain" to "forward", "protocol" to "tcp", "dst-port" to "443", "comment" to "web"), router.added.single())
