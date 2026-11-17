@@ -122,10 +122,13 @@ private fun Routers(shell: Shell, tabsInTitle: Boolean) {
                 Row(Modifier.fillMaxWidth().background(Theme.palette.raised)) { RouterTabs(shell) }
             }
             if (tab == null) {
+                // another copy of the app may have saved routers since this one read the list
+                LaunchedEffect(Unit) { shell.saved.load() }
                 ConnectScreen(
                     shell.services,
                     shell.saved,
                     shell.scope,
+                    shell.tables,
                     shell.questions,
                     onAbout = { shell.about = true },
                     onSettings = { shell.settingsShown = true },

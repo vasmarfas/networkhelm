@@ -80,7 +80,7 @@ fun FieldEditor(argument: Argument, value: String, onChange: (String) -> Unit, m
     when {
         // a source that is an address, as that of a group of IGMP Proxy, is no script
         argument.name in ScriptProperties && type is ValueType.Text && scripts != null -> ScriptEditor(value, onChange, scripts, modifier)
-        (argument.name == "rule" || argument.name == "note") && scripts != null -> ScriptEditor(value, onChange, scripts, modifier, console = false)
+        (argument.name == "rule" || argument.name == "note" || argument.name == "config") && scripts != null -> ScriptEditor(value, onChange, scripts, modifier, console = false)
         type == ValueType.YesNo -> {
             val shown = value.ifEmpty { argument.default.orEmpty() }
             Tick(shown == "true" || shown == "yes", { onChange(if (it) "true" else "false") }, beside, modifier, unset = shown.isEmpty())

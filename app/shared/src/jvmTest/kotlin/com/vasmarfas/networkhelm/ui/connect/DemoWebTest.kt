@@ -77,5 +77,5 @@ class DemoWebTest {
     fun vyosOpens() = opens("vyos.demo", "demo-vyos", "eth0", "vyos")
 
     @Test
-    fun keeneticOpens() = opens("keenetic.demo", "Keenetic Demo", "GigabitEthernet1", "keenetic")
+    fun keeneticOpens() = opens("keenetic.demo", "Keenetic Demo", "Home network", "keenetic")
 }

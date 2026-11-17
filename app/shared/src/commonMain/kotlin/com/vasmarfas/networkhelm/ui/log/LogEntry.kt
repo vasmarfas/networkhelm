@@ -75,12 +75,12 @@ fun List<LogEntry>.collapsed(): List<LogRow> {
 private val months = listOf("jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec")
 private val isoTime = Regex("""^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2}):(\d{2})""")
 private val monthDayYear = Regex("""^([A-Za-z]{3})/(\d{1,2})/(\d{4}) (\d{2}):(\d{2}):(\d{2})""")
-private val monthDay = Regex("""^([A-Za-z]{3})/(\d{1,2}) (\d{2}):(\d{2}):(\d{2})""")
+private val monthDay = Regex("""^([A-Za-z]{3})(?:/| +)(\d{1,2}) (\d{2}):(\d{2}):(\d{2})""")
 private val logread = Regex("""^(?:[A-Za-z]{3} )?([A-Za-z]{3}) +(\d{1,2}) (\d{2}):(\d{2}):(\d{2}) (\d{4})""")
 private val timeOfDay = Regex("""^(\d{2}):(\d{2}):(\d{2})""")
 private val isoDate = Regex("""^(\d{4})-(\d{2})-(\d{2})""")
 
-// oct/22 07:08:26 is of this year and 07:08:26 of today, so they need the date of the router as yyyy-MM-dd;
+// oct/22 07:08:26 and Oct 22 07:08:26 of Keenetic are of this year and 07:08:26 of today, so they need the date of the router as yyyy-MM-dd;
 // a time of the kernel log, as 12.345678, is seconds since boot and has no stamp
 fun stampOf(time: String, today: String?): Stamp? {
     val text = time.trim()

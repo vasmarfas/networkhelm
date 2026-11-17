@@ -21,6 +21,7 @@ import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.runBlocking
 import java.util.Locale
@@ -53,7 +54,7 @@ class ConnectPasswordExpiredTest {
         val services = Services(MemoryStorage(), MemoryTrustStore(), null, secrets) { _, _, _ -> router }
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.7")
@@ -100,7 +101,7 @@ class ConnectPasswordExpiredTest {
         )
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.7")

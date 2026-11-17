@@ -98,9 +98,12 @@ import com.vasmarfas.networkhelm.ui.kit.VerticalSplit
 import com.vasmarfas.networkhelm.ui.kit.dialogPanel
 import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.scrim
+import com.vasmarfas.networkhelm.ui.main.deviceMessage
+import com.vasmarfas.networkhelm.ui.main.deviceText
 import com.vasmarfas.networkhelm.ui.table.DataTable
 import com.vasmarfas.networkhelm.ui.table.TableColumn
-import com.vasmarfas.networkhelm.ui.table.TableState
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
+import com.vasmarfas.networkhelm.ui.table.rememberKeptTable
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.workspace.VerticalScrollbar
 import eu.anifantakis.lib.ksafe.KSafeProtectionLevel
@@ -137,6 +140,7 @@ import networkhelm.app.shared.generated.resources.connect_import_hint
 import networkhelm.app.shared.generated.resources.connect_imported
 import networkhelm.app.shared.generated.resources.connect_interface
 import networkhelm.app.shared.generated.resources.connect_keenetic_token
+import networkhelm.app.shared.generated.resources.connect_keenetic_tunnel
 import networkhelm.app.shared.generated.resources.connect_lists_below
 import networkhelm.app.shared.generated.resources.connect_lists_beside
 import networkhelm.app.shared.generated.resources.connect_neighbors
@@ -146,6 +150,7 @@ import networkhelm.app.shared.generated.resources.connect_platform_found
 import networkhelm.app.shared.generated.resources.connect_port
 import networkhelm.app.shared.generated.resources.connect_scan
 import networkhelm.app.shared.generated.resources.kind_keenetic
+import networkhelm.app.shared.generated.resources.kind_linux
 import networkhelm.app.shared.generated.resources.kind_openwrt
 import networkhelm.app.shared.generated.resources.kind_opnsense
 import networkhelm.app.shared.generated.resources.kind_other
@@ -195,6 +200,8 @@ import networkhelm.app.shared.generated.resources.connect_ssh_key_none
 import networkhelm.app.shared.generated.resources.connect_ssh_passphrase
 import networkhelm.app.shared.generated.resources.connect_stop
 import networkhelm.app.shared.generated.resources.connect_user
+import networkhelm.app.shared.generated.resources.connect_keenetic_ssh
+import networkhelm.app.shared.generated.resources.connect_keenetic_ssh_hint
 import networkhelm.app.shared.generated.resources.connect_via
 import networkhelm.app.shared.generated.resources.connect_via_direct
 import networkhelm.app.shared.generated.resources.connect_via_hint
@@ -252,6 +259,7 @@ import networkhelm.app.shared.generated.resources.protocol_api
 import networkhelm.app.shared.generated.resources.protocol_api_ssl
 import networkhelm.app.shared.generated.resources.protocol_keenetic_http
 import networkhelm.app.shared.generated.resources.protocol_keenetic_https
+import networkhelm.app.shared.generated.resources.protocol_keenetic_ssh
 import networkhelm.app.shared.generated.resources.protocol_mac_telnet
 import networkhelm.app.shared.generated.resources.protocol_openwrt_http
 import networkhelm.app.shared.generated.resources.protocol_openwrt_https
@@ -287,6 +295,7 @@ fun ConnectScreen(
     services: Services,
     saved: SavedRouters,
     scope: CoroutineScope,
+    tables: TableLayouts,
     questions: TrustQuestions = remember { TrustQuestions() },
     onAbout: () -> Unit = {},
     onSettings: () -> Unit = {},
@@ -339,6 +348,7 @@ fun ConnectScreen(
             Lists(
                 services,
                 saved,
+                tables,
                 state,
                 onConnect = { state.connect(onConnected) },
                 onRemove = { router -> ui.launch { state.remove(router) } },
@@ -425,7 +435,7 @@ private fun PasswordRenewal(renewal: Renewal) {
                 SecretField(second, Modifier.width(260.dp).testTag("renewal-repeat"), onGo = { if (ready) renewal.change(first.text.toString()) })
             }
             if (differ && second.text.isNotEmpty()) Text(stringResource(Res.string.book_mismatch), color = palette.warning)
-            renewal.failure?.let { Text(it, color = palette.warning, modifier = Modifier.testTag("renewal-failure")) }
+            renewal.failure?.let { Text(deviceMessage(it), color = palette.warning, modifier = Modifier.testTag("renewal-failure")) }
             Row(Modifier.align(Alignment.End).padding(top = 6.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Button(stringResource(Res.string.renew_skip), renewal::skip)
                 Button(stringResource(Res.string.renew_change), { renewal.change(first.text.toString()) }, enabled = ready, primary = true)
@@ -500,7 +510,6 @@ private fun Form(
         }
         val unverified = when {
             state.kind == DeviceKind.OpenWrt -> "RutOS (Teltonika)"
-            state.kind == DeviceKind.Keenetic -> "Keenetic / Netcraze"
             state.protocol == Access.Upnp -> "TR-064"
             else -> null
         }
@@ -575,12 +584,17 @@ private fun Form(
             }
             Labeled("") { Text(stringResource(Res.string.connect_via_hint), color = palette.muted, style = Theme.type.small) }
         }
+        if (state.kind == DeviceKind.Keenetic && state.protocol != Access.KeeneticSsh) {
+            Labeled(stringResource(Res.string.connect_keenetic_ssh)) { TextField(state.sshAddress, field.testTag("keenetic-ssh"), placeholder = "192.0.2.1:22", mono = true) }
+            Labeled("") { Text(stringResource(Res.string.connect_keenetic_ssh_hint), color = palette.muted, style = Theme.type.small) }
+        }
         // OPNsense has no password for its API: the user is the API key, the password is its secret
         if (state.protocol == Access.Opnsense) Labeled("") { Text(stringResource(Res.string.connect_opnsense_key), color = palette.muted, style = Theme.type.small) }
         if (state.protocol == Access.Pfsense) Labeled("") { Text(stringResource(Res.string.connect_pfsense_key), color = palette.muted, style = Theme.type.small) }
         if (state.protocol == Access.KeeneticSsl || state.protocol == Access.Keenetic) {
             Labeled("") { Text(stringResource(Res.string.connect_keenetic_token), color = palette.muted, style = Theme.type.small) }
         }
+        if (state.protocol == Access.KeeneticSsh) Labeled("") { Text(stringResource(Res.string.connect_keenetic_tunnel), color = palette.muted, style = Theme.type.small) }
         if (state.protocol == Access.Vyos) Labeled("") { Text(stringResource(Res.string.connect_vyos_key), color = palette.muted, style = Theme.type.small) }
         if (state.protocol == Access.Snmp) Labeled("") { Text(stringResource(Res.string.connect_snmp_community), color = palette.muted, style = Theme.type.small) }
         if (state.protocol == Access.Snmp3) {
@@ -667,6 +681,7 @@ private fun Header(onAbout: () -> Unit, onSettings: () -> Unit, onTools: () -> U
 private fun Lists(
     services: Services,
     saved: SavedRouters,
+    tables: TableLayouts,
     state: ConnectState,
     onConnect: () -> Unit,
     onRemove: (SavedRouter) -> Unit,
@@ -719,9 +734,9 @@ private fun Lists(
         Box(Modifier.fillMaxSize()) {
             val scan = services.scan
             when {
-                tab == 0 -> SavedTable(saved, state, onConnect, onRemove)
-                tab == 2 && scan != null -> ScanTable(scan, services, state)
-                else -> NeighborTable(services, state)
+                tab == 0 -> SavedTable(saved, tables, state, onConnect, onRemove)
+                tab == 2 && scan != null -> ScanTable(scan, services, tables, state)
+                else -> NeighborTable(services, tables, state)
             }
             // an empty list tells what Import takes in its own body, where the words have room
             if (tab == 0 && routers.isEmpty() && state.imported == null) {
@@ -738,7 +753,7 @@ private fun Lists(
 }
 
 @Composable
-private fun SavedTable(saved: SavedRouters, state: ConnectState, onConnect: () -> Unit, onRemove: (SavedRouter) -> Unit) {
+private fun SavedTable(saved: SavedRouters, tables: TableLayouts, state: ConnectState, onConnect: () -> Unit, onRemove: (SavedRouter) -> Unit) {
     val routers by saved.routers.collectAsState()
     var selected by remember { mutableStateOf<SavedRouter?>(null) }
     val kinds = DeviceKind.entries.associateWith { kindLabel(it) }
@@ -758,6 +773,7 @@ private fun SavedTable(saved: SavedRouters, state: ConnectState, onConnect: () -
                 TableColumn("protocol", stringResource(Res.string.connect_protocol), 200.dp) { protocols.getValue(it.protocol) },
             ),
             key = { it.address to it.user },
+            state = rememberKeptTable(tables, "connect/saved"),
             onSelection = { keys ->
                 selected = routers.firstOrNull { (it.address to it.user) in keys }
                 selected?.let(state::fill)
@@ -783,7 +799,7 @@ private fun RemoveRow(router: SavedRouter, onRemove: (SavedRouter) -> Unit) {
 }
 
 @Composable
-private fun NeighborTable(services: Services, state: ConnectState) {
+private fun NeighborTable(services: Services, tables: TableLayouts, state: ConnectState) {
     val neighbors = services.neighbors
     if (neighbors == null) {
         Text(stringResource(Res.string.connect_neighbors_unavailable), Modifier.padding(12.dp), color = Theme.palette.muted)
@@ -796,7 +812,7 @@ private fun NeighborTable(services: Services, state: ConnectState) {
     val noLocalNetwork = stringResource(Res.string.error_local_network)
     val notSent = stringResource(Res.string.neighbors_not_sent)
     val heard = remember { mutableStateMapOf<String, MndpSighting>() }
-    val tableState = remember { TableState<String>() }
+    val tableState = rememberKeptTable<String>(tables, "connect/neighbors")
     LaunchedEffect(neighbors) {
         try {
             neighbors.collect { sighting -> heard[sighting.announcement.mac ?: sighting.sourceAddress] = sighting }
@@ -887,7 +903,7 @@ private fun NeighborTable(services: Services, state: ConnectState) {
 }
 
 @Composable
-private fun ScanTable(scan: (List<String>) -> Flow<Found>, services: Services, state: ConnectState) {
+private fun ScanTable(scan: (List<String>) -> Flow<Found>, services: Services, tables: TableLayouts, state: ConnectState) {
     val palette = Theme.palette
     val scope = rememberCoroutineScope()
     val network = remember { TextFieldState() }
@@ -910,7 +926,7 @@ private fun ScanTable(scan: (List<String>) -> Flow<Found>, services: Services, s
                 scan(addresses).collect { found += it }
                 checked = addresses.size
             } catch (e: DeviceException) {
-                problem = getString(Res.string.error_unsupported, e.message.orEmpty())
+                problem = getString(Res.string.error_unsupported, deviceText(e.message.orEmpty()))
             } finally {
                 job = null
             }
@@ -941,6 +957,7 @@ private fun ScanTable(scan: (List<String>) -> Flow<Found>, services: Services, s
                 TableColumn("ports", stringResource(Res.string.scan_ports), 220.dp) { it.ports.joinToString(", ") },
             ),
             key = { it.address },
+            state = rememberKeptTable(tables, "connect/scan"),
             onOpen = { router ->
                 state.fillAddress(router.address)
                 when {
@@ -1021,6 +1038,7 @@ internal fun protocolLabel(protocol: Access) = stringResource(
         Access.Pfsense -> Res.string.protocol_pfsense
         Access.KeeneticSsl -> Res.string.protocol_keenetic_https
         Access.Keenetic -> Res.string.protocol_keenetic_http
+        Access.KeeneticSsh -> Res.string.protocol_keenetic_ssh
         Access.Vyos -> Res.string.protocol_vyos
         Access.Snmp -> Res.string.protocol_snmp
         Access.Snmp3 -> Res.string.protocol_snmp3
@@ -1037,6 +1055,7 @@ private fun kindLabel(kind: DeviceKind) = stringResource(
         DeviceKind.Pfsense -> Res.string.kind_pfsense
         DeviceKind.Keenetic -> Res.string.kind_keenetic
         DeviceKind.Vyos -> Res.string.kind_vyos
+        DeviceKind.Linux -> Res.string.kind_linux
         DeviceKind.Other -> Res.string.kind_other
     },
 )
@@ -1046,21 +1065,21 @@ private fun problemText(problem: Problem): String = when (problem) {
     Problem.Address -> stringResource(Res.string.error_address)
     Problem.Port -> stringResource(Res.string.error_port)
     Problem.Rejected -> stringResource(Res.string.error_rejected)
-    is Problem.Login -> stringResource(Res.string.error_login, problem.message)
+    is Problem.Login -> stringResource(Res.string.error_login, deviceMessage(problem.message))
     is Problem.Refused -> stringResource(Res.string.error_refused, problem.host, problem.port)
     is Problem.Timeout -> stringResource(Res.string.error_timeout, problem.host)
     is Problem.UnknownHost -> stringResource(Res.string.error_unknown_host, problem.host)
     is Problem.Unreachable -> stringResource(Res.string.error_unreachable, problem.host)
     Problem.LocalNetwork -> stringResource(Res.string.error_local_network)
     is Problem.Handshake -> stringResource(Res.string.error_handshake, problem.host)
-    is Problem.Unsupported -> stringResource(Res.string.error_unsupported, problem.message)
+    is Problem.Unsupported -> stringResource(Res.string.error_unsupported, deviceMessage(problem.message))
     is Problem.Browser -> stringResource(if (problem.routerOs) Res.string.error_browser_routeros else Res.string.error_browser, problem.host)
     Problem.MacTelnetUnsupported -> stringResource(Res.string.error_mac_telnet_unsupported)
     Problem.MacTelnetNoInterface -> stringResource(Res.string.error_mac_telnet_no_interface)
     Problem.OwnMac -> stringResource(Res.string.error_own_mac)
     Problem.Tcp8291Unsupported -> stringResource(Res.string.error_tcp_8291_unsupported)
     Problem.NoRest -> stringResource(Res.string.error_no_rest)
-    is Problem.Other -> stringResource(Res.string.error_other, problem.host, problem.message)
+    is Problem.Other -> stringResource(Res.string.error_other, problem.host, deviceMessage(problem.message))
     is Problem.SavedList -> stringResource(Res.string.error_saved_list, problem.message)
     is Problem.Secrets -> stringResource(Res.string.error_secrets, problem.message)
     Problem.BookPassword -> stringResource(Res.string.error_book_password)

@@ -14,6 +14,7 @@ import com.vasmarfas.networkhelm.app.SavedRouters
 import com.vasmarfas.networkhelm.app.Services
 import com.vasmarfas.networkhelm.transport.BrowserBlockedException
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.flow.emptyFlow
 import java.util.Locale
@@ -26,7 +27,7 @@ class ConnectBrowserTest {
     fun aRouterOsRequestThatTheBrowserBlockedIsExplainedByTheMissingCorsHeaders() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), emptyFlow()) { _, _, _ -> throw BrowserBlockedException("https://192.0.2.7/rest") }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.7")
         onNodeWithText("Connect").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("RouterOS sends no CORS headers", substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -36,7 +37,7 @@ class ConnectBrowserTest {
     fun aRequestOfAnotherPlatformGetsTheGeneralText() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), emptyFlow(), connectLogin = { _, _ -> throw BrowserBlockedException("https://192.0.2.7/api") })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.7")
         onNodeWithTag("platform").performClick()
         onAllNodes(hasText("OPNsense")).onLast().performClick()

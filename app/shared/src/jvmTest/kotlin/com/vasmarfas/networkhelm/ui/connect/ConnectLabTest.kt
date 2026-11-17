@@ -26,6 +26,7 @@ import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.runBlocking
@@ -58,7 +59,7 @@ class ConnectLabTest {
         var opened: DeviceSession? = null
         setContent {
             NetworkHelmTheme {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("address").performTextInput(host)
@@ -92,7 +93,7 @@ class ConnectLabTest {
         var opened: DeviceSession? = null
         setContent {
             NetworkHelmTheme {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("protocol").performClick()
@@ -140,7 +141,7 @@ class ConnectLabTest {
         var opened: DeviceSession? = null
         setContent {
             NetworkHelmTheme {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("address").performTextInput(target)
@@ -196,7 +197,7 @@ class ConnectLabTest {
         var opened: DeviceSession? = null
         setContent {
             NetworkHelmTheme {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("platform").performClick()

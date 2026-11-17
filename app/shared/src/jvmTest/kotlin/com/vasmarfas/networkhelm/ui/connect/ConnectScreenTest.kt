@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ui.connect
 
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
@@ -85,6 +86,7 @@ import com.vasmarfas.networkhelm.ui.files.FileExchange
 import com.vasmarfas.networkhelm.ui.files.LocalFile
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.winbox.WinBoxSession
 import kotlinx.coroutines.CoroutineScope
@@ -162,7 +164,7 @@ class ConnectScreenTest {
         }
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.1")
@@ -192,7 +194,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("import").performClick()
@@ -221,7 +223,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("import").performClick()
@@ -242,7 +244,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("import").performClick()
@@ -267,7 +269,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("import").performClick()
@@ -285,7 +287,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange, LocalCompact provides compact) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("import").apply { if (compact) performScrollTo() }.performClick()
@@ -425,7 +427,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("import").performClick()
@@ -445,7 +447,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } }
             }
         }
         fun told(file: String) = waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("$file could not be read: Access is denied")).fetchSemanticsNodes().isNotEmpty() }
@@ -455,6 +457,26 @@ class ConnectScreenTest {
         told("file2")
         onNodeWithTag("open-file").performClick()
         told("file3")
+    }
+
+    @Test
+    fun theSavedListComesBackSortedAsItWasLeftEvenWhenItsLayoutIsReadLate() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val saved = SavedRouters(storage)
+        runBlocking {
+            storage.write("tables.json", """{"connect/saved":{"sort":[{"column":"comment","ascending":true}]}}""")
+            saved.save(SavedRouter("192.0.2.41", "rd-test", comment = "b-office"))
+            saved.save(SavedRouter("192.0.2.42", "rd-test", comment = "a-home"))
+        }
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        val tables = TableLayouts(storage)
+        setContent {
+            LaunchedEffect(tables) { tables.keep() }
+            NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), tables) { _, _, _ -> } }
+        }
+        fun top(text: String) = onAllNodes(hasText(text)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+        waitUntil(timeoutMillis = 5_000) { (top("a-home") ?: Float.MAX_VALUE) < (top("b-office") ?: -1f) }
     }
 
     @Test
@@ -474,7 +496,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.41")
@@ -508,7 +530,7 @@ class ConnectScreenTest {
             login = given
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.45")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("192.0.2.45").performMouseInput { doubleClick() }
         waitUntil(timeoutMillis = 5_000) { login != null }
@@ -533,7 +555,7 @@ class ConnectScreenTest {
             login = given
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.49")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("192.0.2.49").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The password store did not answer: the keyring is locked")).fetchSemanticsNodes().isNotEmpty() }
@@ -560,7 +582,7 @@ class ConnectScreenTest {
             login = given
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.50")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("192.0.2.50").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasSetTextAction() and hasText("rd-test-stored")).fetchSemanticsNodes().isNotEmpty() }
@@ -586,7 +608,7 @@ class ConnectScreenTest {
         val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
         setContent {
             CompositionLocalProvider(LocalSettings provides settings.current, LocalAppSettings provides settings) {
-                NetworkHelmTheme { ConnectScreen(services, saved, rememberCoroutineScope()) { _, address, _ -> reached = address } }
+                NetworkHelmTheme { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, address, _ -> reached = address } }
             }
         }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.48")).fetchSemanticsNodes().isNotEmpty() }
@@ -622,7 +644,7 @@ class ConnectScreenTest {
         var screen by mutableIntStateOf(0)
         setContent {
             CompositionLocalProvider(LocalSettings provides settings.current, LocalAppSettings provides settings) {
-                NetworkHelmTheme { key(screen) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } } }
+                NetworkHelmTheme { key(screen) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } } }
             }
         }
         fun bar() = onNodeWithTag("split-bar").fetchSemanticsNode().boundsInRoot.top
@@ -648,7 +670,7 @@ class ConnectScreenTest {
             secrets.put(passwordKey("192.0.2.46", "rd-test"), "rd-test-stored")
         }
         val services = Services(storage, MemoryTrustStore(), null, secrets) { _, _, _ -> router }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("192.0.2.46")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("192.0.2.46").performClick()
         onNodeWithText("Remove").performClick()
@@ -663,7 +685,7 @@ class ConnectScreenTest {
         val storage = RefusingStorage(SavedRouters.FILE)
         val saved = SavedRouters(storage)
         val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.51")
         onNodeWithText("Save").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("routers.json is used by another process", substring = true)).fetchSemanticsNodes().isNotEmpty() }
@@ -678,7 +700,7 @@ class ConnectScreenTest {
         val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
         setContent {
             CompositionLocalProvider(LocalSettings provides settings.current, LocalAppSettings provides settings) {
-                NetworkHelmTheme { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("lists-place").performClick()
@@ -704,7 +726,7 @@ class ConnectScreenTest {
         }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.42")
@@ -729,7 +751,7 @@ class ConnectScreenTest {
             login = given
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.42")
         onNodeWithTag("ssh-agent").performClick()
         onNodeWithText("Save").performClick()
@@ -746,7 +768,7 @@ class ConnectScreenTest {
         val storage = MemoryStorage()
         val saved = SavedRouters(storage)
         val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("platform").performClick()
         onAllNodes(hasText("OPNsense")).onLast().performClick()
         onNodeWithText("REST with an API key (443)").assertExists()
@@ -768,9 +790,9 @@ class ConnectScreenTest {
             login = given
             router
         })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("platform").performClick()
-        onAllNodes(hasText("Other device: SSH, SNMP, UPnP")).onLast().performClick()
+        onAllNodes(hasText("Other device: SNMP, UPnP")).onLast().performClick()
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("SNMP v3 (UDP 161)")).onLast().performClick()
         onNodeWithTag("address").performTextInput("192.0.2.44")
@@ -808,7 +830,7 @@ class ConnectScreenTest {
             connected = true
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.60")
         onNodeWithTag("via").performClick()
         onAllNodes(hasText("192.0.2.1")).onLast().performClick()
@@ -844,7 +866,7 @@ class ConnectScreenTest {
         val services = Services(storage, MemoryTrustStore(), null, secrets) { _, _, _ -> router }
         setContent {
             CompositionLocalProvider(LocalFileExchange provides exchange) {
-                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } }
             }
         }
         onNodeWithTag("export").performClick()
@@ -884,7 +906,7 @@ class ConnectScreenTest {
         val services = Services(storage, MemoryTrustStore(), neighbors) { _, _, _ -> router }
         setContent {
             NetworkHelmTheme(dark = false) {
-                ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> }
+                ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> }
             }
         }
         picture("connect-light-saved-ru")
@@ -899,7 +921,7 @@ class ConnectScreenTest {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
         val services = Services(storage, MemoryTrustStore(), flow { throw IOException("Address already in use") }, refreshNeighbors = {}) { _, _, _ -> router }
-        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } } }
         onNodeWithText("Neighbors").performClick()
         waitForIdle()
         onNodeWithTag("neighbors-status").assertTextContains("5678", substring = true)
@@ -910,7 +932,7 @@ class ConnectScreenTest {
         Locale.setDefault(Locale.forLanguageTag("ru"))
         val services = Services(MemoryStorage(), MemoryTrustStore(), null) { _, _, _ -> router }
         val saved = SavedRouters(services.storage)
-        setContent { NetworkHelmTheme { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         waitForIdle()
         val layouts = mutableListOf<TextLayoutResult>()
         onNodeWithTag("import-hint").fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action?.invoke(layouts)
@@ -925,7 +947,7 @@ class ConnectScreenTest {
         Locale.setDefault(Locale.ENGLISH)
         var opened: DeviceSession? = null
         val services = Services(MemoryStorage(), MemoryTrustStore(), null) { _, _, _ -> router }
-        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session } } }
         onNodeWithTag("address").performTextInput("192.0.2.1")
         onNodeWithTag("password").performTextInput("rd-test")
         onNodeWithTag("password").performImeAction()
@@ -937,7 +959,7 @@ class ConnectScreenTest {
         Locale.setDefault(Locale.ENGLISH)
         var opened: DeviceSession? = null
         val services = Services(MemoryStorage(), MemoryTrustStore(), null) { _, _, _ -> router }
-        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { session, _, _ -> opened = session } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { session, _, _ -> opened = session } } }
         onNodeWithTag("address").performTextInput("192.0.2.1")
         onNodeWithTag("address").performKeyInput { pressKey(Key.Enter) }
         waitUntil { opened != null }
@@ -955,7 +977,7 @@ class ConnectScreenTest {
             heard.emit(neighbor("rd-test-c", "02:00:00:00:00:04", "192.0.2.13", "ether1"))
         }
         val services = Services(MemoryStorage(), MemoryTrustStore(), heard, refreshNeighbors = refresh) { _, _, _ -> router }
-        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithText("Neighbors").performClick()
         waitUntil { onAllNodes(hasTextExactly("rd-test-c")).fetchSemanticsNodes().isNotEmpty() }
         assertEquals(1, requests)
@@ -974,7 +996,7 @@ class ConnectScreenTest {
         }
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> }
             }
         }
         onNodeWithText("API-SSL (8729)").performClick()
@@ -990,7 +1012,7 @@ class ConnectScreenTest {
     fun portsThatGiveNoAnswerAreGreyedOut() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), probe = true) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage), probe = true) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("127.0.0.1")
         waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("Grey: the port gave no answer")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithTag("address").performTextInput(":8728")
@@ -1001,7 +1023,7 @@ class ConnectScreenTest {
     fun anAddressThatAnswersOnNoPortIsNotSwitchedToMacTelnet() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), probe = true) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage), probe = true) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("127.0.0.1")
         waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("Grey: the port gave no answer")).fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()
@@ -1017,7 +1039,7 @@ class ConnectScreenTest {
         }, localNetwork = { allowed })
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.1")
@@ -1038,7 +1060,7 @@ class ConnectScreenTest {
             asked += addresses
             flowOf(Found("192.168.88.10", listOf(22, 8728)), Found("192.168.88.1", listOf(80, 443, 8729)), Found("192.168.88.20", listOf(80, 8291)))
         })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithText("Scan").performClick()
         onNodeWithTag("scan-network").performTextInput("192.168.88.0/33")
         onNodeWithTag("scan").assertIsNotEnabled()
@@ -1060,7 +1082,7 @@ class ConnectScreenTest {
     fun typingMacAddressSwitchesProtocolToMacTelnetWhenServicePresent() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null, connectMacTelnet = { _, _, _, _, _, _ -> router })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("00:11:22:33:44:55")
         waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("MAC-Telnet (UDP 20561)").assertExists()
@@ -1070,7 +1092,7 @@ class ConnectScreenTest {
     fun typingMacWithoutServiceDoesNotSwitchToMacTelnet() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("00:11:22:33:44:55")
         waitForIdle()
         onNodeWithText("API-SSL (8729)").assertExists()
@@ -1091,7 +1113,7 @@ class ConnectScreenTest {
             },
         )
         var opened = false
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> opened = true } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> opened = true } } }
         onNodeWithTag("address").performTextInput("48:8F:5A:11:22:33")
         waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Connect").performClick()
@@ -1113,7 +1135,7 @@ class ConnectScreenTest {
                 router
             },
         )
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("48:8F:5A:11:22:33")
         waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Connect").performClick()
@@ -1136,7 +1158,7 @@ class ConnectScreenTest {
             typedMac = true,
         )
         var opened = false
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> opened = true } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> opened = true } } }
         onNodeWithTag("address").performTextInput("48:8F:5A:11:22:33")
         waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Connect").performClick()
@@ -1154,7 +1176,7 @@ class ConnectScreenTest {
         Locale.setDefault(Locale.ENGLISH)
         val neighbor = neighbor("CCR", "00:0C:42:AA:BB:CC", "0.0.0.0", "ether1")
         val services = Services(MemoryStorage(), MemoryTrustStore(), flowOf(neighbor), connectMacTelnet = { _, _, _, _, _, _ -> router })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithText("Neighbors").performClick()
         waitUntil { onAllNodes(hasText("00:0C:42:AA:BB:CC")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("00:0C:42:AA:BB:CC").performMouseInput { doubleClick() }
@@ -1167,7 +1189,7 @@ class ConnectScreenTest {
         Locale.setDefault(Locale.ENGLISH)
         val sighting = neighbor("rd-test-d", "02:00:00:00:00:05", "192.0.2.14", "ether1")
         val services = Services(MemoryStorage(), MemoryTrustStore(), flowOf(sighting), connectMacTelnet = { _, _, _, _, _, _ -> router })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithText("Neighbors").performClick()
         fun cell(text: String) = onNode(hasText(text) and hasAnyAncestor(hasTestTag("table")))
         waitUntil { onAllNodes(hasText("02:00:00:00:00:05") and hasAnyAncestor(hasTestTag("table"))).fetchSemanticsNodes().isNotEmpty() }
@@ -1196,7 +1218,7 @@ class ConnectScreenTest {
             },
         )
         var opened = false
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> opened = true } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> opened = true } } }
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("TCP 8291 (WinBox port)")).onLast().performClick()
         onNodeWithTag("address").performTextInput("192.0.2.45")
@@ -1223,7 +1245,7 @@ class ConnectScreenTest {
             },
         )
         var opened = false
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> opened = true } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> opened = true } } }
         onNodeWithTag("address").performTextInput("192.0.2.45")
         onNodeWithTag("password").performTextInput("secret")
         onNodeWithText("Connect").performClick()
@@ -1250,7 +1272,7 @@ class ConnectScreenTest {
             },
         )
         var opened = 0
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> opened++ } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> opened++ } } }
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("TCP 8291 (WinBox port)")).onLast().performClick()
         onNodeWithTag("address").performTextInput("192.0.2.45")
@@ -1270,7 +1292,7 @@ class ConnectScreenTest {
     fun connectingOverTcp8291WithoutServiceShowsTheProblem() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("TCP 8291 (WinBox port)")).onLast().performClick()
         onNodeWithTag("address").performTextInput("192.0.2.45")
@@ -1283,7 +1305,7 @@ class ConnectScreenTest {
     fun theChannelOfPort8291LogsInWithThePasswordAndAsksForNoSshKey() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         assertTrue(onAllNodes(hasTestTag("ssh-key")).fetchSemanticsNodes().isNotEmpty())
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("TCP 8291 (WinBox port)")).onLast().performClick()
@@ -1303,7 +1325,7 @@ class ConnectScreenTest {
             login = given
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.42")
         onNodeWithTag("port").performTextInput("9729")
         onNodeWithText("Save").performClick()
@@ -1322,9 +1344,9 @@ class ConnectScreenTest {
             login = given
             router
         })
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("platform").performClick()
-        onAllNodes(hasText("Other device: SSH, SNMP, UPnP")).onLast().performClick()
+        onAllNodes(hasText("Linux / SSH host")).onLast().performClick()
         onNodeWithTag("address").performTextInput("192.0.2.60")
         onNodeWithTag("port").performTextInput("20x22")
         onNodeWithTag("port").performTextInput("2022")
@@ -1344,7 +1366,7 @@ class ConnectScreenTest {
             login = given
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.42")
         onNodeWithTag("port").performTextInput("9729")
         onNodeWithTag("protocol").performClick()
@@ -1362,7 +1384,7 @@ class ConnectScreenTest {
             tried = true
             router
         }
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithTag("address").performTextInput("192.0.2.42")
         onNodeWithTag("port").performTextInput("70000")
         onNodeWithText("Connect").performClick()
@@ -1375,7 +1397,7 @@ class ConnectScreenTest {
     fun theSavedListIsReachedByScrollingInAWindowTooShortForTheFormAndTheList() = runDesktopComposeUiTest(1100, 420) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onRoot().performTouchInput { swipeUp() }
         waitForIdle()
         onNodeWithText("Saved").assertIsDisplayed()
@@ -1386,7 +1408,7 @@ class ConnectScreenTest {
     fun theFormAndTheListsBothShowInATallWindow() = runDesktopComposeUiTest(1100, 1300) {
         Locale.setDefault(Locale.ENGLISH)
         val services = Services(MemoryStorage(), MemoryTrustStore(), null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithText("Connect").assertIsDisplayed()
         onNodeWithText("Saved").assertIsDisplayed()
         picture("connect-tall-window")
@@ -1400,7 +1422,7 @@ class ConnectScreenTest {
         var given: CoroutineScope? = null
         setContent {
             val scope = rememberCoroutineScope().also { given = it }
-            NetworkHelmTheme { if (shown) ConnectScreen(services, SavedRouters(services.storage), scope) { _, _, _ -> } }
+            NetworkHelmTheme { if (shown) ConnectScreen(services, SavedRouters(services.storage), scope, TableLayouts(services.storage)) { _, _, _ -> } }
         }
         onNodeWithTag("address").performTextInput("00:11:22:33:44:55")
         waitUntil { onAllNodes(hasText("MAC-Telnet (UDP 20561)")).fetchSemanticsNodes().isNotEmpty() }

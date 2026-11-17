@@ -51,6 +51,8 @@ class LogEntryTest {
         assertEquals(60L, assertNotNull(stampOf("2026-10-22 07:09:26", null)).seconds - iso.seconds)
         assertEquals("2026-10-22", assertNotNull(stampOf("oct/22/2026 07:08:26", null)).date)
         assertEquals("2026-10-22", assertNotNull(stampOf("oct/22 07:08:26", "2026-10-27")).date)
+        assertEquals("2026-10-22", assertNotNull(stampOf("Oct 22 07:08:26", "2026-10-27")).date)
+        assertEquals("2026-01-01", assertNotNull(stampOf("Jan  1 00:00:04", "2026-10-27")).date)
         assertEquals("2026-10-27", assertNotNull(stampOf("12:01:23", "2026-10-27")).date)
         assertEquals("2026-10-23", assertNotNull(stampOf("Fri Oct 23 17:41:46 2026", null)).date)
         assertEquals("2026-10-22", assertNotNull(stampOf("2026-10-22T07:08:26+03:00", null)).date)

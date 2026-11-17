@@ -18,6 +18,7 @@ import com.vasmarfas.networkhelm.app.SavedRouters
 import com.vasmarfas.networkhelm.app.Secrets
 import com.vasmarfas.networkhelm.app.Services
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import eu.anifantakis.lib.ksafe.KSafeProtectionInfo
 import eu.anifantakis.lib.ksafe.KSafeProtectionLevel
@@ -35,7 +36,7 @@ class ConnectDisclosureTest {
         }
         val storage = MemoryStorage()
         val services = Services(storage, MemoryTrustStore(), null, secrets, scan = null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } } }
         onNodeWithTag("secrets-protection").assertDoesNotExist()
         onNodeWithText("Remember the password").performClick()
         onNodeWithTag("secrets-protection").assertTextEquals("Remembered passwords use software encryption; the key is kept in the app’s data folder.")
@@ -50,15 +51,16 @@ class ConnectDisclosureTest {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()
         val services = Services(storage, MemoryTrustStore(), null, scan = null)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } } }
         onNodeWithTag("platform-unverified").assertDoesNotExist()
-        for ((platform, driver) in listOf("OpenWrt" to "RutOS (Teltonika)", "Keenetic" to "Keenetic / Netcraze")) {
-            onNodeWithTag("platform").performClick()
-            onAllNodes(hasText(platform)).onLast().performClick()
-            onNodeWithTag("platform-unverified").assertTextEquals("$driver: written from the vendor documentation, not yet tried on a real device.")
-        }
         onNodeWithTag("platform").performClick()
-        onAllNodes(hasText("Other device: SSH, SNMP, UPnP")).onLast().performClick()
+        onAllNodes(hasText("OpenWrt")).onLast().performClick()
+        onNodeWithTag("platform-unverified").assertTextEquals("RutOS (Teltonika): written from the vendor documentation, not yet tried on a real device.")
+        onNodeWithTag("platform").performClick()
+        onAllNodes(hasText("Keenetic / Netcraze")).onLast().performClick()
+        onNodeWithTag("platform-unverified").assertDoesNotExist()
+        onNodeWithTag("platform").performClick()
+        onAllNodes(hasText("Other device: SNMP, UPnP")).onLast().performClick()
         onNodeWithTag("platform-unverified").assertDoesNotExist()
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("UPnP IGD and TR-064, read only (SSDP 1900)")).onLast().performClick()

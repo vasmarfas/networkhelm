@@ -53,6 +53,7 @@ class FakeRouter(
     private val refused: Set<String> = emptySet(),
     private val gone: Set<String> = emptySet(),
     packages: Set<String> = setOf("routeros"),
+    private val words: Map<String, String> = emptyMap(),
 ) : DeviceSession {
     val ran = mutableListOf<Pair<String, Map<String, String>>>()
     val counted = MutableSharedFlow<Map<String, Map<String, String>>>(replay = 1)
@@ -70,6 +71,8 @@ class FakeRouter(
     override suspend fun nativeMenu() = native
 
     override suspend fun packs(store: TextStore?) = made
+
+    override suspend fun words(store: TextStore?) = words
 
     override suspend fun describe(path: MenuPath): MenuSchema {
         if (path.toString() in lacking) throw DeviceException(ErrorCategory.MissingItem, "no such command prefix")

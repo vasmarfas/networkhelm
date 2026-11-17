@@ -20,6 +20,7 @@ import com.vasmarfas.networkhelm.app.Services
 import com.vasmarfas.networkhelm.app.passwordKey
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
+import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.NonCancellable
@@ -51,7 +52,7 @@ class ConnectSwitchTest {
         }
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> }
             }
         }
         onNodeWithTag("address").performTextInput("192.0.2.7")
@@ -80,13 +81,13 @@ class ConnectSwitchTest {
         val services = Services(MemoryStorage(), MemoryTrustStore(), emptyFlow())
         setContent {
             NetworkHelmTheme(dark = true) {
-                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> }
+                ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> }
             }
         }
         onNodeWithText("Password").assertExists()
         onNodeWithTag("user").assertExists()
         onNodeWithTag("platform").performClick()
-        onAllNodes(hasText("Other device: SSH, SNMP, UPnP")).onLast().performClick()
+        onAllNodes(hasText("Other device: SNMP, UPnP")).onLast().performClick()
         onNodeWithTag("protocol").performClick()
         onAllNodes(hasText("SNMP v2c (UDP 161)")).onLast().performClick()
         waitUntil(timeoutMillis = 2_000) { onAllNodes(hasTestTag("password") and hasText("public")).fetchSemanticsNodes().isNotEmpty() }
@@ -113,7 +114,7 @@ class ConnectSwitchTest {
             secrets.put(passwordKey("192.0.2.45", "admin"), "rd-test-ro")
         }
         val services = Services(storage, MemoryTrustStore(), emptyFlow(), secrets)
-        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope()) { _, _, _ -> } } }
+        setContent { NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> } } }
         onNodeWithText("192.0.2.45").performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("password") and hasText("rd-test-ro")).fetchSemanticsNodes().isNotEmpty() }
         waitForIdle()

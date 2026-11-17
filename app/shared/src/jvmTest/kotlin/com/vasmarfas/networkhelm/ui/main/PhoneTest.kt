@@ -199,7 +199,7 @@ class PhoneTest {
         waitUntil(timeoutMillis = 5_000) { clip.entry != null }
         assertEquals("/ip firewall filter add chain=input action=drop", runBlocking { clip.readText() })
         onNodeWithContentDescription("Paste").performClick()
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Add 1 item from the clipboard to the router?")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Add 1 item from the clipboard?")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Paste").performClick()
         waitUntil(timeoutMillis = 5_000) { router.added.isNotEmpty() }
         assertEquals(mapOf("chain" to "input", "action" to "drop"), router.added.single())
@@ -212,7 +212,7 @@ class PhoneTest {
         setContent {
             NetworkHelmTheme {
                 CompositionLocalProvider(LocalCompact provides true) {
-                    ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope()) { _, _, _ -> }
+                    ConnectScreen(services, SavedRouters(services.storage), rememberCoroutineScope(), TableLayouts(services.storage)) { _, _, _ -> }
                 }
             }
         }

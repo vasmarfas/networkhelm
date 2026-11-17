@@ -20,6 +20,7 @@ enum class Access(val routerOs: RouterOsProtocol?, val openWrt: OpenWrtProtocol?
     Pfsense(null, null, 443),
     KeeneticSsl(null, null, 443),
     Keenetic(null, null, 80),
+    KeeneticSsh(null, null, 22),
     Vyos(null, null, 443),
     Snmp(null, null, 161),
     Snmp3(null, null, 161),
@@ -36,9 +37,10 @@ enum class DeviceKind(val protocols: List<Access>) {
     OpenWrt(listOf(Access.OpenWrtSsh, Access.OpenWrtUbusSsl, Access.OpenWrtUbus)),
     Opnsense(listOf(Access.Opnsense)),
     Pfsense(listOf(Access.Pfsense)),
-    Keenetic(listOf(Access.KeeneticSsl, Access.Keenetic)),
+    Keenetic(listOf(Access.KeeneticSsl, Access.Keenetic, Access.KeeneticSsh)),
     Vyos(listOf(Access.Vyos)),
-    Other(listOf(Access.Ssh, Access.Snmp, Access.Snmp3, Access.Upnp)),
+    Linux(listOf(Access.Ssh)),
+    Other(listOf(Access.Snmp, Access.Snmp3, Access.Upnp)),
     ;
 
     companion object {
@@ -49,7 +51,8 @@ enum class DeviceKind(val protocols: List<Access>) {
             Platform.Pfsense -> Pfsense
             Platform.Keenetic -> Keenetic
             Platform.Vyos -> Vyos
-            Platform.Ssh, Platform.Snmp, Platform.Upnp -> Other
+            Platform.Ssh -> Linux
+            Platform.Snmp, Platform.Upnp -> Other
         }
     }
 }

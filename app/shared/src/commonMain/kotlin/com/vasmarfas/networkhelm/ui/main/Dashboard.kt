@@ -156,7 +156,7 @@ internal fun DashboardView(tab: RouterTab) {
 }
 
 @Composable
-private fun Panels(left: @Composable () -> Unit, right: @Composable () -> Unit) {
+internal fun Panels(left: @Composable () -> Unit, right: @Composable () -> Unit) {
     if (LocalCompact.current) {
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
             left()
@@ -171,7 +171,7 @@ private fun Panels(left: @Composable () -> Unit, right: @Composable () -> Unit) 
 }
 
 @Composable
-private fun Section(title: String, content: @Composable () -> Unit) {
+internal fun Section(title: String, content: @Composable () -> Unit) {
     val palette = Theme.palette
     Column(Modifier.fillMaxWidth().testTag("dashboard-section"), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text(title, color = palette.muted, style = Theme.type.small)
@@ -181,7 +181,7 @@ private fun Section(title: String, content: @Composable () -> Unit) {
 }
 
 @Composable
-private fun Meter(fraction: Float, modifier: Modifier = Modifier, color: Color = Theme.palette.accent) {
+internal fun Meter(fraction: Float, modifier: Modifier = Modifier, color: Color = Theme.palette.accent) {
     Box(modifier.height(6.dp).background(Theme.palette.line)) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(fraction.coerceIn(0f, 1f)).background(color))
     }
@@ -220,7 +220,7 @@ private fun Counter(label: String, count: Int, tag: String) {
 }
 
 @Composable
-private fun Rates(line: Series) {
+internal fun Rates(line: Series) {
     val last = line.ring.last()
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Box(Modifier.size(8.dp).background(line.color))

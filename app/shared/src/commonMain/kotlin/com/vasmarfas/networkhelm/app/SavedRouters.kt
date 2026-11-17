@@ -22,6 +22,8 @@ data class SavedRouter(
     val via: String = "",
     val snmpAuth: AuthProtocol = AuthProtocol.Sha1,
     val snmpPriv: PrivProtocol = PrivProtocol.Aes,
+    // the address and port of SSH of a Keenetic, for its command line
+    val ssh: String = "",
 )
 
 class SavedRouters(private val storage: Storage) {

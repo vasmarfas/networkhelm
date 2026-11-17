@@ -8,6 +8,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.snapshotFlow
+import androidx.compose.ui.text.intl.Locale
 import com.vasmarfas.networkhelm.app.Access
 import com.vasmarfas.networkhelm.app.BOOK_FORMAT
 import com.vasmarfas.networkhelm.app.DeviceKind
@@ -40,6 +41,7 @@ import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.Login
 import com.vasmarfas.networkhelm.session.keep
+import com.vasmarfas.networkhelm.session.keeneticCloud
 import com.vasmarfas.networkhelm.session.recognize
 import com.vasmarfas.networkhelm.snmp.AuthProtocol
 import com.vasmarfas.networkhelm.snmp.PrivProtocol
@@ -237,6 +239,7 @@ class ConnectState(
     val keyEncrypted: Boolean get() = key?.second?.let(::sshKeyEncrypted) == true
     var agent by mutableStateOf(false)
     var via by mutableStateOf("")
+    val sshAddress = TextFieldState()
     val agentAvailable: Boolean get() = services.sshAgent
     var snmpAuth by mutableStateOf(AuthProtocol.Sha1)
     var snmpPriv by mutableStateOf(PrivProtocol.Aes)
@@ -306,6 +309,7 @@ class ConnectState(
         passphrase.setTextAndPlaceCursorAtEnd("")
         agent = router.agent
         via = router.via
+        sshAddress.setTextAndPlaceCursorAtEnd(router.ssh)
         snmpAuth = router.snmpAuth
         snmpPriv = router.snmpPriv
         privacy.setTextAndPlaceCursorAtEnd("")
@@ -383,6 +387,13 @@ class ConnectState(
                 }
                 if (isMacAddress(text.trim())) return@collectLatest
                 val target = parseAddress(text)?.takeIf { it.port == null && own.isEmpty() } ?: return@collectLatest
+                // the ports of the cloud are not the router's, and the name already tells it
+                if (keeneticCloud(target.host)) {
+                    detected = DeviceKind.Keenetic
+                    if (!kindPicked) kind = DeviceKind.Keenetic
+                    if (!protocolPicked) protocol = Access.KeeneticSsl
+                    return@collectLatest
+                }
                 delay(700)
                 val ports = Access.entries.filter { it != Access.Snmp && it != Access.Snmp3 && it != Access.Upnp && it != Access.MacTelnet }.map { it.defaultPort }.distinct()
                 val answered = coroutineScope { ports.map { port -> async { port to answers(target.host, port) } }.awaitAll() }
@@ -586,7 +597,11 @@ class ConnectState(
     private fun other(access: Access, host: String, port: Int, user: String, secret: String, key: ByteArray?, agent: Boolean, phrase: String?, snmp: SnmpUser): Login = when (access) {
         Access.Opnsense -> Login.Opnsense(host, user, secret, port)
         Access.Pfsense -> Login.Pfsense(host, user, secret, port)
-        Access.KeeneticSsl, Access.Keenetic -> Login.Keenetic(host, user, secret, access == Access.KeeneticSsl, port)
+        Access.KeeneticSsl, Access.Keenetic -> {
+            val ssh = parseAddress(sshAddress.text.toString())
+            Login.Keenetic(host, user, secret, access == Access.KeeneticSsl, port, Locale.current.language, ssh?.host.orEmpty(), ssh?.port ?: 22)
+        }
+        Access.KeeneticSsh -> Login.Keenetic(host, user, secret, false, port, Locale.current.language, tunnel = true)
         Access.Vyos -> Login.Vyos(host, secret, port)
         Access.Snmp -> Login.Snmp(host, secret, port)
         Access.Snmp3 -> Login.Snmp(host, "", port, snmp)
@@ -599,7 +614,8 @@ class ConnectState(
             problem = Problem.Port
             return
         }
-        val router = SavedRouter(fullAddress(), user.text.toString(), protocol, group.text.toString().trim(), comment.text.toString().trim(), encoding, agent, via, snmpAuth, snmpPriv)
+        val ssh = if (protocol.kind == DeviceKind.Keenetic) sshAddress.text.toString().trim() else ""
+        val router = SavedRouter(fullAddress(), user.text.toString(), protocol, group.text.toString().trim(), comment.text.toString().trim(), encoding, agent, via, snmpAuth, snmpPriv, ssh)
         if (parseAddress(router.address) == null && !isMacAddress(router.address)) {
             problem = Problem.Address
             return
