@@ -19,8 +19,8 @@ I tested it mostly on virtual routers (the table below says which ones), so a re
 | pfSense | view and change | CE 2.7.2 in a virtual machine |
 | VyOS 1.4 and later | view and change | rolling 2026.10.23 in a virtual machine |
 | Teltonika RutOS | like OpenWrt, plus an LTE window | not checked |
-| Keenetic, Netcraze | view only | not checked |
-| Linux over SSH | view only | the OpenWrt virtual machines |
+| Keenetic, Netcraze (one KeeneticOS) | view and change, the menu of the web interface in the words of the router and by its components: connections to the provider, WireGuard, OpenVPN and IP tunnels, the IPv4 and IPv6 firewall, schedules, LEDs and buttons, firmware updates, SMS and USSD; all settings from its CLI, windows and command line over SSH, comparison of the running-config | Keenetic Launcher (KN-1221) with KeeneticOS 5.1.6 and 5.1.8 |
+| Linux over SSH | view and change: dashboard, interfaces and VLANs, addresses, routes kept in NetworkManager, netplan, systemd-networkd or ifupdown, the firewall (ufw, firewalld, nftables, iptables), storage and SMART, listening ports, packages, services, root through sudo | Debian 12, Ubuntu 24.04, Fedora 44, Rocky Linux 9, Alpine 3.24, Arch Linux, openSUSE Leap 16 in LXC containers; reading on the OpenWrt virtual machines |
 | SNMP | walk the agent to find what it has (a "MIB" group of windows with names from the standard MIBs), view it, change any writable value, create and remove rows of tables with RowStatus | reading on the Wi-Fi router, walking and writing on net-snmp in a virtual machine |
 | UPnP, TR-064 | view only | UPnP on the Wi-Fi router, TR-064 not checked |
 

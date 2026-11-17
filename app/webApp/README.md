@@ -17,7 +17,7 @@ On the first visit the list of the connection window holds six routers, one for 
 | `opnsense.demo` | OPNsense 25.1 | API |
 | `pfsense.demo` | pfSense 2.8 | API |
 | `vyos.demo` | VyOS 1.4 | HTTP API |
-| `keenetic.demo` | Keenetic 4.3 | RCI |
+| `keenetic.demo` | Keenetic 5.1 | RCI |
 
 They exist in the memory of the page, any password opens them, and a new connection starts from the data given in `core/.../demo/`: what one connection changed, the next does not find. Lists take add, set, remove and move; Safe Mode of the RouterOS demo takes the changes back; ping, traceroute and the traffic of an interface answer with rows. The addresses are those of documentation (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) and the MAC addresses 00:00:5E:00:53:xx, the range RFC 7042 sets aside for it. The rows of each platform carry the columns of its packs, so the windows look as they do on a real device; menus the demo has no data for are not shown.
 

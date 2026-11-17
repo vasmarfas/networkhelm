@@ -18,7 +18,7 @@ The app is not in the stores yet. When it appears on Google Play and RuStore, a 
 
 ## Report a Router
 
-Keenetic, Netcraze, Teltonika and TR-064 are written from the vendors' documentation and have never met a real device; OPNsense, pfSense and VyOS were checked in virtual machines only. If you run one of them, an issue with the model, the firmware version and what worked or did not helps more than anything else. Please leave addresses, passwords and keys out of it.
+Teltonika and TR-064 are written from the vendors' documentation and have never met a real device; Keenetic and Netcraze, one KeeneticOS, were checked on a Keenetic Launcher (KN-1221), OPNsense, pfSense and VyOS in virtual machines only. If you run one of them, an issue with the model, the firmware version and what worked or did not helps more than anything else. Please leave addresses, passwords and keys out of it.
 
 ## If the App Does Not Start
 
