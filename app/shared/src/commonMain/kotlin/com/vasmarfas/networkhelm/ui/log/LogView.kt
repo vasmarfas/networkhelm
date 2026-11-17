@@ -100,6 +100,7 @@ import com.vasmarfas.networkhelm.ui.kit.MenuPanel
 import com.vasmarfas.networkhelm.ui.kit.arrow
 import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.main.WindowTab
+import com.vasmarfas.networkhelm.ui.main.deviceMessage
 import com.vasmarfas.networkhelm.ui.table.TableLayout
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.table.select
@@ -532,7 +533,7 @@ internal fun LogView(session: DeviceSession, tab: WindowTab, tables: TableLayout
                     details(Modifier.height(paneHeight.coerceAtMost(limit)))
                 }
             }
-            problem?.let { Text(it, Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 2.dp), style = Theme.type.small, color = palette.danger) }
+            problem?.let { Text(deviceMessage(it), Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 2.dp), style = Theme.type.small, color = palette.danger) }
             LogStatus(state, shown.size, source.size, severityList, order.count { it in state.selected }, arrived == null, fresh, day.takeIf { state.times == TimeStyle.Short })
         }
     }

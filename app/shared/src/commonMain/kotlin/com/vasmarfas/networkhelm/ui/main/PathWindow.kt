@@ -115,7 +115,6 @@ import com.vasmarfas.networkhelm.model.closedBy
 import com.vasmarfas.networkhelm.model.lacks
 import com.vasmarfas.networkhelm.model.sensitive
 import com.vasmarfas.networkhelm.offline.addsOf
-import com.vasmarfas.networkhelm.openwrt.RequestOutcomeUnknownException
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.PackAction
 import com.vasmarfas.networkhelm.packs.PackFill
@@ -192,12 +191,10 @@ import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import networkhelm.app.shared.generated.resources.link_lost
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
-import networkhelm.app.shared.generated.resources.error_request_outcome_unknown
 import networkhelm.app.shared.generated.resources.command_question
 import networkhelm.app.shared.generated.resources.command_total
 import networkhelm.app.shared.generated.resources.copy_cell
@@ -645,10 +642,12 @@ private fun ListView(
             val rate = column.endsWith("bits-per-second") || column in pack?.bits.orEmpty()
             // a row without the option has the default of its form: a rule of fw4 without enabled is enabled
             val flag = argument?.type == ValueType.Flag
+            val each = argument?.labels.orEmpty().takeIf { (argument?.type as? ValueType.Enumeration)?.multiple == true }.orEmpty()
             TableColumn<Item>(column, named(column), null, {
                 when {
                     hidden && it.isNotEmpty() -> HiddenValue
                     flag && it.isNotEmpty() -> if (it == argument.choices.firstOrNull() || it in ValueType.Flag.on) "yes" else "no"
+                    each.isNotEmpty() -> it.split(',').filter(String::isNotEmpty).joinToString(", ") { part -> each[part] ?: part }
                     else -> argument?.labels?.get(it) ?: cell(pack, column, it)
                 }
             }, widest = if (rate) "1999.9 Mbps" else null, icon = { row, value ->
@@ -1184,13 +1183,6 @@ internal fun Confirm(
             }
         }
     }
-}
-
-@Composable
-internal fun deviceMessage(text: String): String = when (text) {
-    RequestOutcomeUnknownException.MESSAGE -> stringResource(Res.string.error_request_outcome_unknown)
-    LINK_LOST -> stringResource(Res.string.link_lost)
-    else -> text
 }
 
 @Composable

@@ -97,7 +97,7 @@ internal fun PrepareView(session: DeviceSession, onSecure: (suspend () -> Unit)?
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             val reopen = onSecure?.takeIf { done && certificate && !encrypted }
             Text(
-                problem ?: if (done) stringResource(if (reopen != null) Res.string.prepare_done_now else Res.string.prepare_done) else "",
+                problem?.let { deviceMessage(it) } ?: if (done) stringResource(if (reopen != null) Res.string.prepare_done_now else Res.string.prepare_done) else "",
                 Modifier.weight(1f),
                 color = if (problem != null) palette.danger else palette.success,
                 style = Theme.type.small,

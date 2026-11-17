@@ -1,0 +1,1129 @@
+package com.vasmarfas.networkhelm.ui.main
+
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
+import com.vasmarfas.networkhelm.model.LINK_LOST
+import com.vasmarfas.networkhelm.openwrt.RequestOutcomeUnknownException
+import org.jetbrains.compose.resources.StringResource
+import org.jetbrains.compose.resources.getString
+import org.jetbrains.compose.resources.stringResource
+import networkhelm.app.shared.generated.resources.Res
+import networkhelm.app.shared.generated.resources.error_address_prefix
+import networkhelm.app.shared.generated.resources.error_answered_http
+import networkhelm.app.shared.generated.resources.error_api_no_new_element
+import networkhelm.app.shared.generated.resources.error_browser_blocked
+import networkhelm.app.shared.generated.resources.error_browser_http_only
+import networkhelm.app.shared.generated.resources.error_channel_no_folders
+import networkhelm.app.shared.generated.resources.error_channel_no_input
+import networkhelm.app.shared.generated.resources.error_channel_no_rename
+import networkhelm.app.shared.generated.resources.error_command_no_json
+import networkhelm.app.shared.generated.resources.error_command_no_list
+import networkhelm.app.shared.generated.resources.error_command_not_on_host
+import networkhelm.app.shared.generated.resources.error_config_no_address
+import networkhelm.app.shared.generated.resources.error_config_no_definition
+import networkhelm.app.shared.generated.resources.error_config_no_route
+import networkhelm.app.shared.generated.resources.error_config_no_route_via
+import networkhelm.app.shared.generated.resources.error_connection_closed
+import networkhelm.app.shared.generated.resources.error_connection_lost
+import networkhelm.app.shared.generated.resources.error_console_file_cut
+import networkhelm.app.shared.generated.resources.error_console_file_kept
+import networkhelm.app.shared.generated.resources.error_console_file_limit
+import networkhelm.app.shared.generated.resources.error_console_file_partial
+import networkhelm.app.shared.generated.resources.error_console_line_length
+import networkhelm.app.shared.generated.resources.error_console_listen
+import networkhelm.app.shared.generated.resources.error_console_not_rows
+import networkhelm.app.shared.generated.resources.error_console_prelude
+import networkhelm.app.shared.generated.resources.error_console_safe_mode
+import networkhelm.app.shared.generated.resources.error_console_txt_only
+import networkhelm.app.shared.generated.resources.error_console_verb
+import networkhelm.app.shared.generated.resources.error_demo_no_backup
+import networkhelm.app.shared.generated.resources.error_demo_no_device_mode
+import networkhelm.app.shared.generated.resources.error_demo_no_export
+import networkhelm.app.shared.generated.resources.error_demo_no_files
+import networkhelm.app.shared.generated.resources.error_demo_no_import
+import networkhelm.app.shared.generated.resources.error_demo_no_item
+import networkhelm.app.shared.generated.resources.error_demo_no_menu
+import networkhelm.app.shared.generated.resources.error_demo_no_order
+import networkhelm.app.shared.generated.resources.error_demo_no_restore
+import networkhelm.app.shared.generated.resources.error_demo_no_sign
+import networkhelm.app.shared.generated.resources.error_demo_passwords
+import networkhelm.app.shared.generated.resources.error_demo_read_only
+import networkhelm.app.shared.generated.resources.error_demo_restarts_nothing
+import networkhelm.app.shared.generated.resources.error_demo_router
+import networkhelm.app.shared.generated.resources.error_dst_network
+import networkhelm.app.shared.generated.resources.error_ecsrp5_challenge
+import networkhelm.app.shared.generated.resources.error_ecsrp5_key
+import networkhelm.app.shared.generated.resources.error_ecsrp5_unsupported
+import networkhelm.app.shared.generated.resources.error_exit_status
+import networkhelm.app.shared.generated.resources.error_field_address_needed
+import networkhelm.app.shared.generated.resources.error_field_bool
+import networkhelm.app.shared.generated.resources.error_field_date
+import networkhelm.app.shared.generated.resources.error_field_digits
+import networkhelm.app.shared.generated.resources.error_field_duration
+import networkhelm.app.shared.generated.resources.error_field_flag
+import networkhelm.app.shared.generated.resources.error_field_ipv4
+import networkhelm.app.shared.generated.resources.error_field_ipv6
+import networkhelm.app.shared.generated.resources.error_field_mac
+import networkhelm.app.shared.generated.resources.error_field_no_interface
+import networkhelm.app.shared.generated.resources.error_field_number
+import networkhelm.app.shared.generated.resources.error_field_offset
+import networkhelm.app.shared.generated.resources.error_field_out_of_range
+import networkhelm.app.shared.generated.resources.error_field_prefix
+import networkhelm.app.shared.generated.resources.error_field_range
+import networkhelm.app.shared.generated.resources.error_field_rate
+import networkhelm.app.shared.generated.resources.error_field_read_only
+import networkhelm.app.shared.generated.resources.error_field_step
+import networkhelm.app.shared.generated.resources.error_field_time
+import networkhelm.app.shared.generated.resources.error_field_unset
+import networkhelm.app.shared.generated.resources.error_field_value
+import networkhelm.app.shared.generated.resources.error_field_vrf
+import networkhelm.app.shared.generated.resources.error_firewall_managed
+import networkhelm.app.shared.generated.resources.error_firewalld_no_command
+import networkhelm.app.shared.generated.resources.error_firewalld_no_zone
+import networkhelm.app.shared.generated.resources.error_fstab_exists
+import networkhelm.app.shared.generated.resources.error_fstab_no_line
+import networkhelm.app.shared.generated.resources.error_fstab_verify
+import networkhelm.app.shared.generated.resources.error_fw4_chain_list
+import networkhelm.app.shared.generated.resources.error_fw4_dynamic_rule
+import networkhelm.app.shared.generated.resources.error_fw4_filter_chain
+import networkhelm.app.shared.generated.resources.error_fw4_forward_lists
+import networkhelm.app.shared.generated.resources.error_fw4_list_in_use
+import networkhelm.app.shared.generated.resources.error_fw4_mangle_action
+import networkhelm.app.shared.generated.resources.error_fw4_mangle_chain
+import networkhelm.app.shared.generated.resources.error_fw4_nat_chain
+import networkhelm.app.shared.generated.resources.error_fw4_no_list
+import networkhelm.app.shared.generated.resources.error_fw4_no_member
+import networkhelm.app.shared.generated.resources.error_fw4_raw_action
+import networkhelm.app.shared.generated.resources.error_fw4_raw_chain
+import networkhelm.app.shared.generated.resources.error_gateway_address
+import networkhelm.app.shared.generated.resources.error_gateway_browser_unreadable
+import networkhelm.app.shared.generated.resources.error_gateway_cannot
+import networkhelm.app.shared.generated.resources.error_gateway_closed
+import networkhelm.app.shared.generated.resources.error_gateway_no_8291
+import networkhelm.app.shared.generated.resources.error_gateway_no_documents
+import networkhelm.app.shared.generated.resources.error_gateway_no_mac
+import networkhelm.app.shared.generated.resources.error_gateway_no_mndp
+import networkhelm.app.shared.generated.resources.error_gateway_no_mndp_ask
+import networkhelm.app.shared.generated.resources.error_gateway_no_session
+import networkhelm.app.shared.generated.resources.error_gateway_no_ssh_process
+import networkhelm.app.shared.generated.resources.error_gateway_no_ssh_tunnel
+import networkhelm.app.shared.generated.resources.error_gateway_no_sweep
+import networkhelm.app.shared.generated.resources.error_gateway_protocol
+import networkhelm.app.shared.generated.resources.error_gateway_session_closed
+import networkhelm.app.shared.generated.resources.error_gateway_sweep_limit
+import networkhelm.app.shared.generated.resources.error_gateway_unreadable
+import networkhelm.app.shared.generated.resources.error_home_mount
+import networkhelm.app.shared.generated.resources.error_host_files_ssh_only
+import networkhelm.app.shared.generated.resources.error_host_no_address
+import networkhelm.app.shared.generated.resources.error_host_no_interface
+import networkhelm.app.shared.generated.resources.error_host_no_json
+import networkhelm.app.shared.generated.resources.error_host_no_json_object
+import networkhelm.app.shared.generated.resources.error_host_no_mount
+import networkhelm.app.shared.generated.resources.error_host_no_neighbor
+import networkhelm.app.shared.generated.resources.error_host_no_route
+import networkhelm.app.shared.generated.resources.error_host_no_virtual
+import networkhelm.app.shared.generated.resources.error_host_path_unchangeable
+import networkhelm.app.shared.generated.resources.error_http_cut_chunk
+import networkhelm.app.shared.generated.resources.error_http_cut_headers
+import networkhelm.app.shared.generated.resources.error_http_response_size
+import networkhelm.app.shared.generated.resources.error_http_short_body
+import networkhelm.app.shared.generated.resources.error_http_status
+import networkhelm.app.shared.generated.resources.error_http_status_line
+import networkhelm.app.shared.generated.resources.error_http_too_many_headers
+import networkhelm.app.shared.generated.resources.error_interface_name
+import networkhelm.app.shared.generated.resources.error_interface_unknown
+import networkhelm.app.shared.generated.resources.error_keenetic_account_password
+import networkhelm.app.shared.generated.resources.error_keenetic_acl_list
+import networkhelm.app.shared.generated.resources.error_keenetic_auth_type
+import networkhelm.app.shared.generated.resources.error_keenetic_broker_fields
+import networkhelm.app.shared.generated.resources.error_keenetic_button_kept
+import networkhelm.app.shared.generated.resources.error_keenetic_cli_lines
+import networkhelm.app.shared.generated.resources.error_keenetic_client_by_mac
+import networkhelm.app.shared.generated.resources.error_keenetic_client_mac
+import networkhelm.app.shared.generated.resources.error_keenetic_client_unknown
+import networkhelm.app.shared.generated.resources.error_keenetic_connections_list
+import networkhelm.app.shared.generated.resources.error_keenetic_dot1x_account
+import networkhelm.app.shared.generated.resources.error_keenetic_dot1x_method
+import networkhelm.app.shared.generated.resources.error_keenetic_host_domain
+import networkhelm.app.shared.generated.resources.error_keenetic_ip_tunnel_type
+import networkhelm.app.shared.generated.resources.error_keenetic_ipv4_mask
+import networkhelm.app.shared.generated.resources.error_keenetic_ipv4_mode
+import networkhelm.app.shared.generated.resources.error_keenetic_ipv6_address
+import networkhelm.app.shared.generated.resources.error_keenetic_ipv6_mode
+import networkhelm.app.shared.generated.resources.error_keenetic_isp_tunnel
+import networkhelm.app.shared.generated.resources.error_keenetic_led_mode
+import networkhelm.app.shared.generated.resources.error_keenetic_mac_mode
+import networkhelm.app.shared.generated.resources.error_keenetic_modem_network
+import networkhelm.app.shared.generated.resources.error_keenetic_move_one
+import networkhelm.app.shared.generated.resources.error_keenetic_move_within
+import networkhelm.app.shared.generated.resources.error_keenetic_no_challenge
+import networkhelm.app.shared.generated.resources.error_keenetic_no_command
+import networkhelm.app.shared.generated.resources.error_keenetic_no_forward_rule
+import networkhelm.app.shared.generated.resources.error_keenetic_no_home_address
+import networkhelm.app.shared.generated.resources.error_keenetic_no_key
+import networkhelm.app.shared.generated.resources.error_keenetic_no_order
+import networkhelm.app.shared.generated.resources.error_keenetic_no_rci_path
+import networkhelm.app.shared.generated.resources.error_keenetic_no_realm
+import networkhelm.app.shared.generated.resources.error_keenetic_no_sms_modem
+import networkhelm.app.shared.generated.resources.error_keenetic_no_update
+import networkhelm.app.shared.generated.resources.error_keenetic_no_ussd_modem
+import networkhelm.app.shared.generated.resources.error_keenetic_not_port
+import networkhelm.app.shared.generated.resources.error_keenetic_openvpn_config
+import networkhelm.app.shared.generated.resources.error_keenetic_output_client
+import networkhelm.app.shared.generated.resources.error_keenetic_peer_connection
+import networkhelm.app.shared.generated.resources.error_keenetic_peer_key
+import networkhelm.app.shared.generated.resources.error_keenetic_peer_stays
+import networkhelm.app.shared.generated.resources.error_keenetic_ping_check_host
+import networkhelm.app.shared.generated.resources.error_keenetic_ping_check_mode
+import networkhelm.app.shared.generated.resources.error_keenetic_ping_check_port
+import networkhelm.app.shared.generated.resources.error_keenetic_policy_list
+import networkhelm.app.shared.generated.resources.error_keenetic_policy_name
+import networkhelm.app.shared.generated.resources.error_keenetic_pool_name
+import networkhelm.app.shared.generated.resources.error_keenetic_pool_rename
+import networkhelm.app.shared.generated.resources.error_keenetic_pool_unnamed
+import networkhelm.app.shared.generated.resources.error_keenetic_protocol
+import networkhelm.app.shared.generated.resources.error_keenetic_range_end
+import networkhelm.app.shared.generated.resources.error_keenetic_rci_http
+import networkhelm.app.shared.generated.resources.error_keenetic_rci_no_json
+import networkhelm.app.shared.generated.resources.error_keenetic_rci_no_list
+import networkhelm.app.shared.generated.resources.error_keenetic_refused_rci
+import networkhelm.app.shared.generated.resources.error_keenetic_refused_token
+import networkhelm.app.shared.generated.resources.error_keenetic_rule_input
+import networkhelm.app.shared.generated.resources.error_keenetic_rule_interface
+import networkhelm.app.shared.generated.resources.error_keenetic_rule_no_match
+import networkhelm.app.shared.generated.resources.error_keenetic_rule_port
+import networkhelm.app.shared.generated.resources.error_keenetic_rule_stays
+import networkhelm.app.shared.generated.resources.error_keenetic_schedule_description
+import networkhelm.app.shared.generated.resources.error_keenetic_schedule_entry
+import networkhelm.app.shared.generated.resources.error_keenetic_schedule_list
+import networkhelm.app.shared.generated.resources.error_keenetic_schedule_no_name
+import networkhelm.app.shared.generated.resources.error_keenetic_seconds
+import networkhelm.app.shared.generated.resources.error_keenetic_sms_fields
+import networkhelm.app.shared.generated.resources.error_keenetic_sms_only_read
+import networkhelm.app.shared.generated.resources.error_keenetic_subnet_address
+import networkhelm.app.shared.generated.resources.error_keenetic_subnet_mask
+import networkhelm.app.shared.generated.resources.error_keenetic_target_no_json
+import networkhelm.app.shared.generated.resources.error_keenetic_tunnel_remote
+import networkhelm.app.shared.generated.resources.error_keenetic_tunnel_server
+import networkhelm.app.shared.generated.resources.error_keenetic_tunnel_type_kept
+import networkhelm.app.shared.generated.resources.error_keenetic_unknown_list
+import networkhelm.app.shared.generated.resources.error_keenetic_user_name
+import networkhelm.app.shared.generated.resources.error_keenetic_user_rename
+import networkhelm.app.shared.generated.resources.error_keenetic_ussd_request
+import networkhelm.app.shared.generated.resources.error_keenetic_ussd_timeout
+import networkhelm.app.shared.generated.resources.error_keenetic_view_only
+import networkhelm.app.shared.generated.resources.error_keenetic_vpn_kinds
+import networkhelm.app.shared.generated.resources.error_keenetic_vpn_list
+import networkhelm.app.shared.generated.resources.error_keenetic_wifi_security
+import networkhelm.app.shared.generated.resources.error_keenetic_wireguard_import
+import networkhelm.app.shared.generated.resources.error_keenetic_wisp_key
+import networkhelm.app.shared.generated.resources.error_keenetic_wisp_security
+import networkhelm.app.shared.generated.resources.error_keenetic_wisp_type
+import networkhelm.app.shared.generated.resources.error_linux_new_login_refused
+import networkhelm.app.shared.generated.resources.error_login_dropped
+import networkhelm.app.shared.generated.resources.error_login_no_answer
+import networkhelm.app.shared.generated.resources.error_mac_bytes
+import networkhelm.app.shared.generated.resources.error_mac_octet
+import networkhelm.app.shared.generated.resources.error_mac_octet_range
+import networkhelm.app.shared.generated.resources.error_mac_text
+import networkhelm.app.shared.generated.resources.error_mactelnet_block
+import networkhelm.app.shared.generated.resources.error_mactelnet_closed
+import networkhelm.app.shared.generated.resources.error_mactelnet_closed_before
+import networkhelm.app.shared.generated.resources.error_mactelnet_closed_early
+import networkhelm.app.shared.generated.resources.error_mactelnet_connection_closed
+import networkhelm.app.shared.generated.resources.error_mactelnet_is_closed
+import networkhelm.app.shared.generated.resources.error_mactelnet_login
+import networkhelm.app.shared.generated.resources.error_mactelnet_login_closed
+import networkhelm.app.shared.generated.resources.error_mactelnet_mtwei
+import networkhelm.app.shared.generated.resources.error_mactelnet_no_forwarding
+import networkhelm.app.shared.generated.resources.error_mactelnet_router
+import networkhelm.app.shared.generated.resources.error_mactelnet_salt
+import networkhelm.app.shared.generated.resources.error_mactelnet_short
+import networkhelm.app.shared.generated.resources.error_mactelnet_silent
+import networkhelm.app.shared.generated.resources.error_mactelnet_timeout
+import networkhelm.app.shared.generated.resources.error_mactelnet_unsupported
+import networkhelm.app.shared.generated.resources.error_metric_number
+import networkhelm.app.shared.generated.resources.error_mixomo_no_added
+import networkhelm.app.shared.generated.resources.error_mixomo_no_profile
+import networkhelm.app.shared.generated.resources.error_mixomo_no_rule
+import networkhelm.app.shared.generated.resources.error_mtu_number
+import networkhelm.app.shared.generated.resources.error_mtu_range
+import networkhelm.app.shared.generated.resources.error_native_bad_frame
+import networkhelm.app.shared.generated.resources.error_native_bad_mac
+import networkhelm.app.shared.generated.resources.error_native_bad_padding
+import networkhelm.app.shared.generated.resources.error_native_channel_dropped
+import networkhelm.app.shared.generated.resources.error_native_closed_read
+import networkhelm.app.shared.generated.resources.error_native_drops
+import networkhelm.app.shared.generated.resources.error_native_file_partial
+import networkhelm.app.shared.generated.resources.error_native_forbidden
+import networkhelm.app.shared.generated.resources.error_native_frame_size
+import networkhelm.app.shared.generated.resources.error_native_gone
+import networkhelm.app.shared.generated.resources.error_native_lines_endless
+import networkhelm.app.shared.generated.resources.error_native_list_endless
+import networkhelm.app.shared.generated.resources.error_native_message_size
+import networkhelm.app.shared.generated.resources.error_native_no_answer
+import networkhelm.app.shared.generated.resources.error_native_no_console
+import networkhelm.app.shared.generated.resources.error_native_no_exec
+import networkhelm.app.shared.generated.resources.error_native_no_field
+import networkhelm.app.shared.generated.resources.error_native_no_file
+import networkhelm.app.shared.generated.resources.error_native_no_file_created
+import networkhelm.app.shared.generated.resources.error_native_no_file_opened
+import networkhelm.app.shared.generated.resources.error_native_no_id
+import networkhelm.app.shared.generated.resources.error_native_no_lines
+import networkhelm.app.shared.generated.resources.error_native_no_new_id
+import networkhelm.app.shared.generated.resources.error_native_no_processes
+import networkhelm.app.shared.generated.resources.error_native_no_query
+import networkhelm.app.shared.generated.resources.error_native_no_start
+import networkhelm.app.shared.generated.resources.error_native_no_tunnels
+import networkhelm.app.shared.generated.resources.error_native_no_window
+import networkhelm.app.shared.generated.resources.error_native_none
+import networkhelm.app.shared.generated.resources.error_native_not_command
+import networkhelm.app.shared.generated.resources.error_native_not_implemented
+import networkhelm.app.shared.generated.resources.error_native_port_silent
+import networkhelm.app.shared.generated.resources.error_native_read_refused
+import networkhelm.app.shared.generated.resources.error_native_refused
+import networkhelm.app.shared.generated.resources.error_native_rows_endless
+import networkhelm.app.shared.generated.resources.error_native_service_off
+import networkhelm.app.shared.generated.resources.error_native_table_changed
+import networkhelm.app.shared.generated.resources.error_neighbor_address
+import networkhelm.app.shared.generated.resources.error_neighbor_mac
+import networkhelm.app.shared.generated.resources.error_netcfg_type
+import networkhelm.app.shared.generated.resources.error_netplan_changed
+import networkhelm.app.shared.generated.resources.error_netplan_no_address
+import networkhelm.app.shared.generated.resources.error_netplan_no_definition
+import networkhelm.app.shared.generated.resources.error_netplan_no_route
+import networkhelm.app.shared.generated.resources.error_netplan_no_route_via
+import networkhelm.app.shared.generated.resources.error_no_chain
+import networkhelm.app.shared.generated.resources.error_no_interface_to
+import networkhelm.app.shared.generated.resources.error_no_log_follow
+import networkhelm.app.shared.generated.resources.error_no_package_manager
+import networkhelm.app.shared.generated.resources.error_no_rule
+import networkhelm.app.shared.generated.resources.error_no_write
+import networkhelm.app.shared.generated.resources.error_not_address_or_network
+import networkhelm.app.shared.generated.resources.error_not_chain_rule
+import networkhelm.app.shared.generated.resources.error_not_mac
+import networkhelm.app.shared.generated.resources.error_not_on_host
+import networkhelm.app.shared.generated.resources.error_not_pids
+import networkhelm.app.shared.generated.resources.error_not_service
+import networkhelm.app.shared.generated.resources.error_offline_read_only
+import networkhelm.app.shared.generated.resources.error_open_quote
+import networkhelm.app.shared.generated.resources.error_openwrt_acl
+import networkhelm.app.shared.generated.resources.error_openwrt_bad_image
+import networkhelm.app.shared.generated.resources.error_openwrt_channel_no_status
+import networkhelm.app.shared.generated.resources.error_openwrt_command_exit
+import networkhelm.app.shared.generated.resources.error_openwrt_cron_every
+import networkhelm.app.shared.generated.resources.error_openwrt_cron_format
+import networkhelm.app.shared.generated.resources.error_openwrt_cron_interval
+import networkhelm.app.shared.generated.resources.error_openwrt_cron_minute
+import networkhelm.app.shared.generated.resources.error_openwrt_date_exit
+import networkhelm.app.shared.generated.resources.error_openwrt_dropbear_root
+import networkhelm.app.shared.generated.resources.error_openwrt_dynamic_address
+import networkhelm.app.shared.generated.resources.error_openwrt_dynamic_lease
+import networkhelm.app.shared.generated.resources.error_openwrt_event_size
+import networkhelm.app.shared.generated.resources.error_openwrt_export_ssh
+import networkhelm.app.shared.generated.resources.error_openwrt_form_size
+import networkhelm.app.shared.generated.resources.error_openwrt_gateway_unreached
+import networkhelm.app.shared.generated.resources.error_openwrt_interface_name
+import networkhelm.app.shared.generated.resources.error_openwrt_max_limit
+import networkhelm.app.shared.generated.resources.error_openwrt_missing_argument
+import networkhelm.app.shared.generated.resources.error_openwrt_no_bridge
+import networkhelm.app.shared.generated.resources.error_openwrt_no_command
+import networkhelm.app.shared.generated.resources.error_openwrt_no_dnsmasq
+import networkhelm.app.shared.generated.resources.error_openwrt_no_interface_on
+import networkhelm.app.shared.generated.resources.error_openwrt_no_section
+import networkhelm.app.shared.generated.resources.error_openwrt_no_settings
+import networkhelm.app.shared.generated.resources.error_openwrt_no_task
+import networkhelm.app.shared.generated.resources.error_openwrt_no_timeserver
+import networkhelm.app.shared.generated.resources.error_openwrt_not_ipv6
+import networkhelm.app.shared.generated.resources.error_openwrt_not_uci
+import networkhelm.app.shared.generated.resources.error_openwrt_one_image
+import networkhelm.app.shared.generated.resources.error_openwrt_own_route
+import networkhelm.app.shared.generated.resources.error_openwrt_partly_written
+import networkhelm.app.shared.generated.resources.error_openwrt_passwd
+import networkhelm.app.shared.generated.resources.error_openwrt_password_ssh
+import networkhelm.app.shared.generated.resources.error_openwrt_passwords_differ
+import networkhelm.app.shared.generated.resources.error_openwrt_peer_interface
+import networkhelm.app.shared.generated.resources.error_openwrt_public_key
+import networkhelm.app.shared.generated.resources.error_openwrt_ra_interval
+import networkhelm.app.shared.generated.resources.error_openwrt_rate
+import networkhelm.app.shared.generated.resources.error_openwrt_remove_needs_ssh
+import networkhelm.app.shared.generated.resources.error_openwrt_rpcd_login
+import networkhelm.app.shared.generated.resources.error_openwrt_startup
+import networkhelm.app.shared.generated.resources.error_openwrt_time
+import networkhelm.app.shared.generated.resources.error_openwrt_time_of_day
+import networkhelm.app.shared.generated.resources.error_openwrt_ubus_size
+import networkhelm.app.shared.generated.resources.error_openwrt_unreadable
+import networkhelm.app.shared.generated.resources.error_openwrt_weekday
+import networkhelm.app.shared.generated.resources.error_opnsense_answer
+import networkhelm.app.shared.generated.resources.error_opnsense_answered
+import networkhelm.app.shared.generated.resources.error_opnsense_firmware_no_object
+import networkhelm.app.shared.generated.resources.error_opnsense_info_no_object
+import networkhelm.app.shared.generated.resources.error_opnsense_no_api
+import networkhelm.app.shared.generated.resources.error_opnsense_no_element
+import networkhelm.app.shared.generated.resources.error_opnsense_no_export
+import networkhelm.app.shared.generated.resources.error_opnsense_no_json
+import networkhelm.app.shared.generated.resources.error_opnsense_no_order
+import networkhelm.app.shared.generated.resources.error_opnsense_no_revert
+import networkhelm.app.shared.generated.resources.error_opnsense_no_revision
+import networkhelm.app.shared.generated.resources.error_opnsense_no_sequence
+import networkhelm.app.shared.generated.resources.error_opnsense_not_removed
+import networkhelm.app.shared.generated.resources.error_opnsense_not_saved
+import networkhelm.app.shared.generated.resources.error_opnsense_read_only
+import networkhelm.app.shared.generated.resources.error_opnsense_refused
+import networkhelm.app.shared.generated.resources.error_opnsense_unknown_list
+import networkhelm.app.shared.generated.resources.error_package_name
+import networkhelm.app.shared.generated.resources.error_package_name_needed
+import networkhelm.app.shared.generated.resources.error_packages_no_command
+import networkhelm.app.shared.generated.resources.error_password_unchangeable
+import networkhelm.app.shared.generated.resources.error_path_list
+import networkhelm.app.shared.generated.resources.error_path_missing
+import networkhelm.app.shared.generated.resources.error_path_unchangeable
+import networkhelm.app.shared.generated.resources.error_pfsense_answered
+import networkhelm.app.shared.generated.resources.error_pfsense_move_one
+import networkhelm.app.shared.generated.resources.error_pfsense_no_api
+import networkhelm.app.shared.generated.resources.error_pfsense_no_export
+import networkhelm.app.shared.generated.resources.error_pfsense_no_json
+import networkhelm.app.shared.generated.resources.error_pfsense_no_place
+import networkhelm.app.shared.generated.resources.error_pfsense_read_only
+import networkhelm.app.shared.generated.resources.error_pfsense_refused
+import networkhelm.app.shared.generated.resources.error_pfsense_unknown_list
+import networkhelm.app.shared.generated.resources.error_request_outcome_unknown
+import networkhelm.app.shared.generated.resources.error_response_line_size
+import networkhelm.app.shared.generated.resources.error_rest_listen
+import networkhelm.app.shared.generated.resources.error_rest_not_json
+import networkhelm.app.shared.generated.resources.error_rest_unexpected
+import networkhelm.app.shared.generated.resources.error_romon_ended
+import networkhelm.app.shared.generated.resources.error_romon_id
+import networkhelm.app.shared.generated.resources.error_romon_login
+import networkhelm.app.shared.generated.resources.error_romon_no_link
+import networkhelm.app.shared.generated.resources.error_romon_unreached
+import networkhelm.app.shared.generated.resources.error_root_key_login
+import networkhelm.app.shared.generated.resources.error_root_mount
+import networkhelm.app.shared.generated.resources.error_root_no_sudo
+import networkhelm.app.shared.generated.resources.error_root_password
+import networkhelm.app.shared.generated.resources.error_ros_count
+import networkhelm.app.shared.generated.resources.error_ros_count_none
+import networkhelm.app.shared.generated.resources.error_ros_no_id
+import networkhelm.app.shared.generated.resources.error_ros_no_menu
+import networkhelm.app.shared.generated.resources.error_ros_no_text
+import networkhelm.app.shared.generated.resources.error_ros_unknown_menu
+import networkhelm.app.shared.generated.resources.error_ros_window_disagrees
+import networkhelm.app.shared.generated.resources.error_route_kind
+import networkhelm.app.shared.generated.resources.error_route_via
+import networkhelm.app.shared.generated.resources.error_router_closed
+import networkhelm.app.shared.generated.resources.error_router_closed_change_unknown
+import networkhelm.app.shared.generated.resources.error_router_closed_no_answer
+import networkhelm.app.shared.generated.resources.error_router_late
+import networkhelm.app.shared.generated.resources.error_router_no_file_channel
+import networkhelm.app.shared.generated.resources.error_router_no_safe_mode
+import networkhelm.app.shared.generated.resources.error_router_no_ssh
+import networkhelm.app.shared.generated.resources.error_router_no_ssh_service
+import networkhelm.app.shared.generated.resources.error_router_refused_command
+import networkhelm.app.shared.generated.resources.error_router_refused_login
+import networkhelm.app.shared.generated.resources.error_router_silent
+import networkhelm.app.shared.generated.resources.error_rule_parts
+import networkhelm.app.shared.generated.resources.error_rule_within_chain
+import networkhelm.app.shared.generated.resources.error_rules_lost
+import networkhelm.app.shared.generated.resources.error_rules_lost_detail
+import networkhelm.app.shared.generated.resources.error_rules_rollback
+import networkhelm.app.shared.generated.resources.error_server_closed_no_answer
+import networkhelm.app.shared.generated.resources.error_session_closed
+import networkhelm.app.shared.generated.resources.error_session_over
+import networkhelm.app.shared.generated.resources.error_session_to
+import networkhelm.app.shared.generated.resources.error_smartctl_no_device
+import networkhelm.app.shared.generated.resources.error_snmp3_empty_password
+import networkhelm.app.shared.generated.resources.error_snmp3_no_engine
+import networkhelm.app.shared.generated.resources.error_snmp_answered
+import networkhelm.app.shared.generated.resources.error_snmp_answered_authorization_error
+import networkhelm.app.shared.generated.resources.error_snmp_answered_bad_value
+import networkhelm.app.shared.generated.resources.error_snmp_answered_commit_failed
+import networkhelm.app.shared.generated.resources.error_snmp_answered_gen_err
+import networkhelm.app.shared.generated.resources.error_snmp_answered_inconsistent_name
+import networkhelm.app.shared.generated.resources.error_snmp_answered_inconsistent_value
+import networkhelm.app.shared.generated.resources.error_snmp_answered_no_access
+import networkhelm.app.shared.generated.resources.error_snmp_answered_no_creation
+import networkhelm.app.shared.generated.resources.error_snmp_answered_no_such_name
+import networkhelm.app.shared.generated.resources.error_snmp_answered_not_writable
+import networkhelm.app.shared.generated.resources.error_snmp_answered_read_only
+import networkhelm.app.shared.generated.resources.error_snmp_answered_resource_unavailable
+import networkhelm.app.shared.generated.resources.error_snmp_answered_too_big
+import networkhelm.app.shared.generated.resources.error_snmp_answered_undo_failed
+import networkhelm.app.shared.generated.resources.error_snmp_answered_wrong_encoding
+import networkhelm.app.shared.generated.resources.error_snmp_answered_wrong_length
+import networkhelm.app.shared.generated.resources.error_snmp_answered_wrong_type
+import networkhelm.app.shared.generated.resources.error_snmp_answered_wrong_value
+import networkhelm.app.shared.generated.resources.error_snmp_auth
+import networkhelm.app.shared.generated.resources.error_snmp_column_readonly
+import networkhelm.app.shared.generated.resources.error_snmp_column_value
+import networkhelm.app.shared.generated.resources.error_snmp_counter
+import networkhelm.app.shared.generated.resources.error_snmp_create_tables
+import networkhelm.app.shared.generated.resources.error_snmp_decrypt
+import networkhelm.app.shared.generated.resources.error_snmp_getbulk_empty
+import networkhelm.app.shared.generated.resources.error_snmp_index_parts
+import networkhelm.app.shared.generated.resources.error_snmp_index_type
+import networkhelm.app.shared.generated.resources.error_snmp_index_unknown
+import networkhelm.app.shared.generated.resources.error_snmp_interface_number
+import networkhelm.app.shared.generated.resources.error_snmp_new_row_index
+import networkhelm.app.shared.generated.resources.error_snmp_no_command
+import networkhelm.app.shared.generated.resources.error_snmp_no_create
+import networkhelm.app.shared.generated.resources.error_snmp_no_object_after
+import networkhelm.app.shared.generated.resources.error_snmp_no_order
+import networkhelm.app.shared.generated.resources.error_snmp_no_path
+import networkhelm.app.shared.generated.resources.error_snmp_no_remove
+import networkhelm.app.shared.generated.resources.error_snmp_no_row
+import networkhelm.app.shared.generated.resources.error_snmp_no_rows
+import networkhelm.app.shared.generated.resources.error_snmp_not_index
+import networkhelm.app.shared.generated.resources.error_snmp_not_writable
+import networkhelm.app.shared.generated.resources.error_snmp_nothing_at
+import networkhelm.app.shared.generated.resources.error_snmp_oid_arcs
+import networkhelm.app.shared.generated.resources.error_snmp_remove_tables
+import networkhelm.app.shared.generated.resources.error_snmp_reported
+import networkhelm.app.shared.generated.resources.error_snmp_row_index
+import networkhelm.app.shared.generated.resources.error_snmp_security_level
+import networkhelm.app.shared.generated.resources.error_snmp_sent
+import networkhelm.app.shared.generated.resources.error_snmp_sent_auth
+import networkhelm.app.shared.generated.resources.error_snmp_sent_binding
+import networkhelm.app.shared.generated.resources.error_snmp_sent_cut
+import networkhelm.app.shared.generated.resources.error_snmp_sent_des
+import networkhelm.app.shared.generated.resources.error_snmp_sent_empty_oid
+import networkhelm.app.shared.generated.resources.error_snmp_sent_encrypted
+import networkhelm.app.shared.generated.resources.error_snmp_sent_integer
+import networkhelm.app.shared.generated.resources.error_snmp_sent_length
+import networkhelm.app.shared.generated.resources.error_snmp_sent_no_message
+import networkhelm.app.shared.generated.resources.error_snmp_sent_no_pdu
+import networkhelm.app.shared.generated.resources.error_snmp_sent_no_response
+import networkhelm.app.shared.generated.resources.error_snmp_sent_not_v3
+import networkhelm.app.shared.generated.resources.error_snmp_sent_number
+import networkhelm.app.shared.generated.resources.error_snmp_sent_other_model
+import networkhelm.app.shared.generated.resources.error_snmp_sent_privacy
+import networkhelm.app.shared.generated.resources.error_snmp_sent_response_fields
+import networkhelm.app.shared.generated.resources.error_snmp_sent_scoped
+import networkhelm.app.shared.generated.resources.error_snmp_sent_security
+import networkhelm.app.shared.generated.resources.error_snmp_sent_unproven
+import networkhelm.app.shared.generated.resources.error_snmp_sent_weak
+import networkhelm.app.shared.generated.resources.error_snmp_silent
+import networkhelm.app.shared.generated.resources.error_snmp_silent_write
+import networkhelm.app.shared.generated.resources.error_snmp_too_many_rows
+import networkhelm.app.shared.generated.resources.error_snmp_type_unwritable
+import networkhelm.app.shared.generated.resources.error_snmp_unknown_oid
+import networkhelm.app.shared.generated.resources.error_snmp_unknown_user
+import networkhelm.app.shared.generated.resources.error_snmp_value_type
+import networkhelm.app.shared.generated.resources.error_snmp_window_limits
+import networkhelm.app.shared.generated.resources.error_ssh_platform
+import networkhelm.app.shared.generated.resources.error_table_number
+import networkhelm.app.shared.generated.resources.error_table_unknown
+import networkhelm.app.shared.generated.resources.error_trust_rejected
+import networkhelm.app.shared.generated.resources.error_ufw_app_rule
+import networkhelm.app.shared.generated.resources.error_ufw_lockout
+import networkhelm.app.shared.generated.resources.error_ufw_route_rule
+import networkhelm.app.shared.generated.resources.error_until_reboot
+import networkhelm.app.shared.generated.resources.error_until_reboot_netplan
+import networkhelm.app.shared.generated.resources.error_until_reboot_networkd
+import networkhelm.app.shared.generated.resources.error_until_reboot_nm
+import networkhelm.app.shared.generated.resources.error_until_reboot_no_manager
+import networkhelm.app.shared.generated.resources.error_until_reboot_shared
+import networkhelm.app.shared.generated.resources.error_until_reboot_unheld
+import networkhelm.app.shared.generated.resources.error_until_reboot_unheld_two
+import networkhelm.app.shared.generated.resources.error_upnp_action_status
+import networkhelm.app.shared.generated.resources.error_upnp_description_status
+import networkhelm.app.shared.generated.resources.error_upnp_no_command
+import networkhelm.app.shared.generated.resources.error_upnp_no_description
+import networkhelm.app.shared.generated.resources.error_upnp_no_device
+import networkhelm.app.shared.generated.resources.error_upnp_no_mapping
+import networkhelm.app.shared.generated.resources.error_upnp_no_response
+import networkhelm.app.shared.generated.resources.error_upnp_no_service
+import networkhelm.app.shared.generated.resources.error_upnp_no_ssdp
+import networkhelm.app.shared.generated.resources.error_upnp_refused_login
+import networkhelm.app.shared.generated.resources.error_upnp_remove_mappings
+import networkhelm.app.shared.generated.resources.error_value_needed
+import networkhelm.app.shared.generated.resources.error_value_not_taken
+import networkhelm.app.shared.generated.resources.error_virtual_type
+import networkhelm.app.shared.generated.resources.error_vlan_id
+import networkhelm.app.shared.generated.resources.error_vlan_id_range
+import networkhelm.app.shared.generated.resources.error_vlan_parent
+import networkhelm.app.shared.generated.resources.error_vyos_new_value
+import networkhelm.app.shared.generated.resources.error_vyos_no_json
+import networkhelm.app.shared.generated.resources.error_vyos_no_rename
+import networkhelm.app.shared.generated.resources.error_vyos_node
+import networkhelm.app.shared.generated.resources.error_vyos_rule_order
+import networkhelm.app.shared.generated.resources.error_vyos_settings
+import networkhelm.app.shared.generated.resources.error_vyos_unknown_node
+import networkhelm.app.shared.generated.resources.error_web_no_answer
+import networkhelm.app.shared.generated.resources.error_web_only_host
+import networkhelm.app.shared.generated.resources.error_web_only_openwrt
+import networkhelm.app.shared.generated.resources.error_wrong_login
+import networkhelm.app.shared.generated.resources.link_lost
+
+// the messages :core and the app write themselves, word for word as in values/strings.xml, with %1$s, %2$s for the parts in the order of the text
+internal val errorTemplates: List<Pair<String, StringResource>> = listOf(
+    "no such menu: %1\$s" to Res.string.error_demo_no_menu,
+    "no such item: %1\$s" to Res.string.error_demo_no_item,
+    "%1\$s keeps no order" to Res.string.error_demo_no_order,
+    "%1\$s of a demo router is read only" to Res.string.error_demo_read_only,
+    "this is a demo router: %1\$s" to Res.string.error_demo_router,
+    "this is a demo router: it restarts nothing and keeps nothing" to Res.string.error_demo_restarts_nothing,
+    "this is a demo router: it changes no device mode" to Res.string.error_demo_no_device_mode,
+    "this is a demo router: it makes no files" to Res.string.error_demo_no_files,
+    "this is a demo router: passwords stay as they are" to Res.string.error_demo_passwords,
+    "this is a demo router: it saves no backup" to Res.string.error_demo_no_backup,
+    "this is a demo router: it restores nothing" to Res.string.error_demo_no_restore,
+    "this is a demo router: it signs nothing" to Res.string.error_demo_no_sign,
+    "this is a demo router: it imports nothing" to Res.string.error_demo_no_import,
+    "this is a demo router: it exports nothing" to Res.string.error_demo_no_export,
+    "the gateway closed the connection" to Res.string.error_gateway_closed,
+    "the gateway sent a message this client cannot read: %1\$s" to Res.string.error_gateway_unreadable,
+    "the gateway speaks protocol %1\$s, this client %2\$s" to Res.string.error_gateway_protocol,
+    "no SSH process through the gateway" to Res.string.error_gateway_no_ssh_process,
+    "no SSH tunnel through the gateway" to Res.string.error_gateway_no_ssh_tunnel,
+    "the browser sent a message this gateway cannot read" to Res.string.error_gateway_browser_unreadable,
+    "this gateway cannot %1\$s" to Res.string.error_gateway_cannot,
+    "this gateway cannot reach a router over port 8291" to Res.string.error_gateway_no_8291,
+    "this gateway cannot reach a router by its MAC address" to Res.string.error_gateway_no_mac,
+    "this gateway cannot hear MNDP" to Res.string.error_gateway_no_mndp,
+    "this gateway cannot ask for MNDP announcements" to Res.string.error_gateway_no_mndp_ask,
+    "this gateway cannot sweep addresses" to Res.string.error_gateway_no_sweep,
+    "a sweep takes %1\$s addresses at the most" to Res.string.error_gateway_sweep_limit,
+    "the gateway has no session %1\$s" to Res.string.error_gateway_no_session,
+    "the router has no Safe Mode" to Res.string.error_router_no_safe_mode,
+    "the router has no SSH" to Res.string.error_router_no_ssh,
+    "the gateway keeps no documents" to Res.string.error_gateway_no_documents,
+    "the router has no file channel" to Res.string.error_router_no_file_channel,
+    "the gateway closed the session" to Res.string.error_gateway_session_closed,
+    "%1\$s gave no challenge of KeeneticOS at /auth (HTTP %2\$s)" to Res.string.error_keenetic_no_challenge,
+    "the router refused the user and password" to Res.string.error_router_refused_login,
+    "the router refused the access token" to Res.string.error_keenetic_refused_token,
+    "this router has no /rci/%1\$s" to Res.string.error_keenetic_no_rci_path,
+    "/rci/%1\$s answered HTTP %2\$s" to Res.string.error_keenetic_rci_http,
+    "the router refused the command" to Res.string.error_router_refused_command,
+    "/rci/ answered with no list of answers" to Res.string.error_keenetic_rci_no_list,
+    "%1\$s named no realm at /auth" to Res.string.error_keenetic_no_realm,
+    "%1\$s of the router is no JSON" to Res.string.error_keenetic_target_no_json,
+    "the router refused /rci/%1\$s" to Res.string.error_keenetic_refused_rci,
+    "the router closed the connection without an answer, so the change may or may not have been made" to Res.string.error_router_closed_change_unknown,
+    "the router closed the connection without an answer" to Res.string.error_router_closed_no_answer,
+    "/rci/%1\$s answered with no JSON" to Res.string.error_keenetic_rci_no_json,
+    "Keenetic gives its CLI over RCI only, a line at a time" to Res.string.error_keenetic_cli_lines,
+    "port forwarding has no rule %1\$s" to Res.string.error_keenetic_no_forward_rule,
+    "protocol: %1\$s is not one of the router" to Res.string.error_keenetic_protocol,
+    "a rule for a subnet needs its address" to Res.string.error_keenetic_subnet_address,
+    "a rule for a subnet needs its mask" to Res.string.error_keenetic_subnet_mask,
+    "a rule needs its input" to Res.string.error_keenetic_rule_input,
+    "the output needs the address of the client" to Res.string.error_keenetic_output_client,
+    "the rule needs the port it opens" to Res.string.error_keenetic_rule_port,
+    "a range of ports needs its last port" to Res.string.error_keenetic_range_end,
+    "a new connection is one of %1\$s: the router takes no server for the rest over RCI" to Res.string.error_keenetic_vpn_kinds,
+    "vpn holds connections, not settings" to Res.string.error_keenetic_vpn_list,
+    "the name of a policy is of letters, digits and '_'" to Res.string.error_keenetic_policy_name,
+    "ip/policy holds policies, not settings" to Res.string.error_keenetic_policy_list,
+    "wifi/acl holds access points, not settings" to Res.string.error_keenetic_acl_list,
+    "%1\$s is no MAC address" to Res.string.error_not_mac,
+    "Keenetic keeps no order of %1\$s" to Res.string.error_keenetic_no_order,
+    "%1\$s of Keenetic is only shown" to Res.string.error_keenetic_view_only,
+    "%1\$s has no %2\$s" to Res.string.error_path_missing,
+    "%1\$s has an element with no key, which the app does not remove" to Res.string.error_keenetic_no_key,
+    "a pool name of letters, digits, '_', '.' and '-' is needed" to Res.string.error_keenetic_pool_name,
+    "Keenetic does not rename a pool" to Res.string.error_keenetic_pool_rename,
+    "a pool with no name is not removed" to Res.string.error_keenetic_pool_unnamed,
+    "a user name of letters, digits, '_' and '.' is needed" to Res.string.error_keenetic_user_name,
+    "Keenetic does not rename a user" to Res.string.error_keenetic_user_rename,
+    "Keenetic needs a host name and a domain name" to Res.string.error_keenetic_host_domain,
+    "Keenetic has no %1\$s/%2\$s" to Res.string.error_keenetic_no_command,
+    "the app knows no list of Keenetic at %1\$s" to Res.string.error_keenetic_unknown_list,
+    "the router named no address of its home network over SSH" to Res.string.error_keenetic_no_home_address,
+    "%1\$s holds elements, not settings" to Res.string.error_path_list,
+    "a client needs its MAC address" to Res.string.error_keenetic_client_mac,
+    "a client is known by its MAC; add the new one and remove the old one" to Res.string.error_keenetic_client_by_mac,
+    "%1\$s is neither registered nor given a fixed address" to Res.string.error_keenetic_client_unknown,
+    "%1\$s is no security of Keenetic Wi-Fi" to Res.string.error_keenetic_wifi_security,
+    "a rule needs the interface whose traffic it filters" to Res.string.error_keenetic_rule_interface,
+    "a rule stays with its interface; add it to the other one and remove this one" to Res.string.error_keenetic_rule_stays,
+    "Keenetic moves one rule at a time" to Res.string.error_keenetic_move_one,
+    "a rule moves only within the list of its interface" to Res.string.error_keenetic_move_within,
+    "the rule has no match the router can find it by" to Res.string.error_keenetic_rule_no_match,
+    "%1\$s is no address or network" to Res.string.error_not_address_or_network,
+    "%1\$s is no port, range of ports, <port or >port" to Res.string.error_keenetic_not_port,
+    "a configuration from a file is read only" to Res.string.error_offline_read_only,
+    "the ACL was not laid on the router: %1\$s" to Res.string.error_openwrt_acl,
+    "an event exceeds %1\$s characters" to Res.string.error_openwrt_event_size,
+    "%1\$s cannot be changed" to Res.string.error_path_unchangeable,
+    "files of this router cannot be removed without SSH" to Res.string.error_openwrt_remove_needs_ssh,
+    "choose one image" to Res.string.error_openwrt_one_image,
+    "%1\$s is not an image for this router: %2\$s" to Res.string.error_openwrt_bad_image,
+    "missing value of argument %1\$s" to Res.string.error_openwrt_missing_argument,
+    "no task %1\$s" to Res.string.error_openwrt_no_task,
+    "a time of cron is one word, a command one line" to Res.string.error_openwrt_cron_format,
+    "dropbear of OpenWrt keeps the keys of root only" to Res.string.error_openwrt_dropbear_root,
+    "a public key is a line such as ssh-ed25519 AAAA… comment" to Res.string.error_openwrt_public_key,
+    "%1\$s %2\$s ended with %3\$s" to Res.string.error_openwrt_command_exit,
+    "date ended with %1\$s" to Res.string.error_openwrt_date_exit,
+    "no profile %1\$s" to Res.string.error_mixomo_no_profile,
+    "no rule %1\$s" to Res.string.error_mixomo_no_rule,
+    "mixomo did not list what it added" to Res.string.error_mixomo_no_added,
+    "a form source exceeds %1\$s bytes" to Res.string.error_openwrt_form_size,
+    "the file channel ended without a status" to Res.string.error_openwrt_channel_no_status,
+    "%1\$s has no settings" to Res.string.error_openwrt_no_settings,
+    "%1\$s has no section" to Res.string.error_openwrt_no_section,
+    "uci export needs SSH" to Res.string.error_openwrt_export_ssh,
+    "%1\$s is not a UCI config and section type" to Res.string.error_openwrt_not_uci,
+    "%1\$s must name a list of this chain, not all" to Res.string.error_fw4_chain_list,
+    "firewall4 forwards between two zones or between any and any: name both lists or neither" to Res.string.error_fw4_forward_lists,
+    "chain must be prerouting, input, forward, output or postrouting" to Res.string.error_fw4_mangle_chain,
+    "firewall4 marks packets and changes DSCP: the action is mark-packet or change-dscp" to Res.string.error_fw4_mangle_action,
+    "firewall4 skips connection tracking before routing only: the chain is prerouting" to Res.string.error_fw4_raw_chain,
+    "action must be notrack" to Res.string.error_fw4_raw_action,
+    "chain must be dstnat or srcnat" to Res.string.error_fw4_nat_chain,
+    "no such interface list %1\$s" to Res.string.error_fw4_no_list,
+    "no such member %1\$s" to Res.string.error_fw4_no_member,
+    "interface list %1\$s is in use" to Res.string.error_fw4_list_in_use,
+    "chain must be input, forward or output" to Res.string.error_fw4_filter_chain,
+    "cannot change dynamic rule" to Res.string.error_fw4_dynamic_rule,
+    "a peer stays on its interface here: OpenWrt keeps it in a section of that interface" to Res.string.error_openwrt_peer_interface,
+    "dnsmasq has no instance" to Res.string.error_openwrt_no_dnsmasq,
+    "the system config has no timeserver" to Res.string.error_openwrt_no_timeserver,
+    "%1\$s is not an interval such as 3m20s-10m" to Res.string.error_openwrt_ra_interval,
+    "OpenWrt runs commands at startup from /etc/rc.local, not from cron" to Res.string.error_openwrt_startup,
+    "%1\$s is not a time of day such as 03:00:00" to Res.string.error_openwrt_time_of_day,
+    "cron starts a task on a whole minute, not at %1\$s" to Res.string.error_openwrt_cron_minute,
+    "cron needs an interval such as 1d, 1h or 10m" to Res.string.error_openwrt_cron_interval,
+    "%1\$s is not a day such as mon" to Res.string.error_openwrt_weekday,
+    "cron repeats a task every day, every hour, or every few hours or minutes that divide a day or an hour, not every %1\$s from %2\$s; a task once a week is 1d on its day" to Res.string.error_openwrt_cron_every,
+    "a login of rpcd is in full or read here; ACLs of its own are set in /etc/config/rpcd" to Res.string.error_openwrt_rpcd_login,
+    "an interface of OpenWrt keeps the name of its section here" to Res.string.error_openwrt_interface_name,
+    "cannot change dynamic address %1\$s" to Res.string.error_openwrt_dynamic_address,
+    "max-limit is upload/download, as 10M/85M" to Res.string.error_openwrt_max_limit,
+    "no such bridge %1\$s" to Res.string.error_openwrt_no_bridge,
+    "cannot change dynamic lease" to Res.string.error_openwrt_dynamic_lease,
+    "no interface reaches gateway %1\$s" to Res.string.error_openwrt_gateway_unreached,
+    "a route the router holds by itself is not changed here" to Res.string.error_openwrt_own_route,
+    "no interface stands on %1\$s" to Res.string.error_openwrt_no_interface_on,
+    "%1\$s is no IPv6 address and no interface" to Res.string.error_openwrt_not_ipv6,
+    "%1\$s has no %2\$s here" to Res.string.error_openwrt_no_command,
+    "%1\$s is not a rate such as 85M" to Res.string.error_openwrt_rate,
+    "%1\$s is not a time such as 25s" to Res.string.error_openwrt_time,
+    "%1\$s cannot be read" to Res.string.error_openwrt_unreadable,
+    "%1\$s was not written whole" to Res.string.error_openwrt_partly_written,
+    "the ubus response exceeds %1\$s bytes" to Res.string.error_openwrt_ubus_size,
+    "new passwords do not match" to Res.string.error_openwrt_passwords_differ,
+    "passwd turned down the password of %1\$s" to Res.string.error_openwrt_passwd,
+    "without rpc-sys or LuCI a password is set over SSH" to Res.string.error_openwrt_password_ssh,
+    "the server closed the connection without an answer" to Res.string.error_server_closed_no_answer,
+    "/api/%1\$s answered with no JSON" to Res.string.error_opnsense_no_json,
+    "OPNsense refused the key or its user may not call /api/%1\$s" to Res.string.error_opnsense_refused,
+    "this OPNsense has no /api/%1\$s" to Res.string.error_opnsense_no_api,
+    "/api/%1\$s answered %2\$s: %3\$s" to Res.string.error_opnsense_answered,
+    "the app knows no list of OPNsense at %1\$s" to Res.string.error_opnsense_unknown_list,
+    "%1\$s named no new element" to Res.string.error_api_no_new_element,
+    "OPNsense did not remove %1\$s: %2\$s" to Res.string.error_opnsense_not_removed,
+    "%1\$s of OPNsense keeps no order" to Res.string.error_opnsense_no_order,
+    "the rule %1\$s of OPNsense has no sequence" to Res.string.error_opnsense_no_sequence,
+    "the configuration of OPNsense is not exported through the app yet" to Res.string.error_opnsense_no_export,
+    "%1\$s of OPNsense is read only" to Res.string.error_opnsense_read_only,
+    "OPNsense has no element %1\$s in %2\$s" to Res.string.error_opnsense_no_element,
+    "Firmware status of OPNsense answered no object" to Res.string.error_opnsense_firmware_no_object,
+    "OPNsense answered %1\$s" to Res.string.error_opnsense_answer,
+    "OPNsense did not save: %1\$s" to Res.string.error_opnsense_not_saved,
+    "savepoint of %1\$s named no revision" to Res.string.error_opnsense_no_revision,
+    "OPNsense did not go back to %1\$s of %2\$s: %3\$s" to Res.string.error_opnsense_no_revert,
+    "System Information of OPNsense answered no object" to Res.string.error_opnsense_info_no_object,
+    "/api/v2/%1\$s answered %2\$s without the JSON of the API" to Res.string.error_pfsense_no_json,
+    "pfSense refused the key or its user may not call /api/v2/%1\$s" to Res.string.error_pfsense_refused,
+    "this pfSense has no /api/v2/%1\$s" to Res.string.error_pfsense_no_api,
+    "/api/v2/%1\$s answered %2\$s" to Res.string.error_pfsense_answered,
+    "the app knows no list of pfSense at %1\$s" to Res.string.error_pfsense_unknown_list,
+    "pfSense moves one element at a time" to Res.string.error_pfsense_move_one,
+    "%1\$s is no place in %2\$s" to Res.string.error_pfsense_no_place,
+    "the configuration of pfSense is not exported through the app yet" to Res.string.error_pfsense_no_export,
+    "%1\$s of pfSense is read only" to Res.string.error_pfsense_read_only,
+    "the console did not release Safe Mode" to Res.string.error_console_safe_mode,
+    "the router does not answer [%1\$s]" to Res.string.error_native_no_answer,
+    "%1\$s is no command of the window" to Res.string.error_native_not_command,
+    "no query at [%1\$s]" to Res.string.error_native_no_query,
+    "the object model has no lines where the console has some" to Res.string.error_native_no_lines,
+    "the channel of the window dropped" to Res.string.error_native_channel_dropped,
+    "the router drops the channel every time [%1\$s] is read" to Res.string.error_native_drops,
+    "the session is closed" to Res.string.error_session_closed,
+    "this connection has no native channel" to Res.string.error_native_none,
+    "the WinBox service of the router is off" to Res.string.error_native_service_off,
+    "the WinBox port of the router does not answer" to Res.string.error_native_port_silent,
+    "the router did not answer the login" to Res.string.error_login_no_answer,
+    "no window of the native channel at %1\$s" to Res.string.error_native_no_window,
+    "count-only answered %1\$s" to Res.string.error_ros_count,
+    "count-only answered without a number" to Res.string.error_ros_count_none,
+    "%1\$s answered without an id" to Res.string.error_ros_no_id,
+    "%1\$s returned no text" to Res.string.error_ros_no_text,
+    "the window of %1\$s does not agree with the console" to Res.string.error_ros_window_disagrees,
+    "%1\$s is not available over the console of RouterOS 6" to Res.string.error_console_verb,
+    "listen is not available over the console" to Res.string.error_console_listen,
+    "the line for the console is %1\$s characters long, longer than the %2\$s that this router takes" to Res.string.error_console_line_length,
+    "the router answered with something other than rows: %1\$s" to Res.string.error_console_not_rows,
+    "the router gave %1\$s of the %2\$s bytes of the file; its console carries about 64 KB of a file at most" to Res.string.error_console_file_cut,
+    "the router gives %1\$s of the %2\$s bytes of the file" to Res.string.error_console_file_partial,
+    "the router takes no more than %1\$s bytes of a file through its console" to Res.string.error_console_file_limit,
+    "this router makes only .txt files through its console" to Res.string.error_console_txt_only,
+    "the router keeps %1\$s of the %2\$s bytes that were written" to Res.string.error_console_file_kept,
+    "the console of the router refused what the client defines: %1\$s" to Res.string.error_console_prelude,
+    "the router answered with something other than JSON: %1\$s" to Res.string.error_rest_not_json,
+    "unexpected REST answer: %1\$s" to Res.string.error_rest_unexpected,
+    "listen is not available over REST" to Res.string.error_rest_listen,
+    "no menu or command at /%1\$s" to Res.string.error_ros_no_menu,
+    "the router does not say what %1\$s holds" to Res.string.error_ros_unknown_menu,
+    "the password of this account cannot be changed here" to Res.string.error_password_unchangeable,
+    "a ufw rule of routing is removed and added again" to Res.string.error_ufw_route_rule,
+    "a ufw rule of an application profile is removed and added again" to Res.string.error_ufw_app_rule,
+    "ufw would let this session be and keep the next login out: allow %1\$s/tcp first" to Res.string.error_ufw_lockout,
+    "firewalld has no command %1\$s" to Res.string.error_firewalld_no_command,
+    "firewalld has no zone %1\$s" to Res.string.error_firewalld_no_zone,
+    "a rule moves within its chain" to Res.string.error_rule_within_chain,
+    "%1\$s is no rule of the chain" to Res.string.error_not_chain_rule,
+    "ufw or firewalld keeps the rules of this host and writes them again when it starts" to Res.string.error_firewall_managed,
+    "%1\$s has no rule %2\$s" to Res.string.error_no_rule,
+    "a rule needs its matches and its action, as -p tcp --dport 22 -j ACCEPT" to Res.string.error_rule_parts,
+    "%1\$s has no chain %2\$s" to Res.string.error_no_chain,
+    "the host did not keep the rules it had: %1\$s" to Res.string.error_rules_lost_detail,
+    "the host did not keep the rules it had" to Res.string.error_rules_lost,
+    "the host stopped answering after the change: the rules it had come back in a minute" to Res.string.error_rules_rollback,
+    "%1\$s: %2\$s is not a value it takes" to Res.string.error_value_not_taken,
+    "%1\$s: a value is needed" to Res.string.error_value_needed,
+    "%1\$s gave no JSON" to Res.string.error_command_no_json,
+    "%1\$s gave no list" to Res.string.error_command_no_list,
+    "the host has no interface %1\$s" to Res.string.error_host_no_interface,
+    "mtu: %1\$s is no number" to Res.string.error_mtu_number,
+    "this session goes over %1\$s, and it would end with it" to Res.string.error_session_over,
+    "name: %1\$s is no name of an interface" to Res.string.error_interface_name,
+    "parent: a VLAN goes on an interface" to Res.string.error_vlan_parent,
+    "vlan-id: a VLAN has a number from 1 to 4094" to Res.string.error_vlan_id,
+    "type: %1\$s is none of %2\$s" to Res.string.error_virtual_type,
+    "the host has no virtual interface %1\$s" to Res.string.error_host_no_virtual,
+    "address: %1\$s is not an address with its prefix, as 192.0.2.5/24" to Res.string.error_address_prefix,
+    "interface: %1\$s is no interface" to Res.string.error_interface_unknown,
+    "the host has no address %1\$s" to Res.string.error_host_no_address,
+    "this session came to %1\$s, and it would end with it" to Res.string.error_session_to,
+    "dst-address: %1\$s is not a network, as 192.0.2.0/24" to Res.string.error_dst_network,
+    "gateway: %1\$s is no address" to Res.string.error_gateway_address,
+    "a route goes through a gateway or an interface" to Res.string.error_route_via,
+    "the host has no route %1\$s" to Res.string.error_host_no_route,
+    "a %1\$s route is removed and added again" to Res.string.error_route_kind,
+    "metric: %1\$s is no number" to Res.string.error_metric_number,
+    "routing-table: %1\$s is no table" to Res.string.error_table_unknown,
+    "address: %1\$s is no address" to Res.string.error_neighbor_address,
+    "mac-address: %1\$s is no MAC address" to Res.string.error_neighbor_mac,
+    "the host has no neighbour %1\$s" to Res.string.error_host_no_neighbor,
+    "%1\$s are not process numbers" to Res.string.error_not_pids,
+    "%1\$s is no service" to Res.string.error_not_service,
+    "mtu: %1\$s is not a number from 68 to 65535" to Res.string.error_mtu_range,
+    "type: %1\$s is none of vlan, bridge and dummy" to Res.string.error_netcfg_type,
+    "vlan-id: %1\$s is not a number from 1 to 4094" to Res.string.error_vlan_id_range,
+    "no interface leads to %1\$s" to Res.string.error_no_interface_to,
+    "routing-table: %1\$s is no number, and %2\$s takes a table by its number" to Res.string.error_table_number,
+    "this change lasts until a reboot: %1\$s" to Res.string.error_until_reboot,
+    "this change lasts until a reboot: systemd-networkd has no .network file for %1\$s" to Res.string.error_until_reboot_networkd,
+    "this change lasts until a reboot: NetworkManager keeps no profile for %1\$s" to Res.string.error_until_reboot_nm,
+    "this change lasts until a reboot: netplan does not define %1\$s" to Res.string.error_until_reboot_netplan,
+    "this change lasts until a reboot: the host has none of NetworkManager, netplan, systemd-networkd and ifupdown" to Res.string.error_until_reboot_no_manager,
+    "this change lasts until a reboot: no configuration of NetworkManager, netplan, systemd-networkd or ifupdown holds %1\$s" to Res.string.error_until_reboot_unheld,
+    "this change lasts until a reboot: no configuration of NetworkManager, netplan, systemd-networkd or ifupdown holds %1\$s or %2\$s" to Res.string.error_until_reboot_unheld_two,
+    "this change lasts until a reboot: %1\$s configures more interfaces than %2\$s, and a change to it would reach them all" to Res.string.error_until_reboot_shared,
+    "%1\$s has no address %2\$s of %3\$s, and the other netplan files stay as they are" to Res.string.error_netplan_no_address,
+    "%1\$s keeps no address %2\$s of %3\$s" to Res.string.error_config_no_address,
+    "%1\$s has no route to %2\$s of %3\$s, and the other netplan files stay as they are" to Res.string.error_netplan_no_route,
+    "%1\$s has no route to %2\$s via %3\$s of %4\$s, and the other netplan files stay as they are" to Res.string.error_netplan_no_route_via,
+    "%1\$s keeps no route to %2\$s of %3\$s" to Res.string.error_config_no_route,
+    "%1\$s keeps no route to %2\$s via %3\$s of %4\$s" to Res.string.error_config_no_route_via,
+    "%1\$s has no definition of %2\$s, and the other netplan files stay as they are" to Res.string.error_netplan_no_definition,
+    "%1\$s keeps no definition of %2\$s" to Res.string.error_config_no_definition,
+    "the netplan file of NetworkHelm is no longer the JSON it writes: %1\$s" to Res.string.error_netplan_changed,
+    "the host has none of apt, dnf, yum, zypper, pacman and apk" to Res.string.error_no_package_manager,
+    "packages have no command %1\$s" to Res.string.error_packages_no_command,
+    "name the package" to Res.string.error_package_name_needed,
+    "%1\$s is not the name of a package" to Res.string.error_package_name,
+    "exit %1\$s" to Res.string.error_exit_status,
+    "this needs root, and the host has no sudo" to Res.string.error_root_no_sudo,
+    "this needs root: sudo asks for a password, and the login went with a key" to Res.string.error_root_key_login,
+    "this needs root, and sudo did not take the password of the login" to Res.string.error_root_password,
+    "a quote is left open in %1\$s" to Res.string.error_open_quote,
+    "the host has no mount %1\$s" to Res.string.error_host_no_mount,
+    "/ is the root of the host and stays mounted" to Res.string.error_root_mount,
+    "the home of this login is on %1\$s, and it stays mounted" to Res.string.error_home_mount,
+    "fstab has no line %1\$s" to Res.string.error_fstab_no_line,
+    "findmnt --verify: %1\$s. %2\$s is back as it was" to Res.string.error_fstab_verify,
+    "fstab has a line for %1\$s already" to Res.string.error_fstab_exists,
+    "smartctl has no device %1\$s" to Res.string.error_smartctl_no_device,
+    "the host gave no JSON: %1\$s" to Res.string.error_host_no_json,
+    "the host gave no JSON object: %1\$s" to Res.string.error_host_no_json_object,
+    "this connection cannot follow a log" to Res.string.error_no_log_follow,
+    "this connection cannot write" to Res.string.error_no_write,
+    "%1\$s is not on this host" to Res.string.error_not_on_host,
+    "%1\$s/%2\$s is not on this host" to Res.string.error_command_not_on_host,
+    "%1\$s of this host cannot be changed here" to Res.string.error_host_path_unchangeable,
+    "only the files of a host reached over SSH alone can be changed here" to Res.string.error_host_files_ssh_only,
+    "a row of %1\$s is named by its index" to Res.string.error_snmp_row_index,
+    "an OID the dictionary does not know changes only its value" to Res.string.error_snmp_unknown_oid,
+    "an OID is named by its arcs under %1\$s" to Res.string.error_snmp_oid_arcs,
+    "SNMP creates rows only in tables" to Res.string.error_snmp_create_tables,
+    "%1\$s has no RowStatus, so its rows are not created over SNMP" to Res.string.error_snmp_no_create,
+    "a new row of %1\$s needs its index" to Res.string.error_snmp_new_row_index,
+    "SNMP removes only rows of tables" to Res.string.error_snmp_remove_tables,
+    "%1\$s has no RowStatus, so its rows are not removed over SNMP" to Res.string.error_snmp_no_remove,
+    "the SNMP agent has nothing at %1\$s" to Res.string.error_snmp_nothing_at,
+    "%1\$s of %2\$s cannot be written over SNMP" to Res.string.error_snmp_not_writable,
+    "%1\$s is no index of a row" to Res.string.error_snmp_not_index,
+    "the index of %1\$s has %2\$s parts, %3\$s, separated by commas" to Res.string.error_snmp_index_parts,
+    "the dictionary does not know %1\$s, a part of the index of %2\$s" to Res.string.error_snmp_index_unknown,
+    "%1\$s cannot be a part of an index" to Res.string.error_snmp_index_type,
+    "%1\$s is no value of the type %2\$s" to Res.string.error_snmp_value_type,
+    "a counter is not written over SNMP" to Res.string.error_snmp_counter,
+    "a value of the type %1\$s is not written here" to Res.string.error_snmp_type_unwritable,
+    "the SNMP agent sent %1\$s" to Res.string.error_snmp_sent,
+    "the SNMP agent sent a DES message of %1\$s bytes" to Res.string.error_snmp_sent_des,
+    "the SNMP agent sent a Response of %1\$s fields" to Res.string.error_snmp_sent_response_fields,
+    "the SNMP agent sent a cut message" to Res.string.error_snmp_sent_cut,
+    "the SNMP agent sent a length of %1\$s bytes" to Res.string.error_snmp_sent_length,
+    "the SNMP agent sent a message its authentication does not prove" to Res.string.error_snmp_sent_unproven,
+    "the SNMP agent sent a message of another security model" to Res.string.error_snmp_sent_other_model,
+    "the SNMP agent sent a message that is not of SNMPv3" to Res.string.error_snmp_sent_not_v3,
+    "the SNMP agent sent a number of %1\$s bytes" to Res.string.error_snmp_sent_number,
+    "the SNMP agent sent a scoped PDU without its PDU" to Res.string.error_snmp_sent_scoped,
+    "the SNMP agent sent a variable binding of the wrong shape" to Res.string.error_snmp_sent_binding,
+    "the SNMP agent sent an INTEGER of %1\$s bytes" to Res.string.error_snmp_sent_integer,
+    "the SNMP agent sent an answer below the security of the user" to Res.string.error_snmp_sent_weak,
+    "the SNMP agent sent an authenticated message to a user without authentication" to Res.string.error_snmp_sent_auth,
+    "the SNMP agent sent an empty OBJECT IDENTIFIER" to Res.string.error_snmp_sent_empty_oid,
+    "the SNMP agent sent an encrypted message to a user without privacy" to Res.string.error_snmp_sent_encrypted,
+    "the SNMP agent sent privacy parameters of %1\$s bytes" to Res.string.error_snmp_sent_privacy,
+    "the SNMP agent sent security parameters of %1\$s fields" to Res.string.error_snmp_sent_security,
+    "the SNMP agent sent no PDU" to Res.string.error_snmp_sent_no_pdu,
+    "the SNMP agent sent no Response" to Res.string.error_snmp_sent_no_response,
+    "the SNMP agent sent no message" to Res.string.error_snmp_sent_no_message,
+    "the SNMP agent cannot send even one object after %1\$s" to Res.string.error_snmp_no_object_after,
+    "the SNMP agent cannot send even one row of %1\$s" to Res.string.error_snmp_no_row,
+    "%1\$s has more than %2\$s rows" to Res.string.error_snmp_too_many_rows,
+    "the SNMP agent answered GETBULK without a row" to Res.string.error_snmp_getbulk_empty,
+    "the SNMP agent reported %1\$s" to Res.string.error_snmp_reported,
+    "no SNMP answer in %1\$s: a wrong community gets none either" to Res.string.error_snmp_silent,
+    "no SNMP answer in %1\$s: a community that may not write gets none either" to Res.string.error_snmp_silent_write,
+    "no SNMPv3 answer in %1\$s: the agent did not name its engine" to Res.string.error_snmp3_no_engine,
+    "%1\$s is no value of %2\$s" to Res.string.error_snmp_column_value,
+    "%1\$s is a %2\$s, which SNMP does not let a manager write" to Res.string.error_snmp_column_readonly,
+    "the SNMP agent has no rows of %1\$s" to Res.string.error_snmp_no_rows,
+    "SNMP has no %1\$s here" to Res.string.error_snmp_no_path,
+    "an interface is named by its number" to Res.string.error_snmp_interface_number,
+    "the rows of an SNMP table have no order, so they cannot be moved" to Res.string.error_snmp_no_order,
+    "SNMP has no %1\$s/%2\$s here" to Res.string.error_snmp_no_command,
+    "this window changes only the state and comment of an interface and the name, contact and location of the system; the rest the agent lets write is in the MIB menu" to Res.string.error_snmp_window_limits,
+    "the SNMP agent does not take this level of security for the user (%1\$s)" to Res.string.error_snmp_security_level,
+    "the SNMP agent knows no such user (%1\$s)" to Res.string.error_snmp_unknown_user,
+    "the SNMP agent refused the authentication: a wrong password or protocol (%1\$s)" to Res.string.error_snmp_auth,
+    "the SNMP agent could not decrypt the request: a wrong privacy password or protocol (%1\$s)" to Res.string.error_snmp_decrypt,
+    "a password of SNMPv3 cannot be empty" to Res.string.error_snmp3_empty_password,
+    "the SNMP agent answered %1\$s for %2\$s" to Res.string.error_snmp_answered,
+    "the SNMP agent answered tooBig for %1\$s: the answer does not fit one message" to Res.string.error_snmp_answered_too_big,
+    "the SNMP agent answered noSuchName for %1\$s: the agent has no such object or may not change it" to Res.string.error_snmp_answered_no_such_name,
+    "the SNMP agent answered badValue for %1\$s: the agent does not take this value" to Res.string.error_snmp_answered_bad_value,
+    "the SNMP agent answered readOnly for %1\$s: the object is read-only" to Res.string.error_snmp_answered_read_only,
+    "the SNMP agent answered genErr for %1\$s: the agent failed to apply the change" to Res.string.error_snmp_answered_gen_err,
+    "the SNMP agent answered noAccess for %1\$s: the community or user may not write this object" to Res.string.error_snmp_answered_no_access,
+    "the SNMP agent answered wrongType for %1\$s: the value has the wrong type for the object" to Res.string.error_snmp_answered_wrong_type,
+    "the SNMP agent answered wrongLength for %1\$s: the value has the wrong length for the object" to Res.string.error_snmp_answered_wrong_length,
+    "the SNMP agent answered wrongEncoding for %1\$s: the value is encoded wrongly" to Res.string.error_snmp_answered_wrong_encoding,
+    "the SNMP agent answered wrongValue for %1\$s: the agent does not take this value" to Res.string.error_snmp_answered_wrong_value,
+    "the SNMP agent answered noCreation for %1\$s: the agent cannot create this object" to Res.string.error_snmp_answered_no_creation,
+    "the SNMP agent answered inconsistentValue for %1\$s: the value does not fit the other values of the row or the state of the agent" to Res.string.error_snmp_answered_inconsistent_value,
+    "the SNMP agent answered resourceUnavailable for %1\$s: the agent has no resources for the change" to Res.string.error_snmp_answered_resource_unavailable,
+    "the SNMP agent answered commitFailed for %1\$s: the agent failed to apply the change and undid it" to Res.string.error_snmp_answered_commit_failed,
+    "the SNMP agent answered undoFailed for %1\$s: the agent failed to apply the change and could not undo all of it" to Res.string.error_snmp_answered_undo_failed,
+    "the SNMP agent answered authorizationError for %1\$s: the community or user may not do this" to Res.string.error_snmp_answered_authorization_error,
+    "the SNMP agent answered notWritable for %1\$s: the object cannot be written" to Res.string.error_snmp_answered_not_writable,
+    "the SNMP agent answered inconsistentName for %1\$s: the agent cannot create a row with this index now" to Res.string.error_snmp_answered_inconsistent_name,
+    "this channel cannot rename files" to Res.string.error_channel_no_rename,
+    "this channel cannot make folders" to Res.string.error_channel_no_folders,
+    "this channel gives a command no input" to Res.string.error_channel_no_input,
+    "the browser did not let the page reach %1\$s" to Res.string.error_browser_blocked,
+    "a response line exceeds %1\$s bytes" to Res.string.error_response_line_size,
+    "the HTTP answer has %1\$s of %2\$s bytes" to Res.string.error_http_short_body,
+    "HTTP %1\$s on %2\$s" to Res.string.error_http_status,
+    "not an HTTP status line: %1\$s" to Res.string.error_http_status_line,
+    "the HTTP answer ended inside its headers" to Res.string.error_http_cut_headers,
+    "the HTTP answer has more than %1\$s header lines" to Res.string.error_http_too_many_headers,
+    "the HTTP answer ended inside a chunk" to Res.string.error_http_cut_chunk,
+    "the HTTP response exceeds %1\$s bytes" to Res.string.error_http_response_size,
+    "a page in a browser can send HTTP requests only" to Res.string.error_browser_http_only,
+    "%1\$s: %2\$s was not accepted" to Res.string.error_trust_rejected,
+    "the description %1\$s answered %2\$s" to Res.string.error_upnp_description_status,
+    "the device refused the user and password" to Res.string.error_upnp_refused_login,
+    "%1\$s answered %2\$s" to Res.string.error_upnp_action_status,
+    "%1\$s answered no %2\$sResponse" to Res.string.error_upnp_no_response,
+    "the description names no device" to Res.string.error_upnp_no_device,
+    "%1\$s:%2\$s has no UPnP description" to Res.string.error_upnp_no_description,
+    "no SSDP answer from %1\$s:%2\$s" to Res.string.error_upnp_no_ssdp,
+    "the device has no service for %1\$s" to Res.string.error_upnp_no_service,
+    "no port mapping %1\$s" to Res.string.error_upnp_no_mapping,
+    "the device has no %1\$s/%2\$s" to Res.string.error_upnp_no_command,
+    "over UPnP only port mappings can be removed here" to Res.string.error_upnp_remove_mappings,
+    "%1\$s answered HTTP %2\$s without the JSON of the API" to Res.string.error_vyos_no_json,
+    "%1\$s answered HTTP %2\$s" to Res.string.error_answered_http,
+    "%1\$s is a node of VyOS, not a value" to Res.string.error_vyos_node,
+    "%1\$s of VyOS holds settings, not elements" to Res.string.error_vyos_settings,
+    "a new element of %1\$s needs its value in %2\$s" to Res.string.error_vyos_new_value,
+    "the API of VyOS renames no element" to Res.string.error_vyos_no_rename,
+    "VyOS orders its rules by their numbers" to Res.string.error_vyos_rule_order,
+    "the app knows no node of VyOS at %1\$s" to Res.string.error_vyos_unknown_node,
+    "unexpected EC-SRP5 challenge of %1\$s bytes" to Res.string.error_ecsrp5_challenge,
+    "the router sent a key that gives no shared secret" to Res.string.error_ecsrp5_key,
+    "the router does not speak EC-SRP5" to Res.string.error_ecsrp5_unsupported,
+    "wrong user name or password" to Res.string.error_wrong_login,
+    "the router closed the connection during login" to Res.string.error_login_dropped,
+    "a frame of the router is longer than %1\$s bytes" to Res.string.error_native_frame_size,
+    "a message of %1\$s bytes does not fit one frame" to Res.string.error_native_message_size,
+    "malformed encrypted frame" to Res.string.error_native_bad_frame,
+    "malformed padding" to Res.string.error_native_bad_padding,
+    "the MAC of a frame does not match" to Res.string.error_native_bad_mac,
+    "MAC address must be 6 bytes, got %1\$s" to Res.string.error_mac_bytes,
+    "\"%1\$s\" is not a 6-octet MAC address" to Res.string.error_mac_text,
+    "invalid MAC octet \"%1\$s\" in \"%2\$s\"" to Res.string.error_mac_octet,
+    "MAC octet out of range: \"%1\$s\"" to Res.string.error_mac_octet_range,
+    "MAC-Telnet packet is too short: %1\$s bytes (minimum %2\$s)" to Res.string.error_mactelnet_short,
+    "MAC-Telnet control block claims %1\$s bytes but only %2\$s remain" to Res.string.error_mactelnet_block,
+    "MAC-Telnet peer not responding" to Res.string.error_mactelnet_silent,
+    "MAC-Telnet error from router: %1\$s" to Res.string.error_mactelnet_router,
+    "router requested EC-SRP5 but MTWEI was not initialized" to Res.string.error_mactelnet_mtwei,
+    "unsupported salt size: %1\$s bytes" to Res.string.error_mactelnet_salt,
+    "MAC-Telnet login failed: invalid user or password" to Res.string.error_mactelnet_login,
+    "MAC-Telnet login failed: session closed by router" to Res.string.error_mactelnet_login_closed,
+    "MAC-Telnet session closed by router before ready" to Res.string.error_mactelnet_closed_early,
+    "MAC-Telnet session is closed" to Res.string.error_mactelnet_is_closed,
+    "MAC-Telnet session closed before ready" to Res.string.error_mactelnet_closed_before,
+    "MAC-Telnet session closed" to Res.string.error_mactelnet_closed,
+    "the MAC-Telnet connection is closed" to Res.string.error_mactelnet_connection_closed,
+    "MAC-Telnet does not support %1\$s (terminal console only)" to Res.string.error_mactelnet_unsupported,
+    "MAC-Telnet does not support port forwarding (terminal console only)" to Res.string.error_mactelnet_no_forwarding,
+    "MAC-Telnet connection to %1\$s timed out" to Res.string.error_mactelnet_timeout,
+    "connection closed" to Res.string.error_connection_closed,
+    "connection lost" to Res.string.error_connection_lost,
+    "the agent cannot reach %1\$s: no such RoMON id, or RoMON is off on the agent" to Res.string.error_romon_unreached,
+    "%1\$s refused the login of %2\$s" to Res.string.error_romon_login,
+    "the agent opened no link to %1\$s" to Res.string.error_romon_no_link,
+    "the RoMON link ended" to Res.string.error_romon_ended,
+    "%1\$s is not a RoMON id" to Res.string.error_romon_id,
+    "the router did not answer in time" to Res.string.error_router_late,
+    "the router did not answer" to Res.string.error_router_silent,
+    "the router closed the connection" to Res.string.error_router_closed,
+    "the router refused the request (error 0x%1\$s)" to Res.string.error_native_refused,
+    "the router does not implement this request" to Res.string.error_native_not_implemented,
+    "the router refused the read (error 0x%1\$s)" to Res.string.error_native_read_refused,
+    "the element is gone" to Res.string.error_native_gone,
+    "the router does not let this user change it" to Res.string.error_native_forbidden,
+    "the router opened no file" to Res.string.error_native_no_file_opened,
+    "the router sent %1\$s of %2\$s bytes" to Res.string.error_native_file_partial,
+    "the router created no file" to Res.string.error_native_no_file_created,
+    "the router has no file %1\$s" to Res.string.error_native_no_file,
+    "the channel closed during the read" to Res.string.error_native_closed_read,
+    "the router did not say which element it made" to Res.string.error_native_no_new_id,
+    "%1\$s is no field of this window" to Res.string.error_native_no_field,
+    "the element has no id on the router" to Res.string.error_native_no_id,
+    "this window starts nothing" to Res.string.error_native_no_start,
+    "the router did not end the rows of [%1\$s] in %2\$s pages" to Res.string.error_native_rows_endless,
+    "the router did not end the lines of [%1\$s] in %2\$s pages" to Res.string.error_native_lines_endless,
+    "the table [%1\$s] changed between two pages of the read" to Res.string.error_native_table_changed,
+    "the router did not end the list of [%1\$s] in %2\$s pages" to Res.string.error_native_list_endless,
+    "the native channel has no commands with an exit status" to Res.string.error_native_no_exec,
+    "the native channel has no processes" to Res.string.error_native_no_processes,
+    "the native channel has no tunnels" to Res.string.error_native_no_tunnels,
+    "the router refused to open a console" to Res.string.error_native_no_console,
+    "%1\$s cannot be taken off" to Res.string.error_field_unset,
+    "%1\$s does not take %2\$s: out of range" to Res.string.error_field_out_of_range,
+    "%1\$s does not take \"%2\$s\"" to Res.string.error_field_value,
+    "%1\$s does not take \"%2\$s\": its step is %3\$sms" to Res.string.error_field_step,
+    "%1\$s has no flag \"%2\$s\"" to Res.string.error_field_flag,
+    "%1\$s has no interface \"%2\$s\"" to Res.string.error_field_no_interface,
+    "%1\$s is read-only" to Res.string.error_field_read_only,
+    "%1\$s takes a date like 2026-07-25, not \"%2\$s\"" to Res.string.error_field_date,
+    "%1\$s takes a number after @, not \"%2\$s\"" to Res.string.error_field_vrf,
+    "%1\$s takes a number like 10M, not \"%2\$s\"" to Res.string.error_field_rate,
+    "%1\$s takes a number, not \"%2\$s\"" to Res.string.error_field_number,
+    "%1\$s takes a prefix length up to %2\$s, not \"%3\$s\"" to Res.string.error_field_prefix,
+    "%1\$s takes a range like 1000..1500, not \"%2\$s\"" to Res.string.error_field_range,
+    "%1\$s takes a time like 12:30:00, not \"%2\$s\"" to Res.string.error_field_time,
+    "%1\$s takes a time like 1d 02:03:04 or 1w2d3h, not \"%2\$s\"" to Res.string.error_field_duration,
+    "%1\$s takes an address like 00:0C:42:AA:BB:CC, not \"%2\$s\"" to Res.string.error_field_mac,
+    "%1\$s takes an address like 192.168.88.1, not \"%2\$s\"" to Res.string.error_field_ipv4,
+    "%1\$s takes an address like fe80::1, not \"%2\$s\"" to Res.string.error_field_ipv6,
+    "%1\$s takes an address" to Res.string.error_field_address_needed,
+    "%1\$s takes an offset like +03:00, not \"%2\$s\"" to Res.string.error_field_offset,
+    "%1\$s takes at most %2\$s digits after the point" to Res.string.error_field_digits,
+    "%1\$s takes yes or no, not \"%2\$s\"" to Res.string.error_field_bool,
+    "SSH is not available on this platform" to Res.string.error_ssh_platform,
+    "the router lists no SSH service" to Res.string.error_router_no_ssh_service,
+    "this page reaches only %1\$s, the router that served it" to Res.string.error_web_only_host,
+    "this page reaches only %1\$s, the OpenWrt router that served it" to Res.string.error_web_only_openwrt,
+    "the router does not answer: %1\$s" to Res.string.error_web_no_answer,
+    "the router has no modem that sends SMS" to Res.string.error_keenetic_no_sms_modem,
+    "an SMS needs the number it goes to and its text" to Res.string.error_keenetic_sms_fields,
+    "an SMS is only marked as read" to Res.string.error_keenetic_sms_only_read,
+    "the router has no modem for USSD" to Res.string.error_keenetic_no_ussd_modem,
+    "a USSD request is needed, such as *100#" to Res.string.error_keenetic_ussd_request,
+    "the operator gave no answer to %1\$s in a minute" to Res.string.error_keenetic_ussd_timeout,
+    "a schedule needs its description" to Res.string.error_keenetic_schedule_description,
+    "schedule holds schedules, not settings" to Res.string.error_keenetic_schedule_list,
+    "a schedule with no name is not removed" to Res.string.error_keenetic_schedule_no_name,
+    "\"%1\$s\" is no start or stop, a time as 08:00 and days as mon,tue or *" to Res.string.error_keenetic_schedule_entry,
+    "%1\$s is no mode of the LEDs" to Res.string.error_keenetic_led_mode,
+    "the router keeps what %1\$s does at %2\$s" to Res.string.error_keenetic_button_kept,
+    "the router found no other KeeneticOS in its channel" to Res.string.error_keenetic_no_update,
+    "%1\$s holds connections, not settings" to Res.string.error_keenetic_connections_list,
+    "the router made no connection of the .conf" to Res.string.error_keenetic_wireguard_import,
+    "a peer needs its public key" to Res.string.error_keenetic_peer_key,
+    "a peer needs the WireGuard connection it belongs to" to Res.string.error_keenetic_peer_connection,
+    "a peer stays with its connection; add it to the other one and remove this one" to Res.string.error_keenetic_peer_stays,
+    "%1\$s is no number of seconds" to Res.string.error_keenetic_seconds,
+    "an OpenVPN connection needs the text of its .ovpn file" to Res.string.error_keenetic_openvpn_config,
+    "%1\$s is no IP tunnel of Keenetic" to Res.string.error_keenetic_ip_tunnel_type,
+    "a tunnel needs the address of its far end" to Res.string.error_keenetic_tunnel_remote,
+    "a tunnel keeps its type; add one of the other type and remove this one" to Res.string.error_keenetic_tunnel_type_kept,
+    "a tunnel to a broker needs its IPv4 address and the IPv6 address it gave" to Res.string.error_keenetic_broker_fields,
+    "a manual IPv4 address needs its mask" to Res.string.error_keenetic_ipv4_mask,
+    "%1\$s is no IPv4 setting of Keenetic" to Res.string.error_keenetic_ipv4_mode,
+    "a manual IPv6 setting needs its address" to Res.string.error_keenetic_ipv6_address,
+    "%1\$s is no IPv6 setting of Keenetic" to Res.string.error_keenetic_ipv6_mode,
+    "%1\$s is no way of Keenetic to take a MAC address" to Res.string.error_keenetic_mac_mode,
+    "%1\$s is no 802.1x method of Keenetic" to Res.string.error_keenetic_dot1x_method,
+    "802.1x needs a user and a password" to Res.string.error_keenetic_dot1x_account,
+    "%1\$s is no tunnel of a provider" to Res.string.error_keenetic_isp_tunnel,
+    "a %1\$s tunnel needs the address of its server" to Res.string.error_keenetic_tunnel_server,
+    "%1\$s is no authentication of Keenetic" to Res.string.error_keenetic_auth_type,
+    "the account of %1\$s needs its password" to Res.string.error_keenetic_account_password,
+    "%1\$s is no connection type of Wireless ISP" to Res.string.error_keenetic_wisp_type,
+    "%1\$s is no network type of a modem" to Res.string.error_keenetic_modem_network,
+    "Ping Check needs the address or the name it checks" to Res.string.error_keenetic_ping_check_host,
+    "a check of a TCP port needs the port" to Res.string.error_keenetic_ping_check_port,
+    "%1\$s is no mode of Ping Check" to Res.string.error_keenetic_ping_check_mode,
+    "%1\$s is no security the app sets on a Wi-Fi connection" to Res.string.error_keenetic_wisp_security,
+    "the Wi-Fi network needs its key" to Res.string.error_keenetic_wisp_key,
+    "after the change the host let no new SSH session in: the rules it had are back" to Res.string.error_linux_new_login_refused,
+)
+
+private val part = Regex("""%\d+[$]s""")
+
+// the template with the most fixed text goes first, so a general one does not take the message of a narrower one
+private val patterns by lazy { errorTemplates.sortedByDescending { it.first.replace(part, "").length }.map { (template, key) -> pattern(template) to key } }
+
+// a template that opens with a part takes one word there, so a text of a router that only ends the way a template does stays as it is
+private fun pattern(template: String): Regex {
+    val pieces = template.split(part)
+    val first = if (pieces.first().isEmpty()) """(\S+)""" else """([\s\S]*?)"""
+    return Regex(pieces.map { Regex.escape(it) }.reduceIndexed { i, text, piece -> text + (if (i == 1) first else """([\s\S]*?)""") + piece })
+}
+
+// the string of a message the app wrote and its parts; null for a text of the router, which is shown as it came
+internal fun errorResource(message: String): Pair<StringResource, Array<String>>? = when (message) {
+    RequestOutcomeUnknownException.MESSAGE -> Res.string.error_request_outcome_unknown to emptyArray<String>()
+    LINK_LOST -> Res.string.link_lost to emptyArray<String>()
+    else -> patterns.firstNotNullOfOrNull { (pattern, key) -> pattern.matchEntire(message)?.let { key to it.groupValues.drop(1).toTypedArray() } }
+}
+
+@Composable
+internal fun deviceMessage(text: String): String {
+    val found = remember(text) { errorResource(text) } ?: return text
+    return stringResource(found.first, *found.second)
+}
+
+internal suspend fun deviceText(text: String): String = errorResource(text)?.let { (key, parts) -> getString(key, *parts) } ?: text

@@ -168,7 +168,7 @@ internal fun DhcpSetupView(session: DeviceSession) {
         }
         Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
             Text(
-                problem ?: done?.let { stringResource(Res.string.dhcp_setup_done, it, chosen.orEmpty()) }.orEmpty(),
+                problem?.let { deviceMessage(it) } ?: done?.let { stringResource(Res.string.dhcp_setup_done, it, chosen.orEmpty()) }.orEmpty(),
                 Modifier.weight(1f).testTag("dhcp-result"),
                 color = if (problem != null) palette.danger else palette.success,
                 style = Theme.type.small,

@@ -68,7 +68,7 @@ internal fun CompareView(tab: RouterTab, comparison: Comparison) {
         val status = when {
             // OpenWrt gives uci export over SSH only
             failure?.category == ErrorCategory.Unsupported -> stringResource(Res.string.compare_unsupported)
-            failure != null -> failure.message
+            failure != null -> failure.message?.let { deviceMessage(it) }
             differences == null -> stringResource(Res.string.compare_reading)
             differences.isEmpty() -> stringResource(Res.string.compare_same)
             else -> stringResource(Res.string.compare_summary, differences.size)

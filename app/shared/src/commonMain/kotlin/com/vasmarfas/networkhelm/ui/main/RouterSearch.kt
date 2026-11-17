@@ -211,7 +211,7 @@ private fun RouterLine(found: RouterFinds) {
     val palette = Theme.palette
     Row(Modifier.fillMaxWidth().padding(top = 8.dp, bottom = 4.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("${found.tab.session.device.identity} (${found.tab.address})", style = Theme.type.strong, maxLines = 1)
-        found.problem?.let { Text(it, color = palette.danger, style = Theme.type.small, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+        found.problem?.let { Text(deviceMessage(it), color = palette.danger, style = Theme.type.small, maxLines = 1, overflow = TextOverflow.Ellipsis) }
         if (!found.done) Text("…", color = palette.muted)
         Spacer(Modifier.weight(1f))
         Text("${found.hits.size}", color = palette.muted, style = Theme.type.small)

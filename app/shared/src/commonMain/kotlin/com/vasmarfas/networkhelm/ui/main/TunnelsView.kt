@@ -198,7 +198,7 @@ private fun TunnelLine(tunnel: Tunnel, onClose: () -> Unit) {
             }
             refused?.let { Text(stringResource(Res.string.tunnels_refused, it), color = palette.danger, style = Theme.type.small, maxLines = 1) }
         }
-        failure?.let { Text(stringResource(Res.string.tunnels_failed, tunnel.wanted, it), color = palette.danger, style = Theme.type.small, maxLines = 2) }
+        failure?.let { Text(stringResource(Res.string.tunnels_failed, tunnel.wanted, deviceMessage(it)), color = palette.danger, style = Theme.type.small, maxLines = 2) }
         Spacer(Modifier.weight(1f))
         IconButton(Lucide.X, stringResource(Res.string.list_remove), onClose, Modifier.testTag("tunnel-close"))
     }
