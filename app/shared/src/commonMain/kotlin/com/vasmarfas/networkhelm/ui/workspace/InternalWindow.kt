@@ -149,6 +149,10 @@ internal fun InternalWindow(
             ResizeHandle(Modifier.align(Alignment.BottomCenter).height(ResizeGrip).fillMaxWidth(), window, x = 0, y = 1)
             ResizeHandle(Modifier.align(Alignment.BottomStart).size(ResizeGrip * 2), window, x = -1, y = 1)
             ResizeHandle(Modifier.align(Alignment.BottomEnd).size(ResizeGrip * 2), window, x = 1, y = 1)
+            // the top edge is a strip above the title, which is dragged below it
+            ResizeHandle(Modifier.align(Alignment.TopCenter).height(ResizeGrip).fillMaxWidth(), window, x = 0, y = -1)
+            ResizeHandle(Modifier.align(Alignment.TopStart).size(ResizeGrip * 2), window, x = -1, y = -1)
+            ResizeHandle(Modifier.align(Alignment.TopEnd).size(ResizeGrip * 2), window, x = 1, y = -1)
         }
     }
 }

@@ -28,7 +28,8 @@ class WindowState internal constructor(val id: Long, title: String, position: Dp
     var sized = false
         private set
 
-    // x: -1 for the left edge, 1 for the right; y: 1 for the bottom edge; 0 leaves that size alone
+    // x: -1 for the left edge, 1 for the right; y: -1 for the top edge, 1 for the bottom; 0 leaves that size alone. The left and the
+    // top edge stop at the edge of the workspace
     fun resize(x: Int, y: Int, dx: Dp, dy: Dp) {
         sized = true
         val width = when (x) {
@@ -36,8 +37,13 @@ class WindowState internal constructor(val id: Long, title: String, position: Dp
             -1 -> max(MinSize.width, size.width - dx).coerceAtMost(size.width + position.x)
             else -> size.width
         }
-        if (x == -1) position = DpOffset(position.x + size.width - width, position.y)
-        size = DpSize(width, if (y == 1) max(MinSize.height, size.height + dy) else size.height)
+        val height = when (y) {
+            1 -> max(MinSize.height, size.height + dy)
+            -1 -> max(MinSize.height, size.height - dy).coerceAtMost(size.height + position.y)
+            else -> size.height
+        }
+        position = DpOffset(if (x == -1) position.x + size.width - width else position.x, if (y == -1) position.y + size.height - height else position.y)
+        size = DpSize(width, height)
     }
 }
 
