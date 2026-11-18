@@ -6,6 +6,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.graphics.toAwtImage
@@ -477,6 +478,35 @@ class ConnectScreenTest {
         }
         fun top(text: String) = onAllNodes(hasText(text)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
         waitUntil(timeoutMillis = 5_000) { (top("a-home") ?: Float.MAX_VALUE) < (top("b-office") ?: -1f) }
+    }
+
+    @Test
+    fun aSortPickedInTheSavedListStaysForTheNextStart() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val saved = SavedRouters(storage)
+        runBlocking {
+            saved.save(SavedRouter("192.0.2.41", "rd-test", comment = "b-office"))
+            saved.save(SavedRouter("192.0.2.42", "rd-test", comment = "a-home"))
+        }
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        var start by mutableIntStateOf(0)
+        setContent {
+            key(start) {
+                val tables = remember { TableLayouts(storage) }
+                LaunchedEffect(tables) { tables.keep() }
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, saved, rememberCoroutineScope(), tables) { _, _, _ -> } }
+            }
+        }
+        fun top(text: String) = onAllNodes(hasText(text)).fetchSemanticsNodes().firstOrNull()?.boundsInRoot?.top
+        fun homeFirst() = (top("a-home") ?: Float.MAX_VALUE) < (top("b-office") ?: -1f)
+        waitUntil(timeoutMillis = 5_000) { top("a-home") != null && !homeFirst() }
+        onNode(hasText("Comment") and hasAnyAncestor(hasTestTag("table"))).performClick()
+        waitUntil(timeoutMillis = 5_000) { homeFirst() }
+        waitUntil(timeoutMillis = 5_000) { runBlocking { storage.read("tables.json") }.orEmpty().contains("comment") }
+        runOnIdle { start++ }
+        waitForIdle()
+        waitUntil(timeoutMillis = 5_000) { homeFirst() }
     }
 
     @Test
