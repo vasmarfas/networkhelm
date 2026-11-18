@@ -40,7 +40,7 @@ def table(header, rows):
 name = f"NetworkHelm-{version}"
 windows = cell(("EXE", f"{name}-windows-setup.exe"), ("Portable", f"{name}-windows-portable.exe"), ("MSI", f"{name}-windows.msi"))
 windows_arm = cell(("EXE", f"{name}-windows-arm64-setup.exe"), ("Portable", f"{name}-windows-arm64-portable.exe"), proven=False)
-windows_legacy = cell(("EXE", f"{name}-windows-legacy-setup.exe"), ("Portable", f"{name}-windows-legacy-portable.exe"), proven=False)
+windows_legacy = cell(("EXE", f"{name}-windows-legacy-setup.exe"), ("Portable", f"{name}-windows-legacy-portable.exe"))
 linux = cell(("DEB", f"{name}-linux-amd64.deb"), ("RPM", f"{name}-linux-x86_64.rpm"), ("AppImage", f"{name}-linux-x86_64.AppImage"))
 linux_arm = cell(("DEB", f"{name}-linux-arm64.deb"), ("RPM", f"{name}-linux-aarch64.rpm"), ("AppImage", f"{name}-linux-aarch64.AppImage"), proven=False)
 android = cell(("APK", f"{name}.apk"))
