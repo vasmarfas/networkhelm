@@ -71,6 +71,10 @@ jobs:
           APP_VERSION_NAME: ${{ steps.version.outputs.name }}
         run: ./gradlew :app:webApp:pagesBundle
 
+      # the privacy policy and the terms of the repository, for the links the consent screens and the stores ask for
+      - name: Add the privacy policy and the terms
+        run: python3 tools/pages/legal.py app/webApp/build/pages
+
       # the same files as an archive, for a web server of one's own
       - name: Pack the page
         env:
