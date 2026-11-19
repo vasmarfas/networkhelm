@@ -40,6 +40,7 @@ import platform.Network.nw_parameters_create_secure_tcp
 import platform.Network.nw_tls_copy_sec_protocol_options
 import platform.Security.SecCertificateCopyData
 import platform.Security.SecTrustCopyCertificateChain
+import platform.Security.SecTrustRef
 import platform.Security.sec_protocol_options_set_verify_block
 import platform.Security.sec_trust_copy_ref
 import platform.Security.sec_trust_t
@@ -136,22 +137,26 @@ private fun dispatch_data_t.copyInto(target: ByteArray, offset: Int): Int {
 private fun leafSha256(trust: sec_trust_t): String? {
     val ref = sec_trust_copy_ref(trust) ?: return null
     try {
-        val chain = SecTrustCopyCertificateChain(ref) ?: return null
-        try {
-            val leaf = CFArrayGetValueAtIndex(chain, 0)?.reinterpret<__SecCertificate>() ?: return null
-            val der = SecCertificateCopyData(leaf) ?: return null
-            try {
-                val digest = UByteArray(CC_SHA256_DIGEST_LENGTH)
-                digest.usePinned { CC_SHA256(CFDataGetBytePtr(der), CFDataGetLength(der).convert(), it.addressOf(0)) }
-                return digest.joinToString("") { it.toString(16).padStart(2, '0') }
-            } finally {
-                CFRelease(der)
-            }
-        } finally {
-            CFRelease(chain)
-        }
+        return sha256(ref)
     } finally {
         CFRelease(ref)
+    }
+}
+
+internal fun sha256(trust: SecTrustRef): String? {
+    val chain = SecTrustCopyCertificateChain(trust) ?: return null
+    try {
+        val leaf = CFArrayGetValueAtIndex(chain, 0)?.reinterpret<__SecCertificate>() ?: return null
+        val der = SecCertificateCopyData(leaf) ?: return null
+        try {
+            val digest = UByteArray(CC_SHA256_DIGEST_LENGTH)
+            digest.usePinned { CC_SHA256(CFDataGetBytePtr(der), CFDataGetLength(der).convert(), it.addressOf(0)) }
+            return digest.joinToString("") { it.toString(16).padStart(2, '0') }
+        } finally {
+            CFRelease(der)
+        }
+    } finally {
+        CFRelease(chain)
     }
 }
 

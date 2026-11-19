@@ -11,6 +11,8 @@ import org.snakeyaml.engine.v2.nodes.MappingNode
 import org.snakeyaml.engine.v2.nodes.Node
 import org.snakeyaml.engine.v2.nodes.ScalarNode
 import org.snakeyaml.engine.v2.nodes.SequenceNode
+import java.io.StringReader
+import java.util.Properties
 
 buildscript {
     dependencies {
@@ -141,6 +143,32 @@ val bundleMibs = tasks.register<BundleText>("bundleMibs") {
     output.set(layout.buildDirectory.dir("generated/mibs"))
 }
 
+// the secret of the client of Google for a desktop, which Google wants with each code. It goes into the builds of the desktop and Android
+// alone, which both sign in with that client
+abstract class GoogleSecret : DefaultTask() {
+    @get:Input
+    abstract val secret: Property<String>
+
+    @get:OutputDirectory
+    abstract val output: DirectoryProperty
+
+    @TaskAction
+    fun write() {
+        val literal = secret.get().replace("\\", "\\\\").replace("\"", "\\\"").replace("$", "\\$")
+        val target = output.get().file("com/vasmarfas/networkhelm/sync/GoogleDesktopSecret.kt").asFile
+        target.parentFile.mkdirs()
+        target.writeText("package com.vasmarfas.networkhelm.sync\n\ninternal const val GOOGLE_DESKTOP_SECRET: String = \"$literal\"\n")
+    }
+}
+
+// local.properties of a developer, else the secret of CI; a build without either does not offer Google Drive on the desktop and Android
+val googleSecret = tasks.register<GoogleSecret>("googleSecret") {
+    val local = providers.fileContents(rootProject.layout.projectDirectory.file("local.properties")).asText
+        .map { Properties().apply { load(StringReader(it)) }.getProperty("google.desktop.client.secret").orEmpty() }
+    secret.set(local.filter { it.isNotEmpty() }.orElse(providers.environmentVariable("GOOGLE_DESKTOP_CLIENT_SECRET")).orElse(""))
+    output.set(layout.buildDirectory.dir("generated/googleDesktopSecret"))
+}
+
 kotlin {
     @OptIn(ExperimentalKotlinGradlePluginApi::class)
     applyDefaultHierarchyTemplate {
@@ -148,6 +176,13 @@ kotlin {
             group("jvmAndroid") {
                 withJvm()
                 withCompilations { it.platformType == KotlinPlatformType.androidJvm }
+            }
+            // libsodium through its Kotlin bindings; the WebAssembly build reaches libsodium.js on its own
+            group("sodium") {
+                withJvm()
+                withCompilations { it.platformType == KotlinPlatformType.androidJvm }
+                withIos()
+                withJs()
             }
             // QuickJS has no build for the browser, and its Android build loads only on a device
             group("quickJs") {
@@ -213,6 +248,22 @@ kotlin {
         commonMain.dependencies {
             implementation(libs.kotlinx.coroutinesCore)
             implementation(libs.kotlinx.serializationJson)
+            implementation(libs.ktor.clientCore)
+        }
+        getByName("sodiumMain").dependencies {
+            implementation(libs.sodium)
+        }
+        getByName("jvmAndroidMain") {
+            kotlin.srcDir(googleSecret.flatMap { it.output })
+        }
+        jvmMain.dependencies {
+            implementation(libs.ktor.clientJava)
+        }
+        wasmJsMain.dependencies {
+            implementation(npm("libsodium-wrappers-sumo", "0.8.4"))
+        }
+        webMain.dependencies {
+            implementation(libs.ktor.clientJs)
         }
         getByName("jvmAndroidMain").dependencies {
             implementation(libs.jsch)
@@ -223,16 +274,19 @@ kotlin {
         // Android runs the Java 8 classes of jsch, which need Bouncy Castle for ed25519, curve25519 and chacha20
         androidMain.dependencies {
             implementation(libs.bouncycastle)
+            implementation(libs.ktor.clientOkhttp)
         }
         iosMain {
             kotlin.srcDir(if (macHost) "src/iosSsh/kotlin" else "src/iosSshStub/kotlin")
         }
         iosMain.dependencies {
             implementation(libs.ktor.network)
+            implementation(libs.ktor.clientDarwin)
         }
         commonTest.dependencies {
             implementation(libs.kotlin.test)
             implementation(libs.kotlinx.coroutinesTest)
+            implementation(libs.ktor.clientMock)
         }
     }
 }

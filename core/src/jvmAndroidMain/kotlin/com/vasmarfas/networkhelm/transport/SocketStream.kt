@@ -114,7 +114,7 @@ actual suspend fun openTls(host: String, port: Int, pinnedSha256: String?, timeo
     }
 }
 
-private fun sha256(certificate: Certificate) =
+internal fun sha256(certificate: Certificate) =
     MessageDigest.getInstance("SHA-256").digest(certificate.encoded).joinToString("") { "%02x".format(it) }
 
 // the address that answered last, by host name

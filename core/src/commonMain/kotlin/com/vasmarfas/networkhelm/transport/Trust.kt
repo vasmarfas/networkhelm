@@ -9,10 +9,15 @@ enum class TrustKind { Tls, Ssh }
 
 class TrustRequest(val host: String, val port: Int, val kind: TrustKind, val fingerprint: String, val previous: String?)
 
+data class Trusted(val host: String, val port: Int, val kind: TrustKind, val fingerprint: String)
+
 interface TrustStore {
     suspend fun get(host: String, port: Int, kind: TrustKind): String?
 
     suspend fun put(host: String, port: Int, kind: TrustKind, fingerprint: String)
+
+    // every fingerprint the store keeps, for synchronisation; null for a store that keeps none from one run of the app to the next
+    suspend fun all(): List<Trusted>? = null
 }
 
 class MemoryTrustStore : TrustStore {

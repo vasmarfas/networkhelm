@@ -65,7 +65,7 @@ internal class FetchStream(private val host: String, private val port: Int, priv
                 answers.trySend((head + "Transfer-Encoding: chunked\r\n\r\n").encodeToByteArray())
                 scope.launch { follow(response, url) }
             } else {
-                val text = text(response).await<JsString>().toString().encodeToByteArray()
+                val text = string(text(response).await<JsAny>()).encodeToByteArray()
                 answers.trySend((head + "Content-Length: ${text.size}\r\n\r\n").encodeToByteArray() + text)
             }
         } catch (e: CancellationException) {
@@ -104,7 +104,9 @@ private fun status(response: JsAny): Int = js("response.status")
 private fun headerLines(response: JsAny): String =
     js("(() => { const lines = []; response.headers.forEach((value, name) => lines.push(name + ': ' + value)); return lines.join('\\r\\n'); })()")
 
-private fun text(response: JsAny): Promise<JsString> = js("response.text()")
+private fun text(response: JsAny): Promise<JsAny> = js("response.text()")
+
+private fun string(value: JsAny): String = js("value")
 
 private fun reader(response: JsAny): JsAny = js("response.body.getReader()")
 

@@ -87,14 +87,14 @@ fun urlEncoded(text: String) = text.encodeToByteArray().joinToString("") {
     if (code < 0x80 && (char.isLetterOrDigit() || char in "-._~")) "$char" else "%" + code.toString(16).uppercase().padStart(2, '0')
 }
 
-private fun head(method: String, target: String, host: String, headers: Map<String, String>, length: Int?, keepAlive: Boolean = false) = buildString {
+internal fun head(method: String, target: String, host: String, headers: Map<String, String>, length: Int?, keepAlive: Boolean = false) = buildString {
     append("$method $target HTTP/1.1\r\nHost: $host\r\nConnection: ${if (keepAlive) "keep-alive" else "close"}\r\n")
     if (length != null) append("Content-Length: $length\r\n")
     headers.forEach { (name, value) -> append("$name: $value\r\n") }
     append("\r\n")
 }
 
-private suspend fun readHead(source: BufferedStream): Pair<Int, Map<String, String>> =
+internal suspend fun readHead(source: BufferedStream): Pair<Int, Map<String, String>> =
     readHead(source, source.readLine(MAX_HTTP_LINE_BYTES) ?: throw DeviceException(ErrorCategory.ConnectionLost, "the server closed the connection without an answer"))
 
 private suspend fun readHead(source: BufferedStream, first: String): Pair<Int, Map<String, String>> {
@@ -109,7 +109,7 @@ private suspend fun readHead(source: BufferedStream, first: String): Pair<Int, M
     }
 }
 
-private fun body(source: BufferedStream, fields: Map<String, String>): ByteStream = when {
+internal fun body(source: BufferedStream, fields: Map<String, String>): ByteStream = when {
     fields["transfer-encoding"]?.contains("chunked") == true -> ChunkedBody(source)
     else -> fields["content-length"]?.toLongOrNull()?.takeIf { it >= 0 }?.let { SizedBody(source, it) } ?: source
 }
@@ -155,7 +155,7 @@ private class ChunkedBody(private val source: BufferedStream) : ByteStream {
     private fun cut() = DeviceException(ErrorCategory.ConnectionLost, "the HTTP answer ended inside a chunk")
 }
 
-private suspend fun readToEnd(stream: ByteStream, limit: Int): ByteArray {
+internal suspend fun readToEnd(stream: ByteStream, limit: Int): ByteArray {
     require(limit > 0)
     var data = ByteArray(minOf(16 * 1024, limit))
     var size = 0
