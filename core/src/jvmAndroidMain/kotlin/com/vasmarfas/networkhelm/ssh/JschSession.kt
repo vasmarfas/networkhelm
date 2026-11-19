@@ -30,8 +30,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runInterruptible
 import kotlinx.coroutines.sync.Semaphore
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.ByteArrayInputStream
 import java.io.ByteArrayOutputStream
 import java.io.IOException
@@ -41,6 +41,7 @@ import java.io.OutputStream
 import java.nio.ByteBuffer
 import java.security.MessageDigest
 import java.util.Base64
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.TimeSource
 import com.jcraft.jsch.HostKey as JschHostKey
@@ -102,8 +103,12 @@ private const val MAX_EXEC_OUTPUT_BYTES = 64 * 1024 * 1024
 private const val SERVER_ALIVE_MILLIS = 15_000
 private const val SERVER_ALIVE_MISSES = 3
 private const val CHANNEL_OPEN_MILLIS = 10_000
+private val REFUSED_WITHIN = 2_500.milliseconds
 
-private const val EXEC_CHANNELS = 6
+private const val SESSION_CHANNELS = 10
+private const val CHANNEL_WAIT_MILLIS = 30_000L
+private const val REFUSED_RETRIES = 20
+private const val REFUSED_PAUSE_MILLIS = 250L
 
 private fun InputStream.readAtMost(limit: Int): ByteArray {
     val bytes = ByteArrayOutputStream()
@@ -121,15 +126,40 @@ private class JschSession(private val session: Session) : SshSession {
     // it swallows that after its cipher has moved on, the router drops the session, so they are sent from here
     private val later = CoroutineScope(SupervisorJob() + Dispatchers.IO.limitedParallelism(1))
 
-    // OpenSSH opens ten channels on one connection (MaxSessions), and the windows that poll each run a command:
-    // with more at once the next command and the console get channel is not opened
-    private val commands = Semaphore(EXEC_CHANNELS)
+    // OpenSSH opens ten session channels on one connection (MaxSessions): commands, the streams of Docker, consoles and SFTP
+    // share them, and one over the limit gets channel is not opened; a stream keeps its place until it is closed or ends
+    private val channels = Semaphore(SESSION_CHANNELS)
 
     override suspend fun exec(command: String): ExecResult = execute(command, null)
 
     override suspend fun exec(command: String, input: String): ExecResult = execute(command, input)
 
-    private suspend fun execute(command: String, input: String?): ExecResult = commands.withPermit { inChannel(command, input) }
+    private suspend fun execute(command: String, input: String?): ExecResult {
+        place()
+        try {
+            var refused = 0
+            while (true) {
+                val started = TimeSource.Monotonic.markNow()
+                try {
+                    return inChannel(command, input)
+                } catch (e: DeviceException) {
+                    // a server that keeps fewer channels refuses at once, and a channel closed a moment ago may still count there;
+                    // the command has not run, so it goes again when another channel is gone
+                    if (started.elapsedNow() >= REFUSED_WITHIN || !refused(e) || ++refused > REFUSED_RETRIES) throw e
+                    delay(REFUSED_PAUSE_MILLIS)
+                }
+            }
+        } finally {
+            channels.release()
+        }
+    }
+
+    private fun refused(e: DeviceException) = session.isConnected && (e.cause as? JSchException)?.message == "channel is not opened."
+
+    private suspend fun place() {
+        withTimeoutOrNull(CHANNEL_WAIT_MILLIS) { channels.acquire() }
+            ?: throw DeviceException(ErrorCategory.General, "no channel of the connection got free in 30 seconds: the windows that stream hold them all")
+    }
 
     private suspend fun inChannel(command: String, input: String?): ExecResult = withContext(Dispatchers.IO) {
         val channel = open<ChannelExec>("exec")
@@ -155,34 +185,47 @@ private class JschSession(private val session: Session) : SshSession {
         }
     }
 
-    override suspend fun process(command: String): ByteStream {
+    override suspend fun process(command: String): ByteStream = held { free ->
         val channel = open<ChannelExec>("exec")
         channel.setCommand(command)
-        return connected(channel, ChannelStream(channel, channel.inputStream, channel.outputStream, later))
+        connected(channel, ChannelStream(channel, channel.inputStream, channel.outputStream, later, free))
     }
 
-    override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel {
+    override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel = held { free ->
         val channel = open<ChannelShell>("shell")
         channel.setPtyType(term, columns, rows, 0, 0)
-        return connected(channel, ShellStream(channel, later))
+        connected(channel, ShellStream(channel, later, free))
     }
 
-    override suspend fun sftp(): SftpClient {
+    override suspend fun sftp(): SftpClient = held { free ->
         val channel = open<ChannelSftp>("sftp")
-        return connected(channel, JschSftp(channel, later))
+        connected(channel, JschSftp(channel, later, free))
     }
 
     override suspend fun forward(host: String, port: Int): ByteStream {
         val channel = open<ChannelDirectTCPIP>("direct-tcpip")
         channel.setHost(host)
         channel.setPort(port)
-        return connected(channel, ChannelStream(channel, channel.inputStream, channel.outputStream, later)) { channel.connect(10_000) }
+        return connected(channel, ChannelStream(channel, channel.inputStream, channel.outputStream, later) {}) { channel.connect(10_000) }
     }
 
     private inline fun <reified T : Channel> open(type: String): T = try {
         session.openChannel(type) as T
     } catch (e: JSchException) {
         throw lost(e)
+    }
+
+    // a channel that stays open keeps its place until free runs, which its stream does once, on close or at its end
+    private suspend fun <T> held(open: suspend (free: () -> Unit) -> T): T {
+        place()
+        val freed = AtomicBoolean()
+        val free = { if (freed.compareAndSet(false, true)) channels.release() }
+        try {
+            return open(free)
+        } catch (e: Throwable) {
+            free()
+            throw e
+        }
     }
 
     private fun lost(e: JSchException) = DeviceException(if (session.isConnected) ErrorCategory.General else ErrorCategory.ConnectionLost, e.message.orEmpty(), e)
@@ -210,10 +253,11 @@ private open class ChannelStream(
     private val input: InputStream,
     private val output: OutputStream,
     protected val later: CoroutineScope,
+    private val free: () -> Unit,
 ) : ByteStream {
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = runInterruptible(Dispatchers.IO) {
         try {
-            input.read(buffer, offset, length)
+            input.read(buffer, offset, length).also { if (it < 0) free() }
         } catch (e: InterruptedIOException) {
             throw InterruptedException()
         } catch (e: IOException) {
@@ -231,17 +275,21 @@ private open class ChannelStream(
     }
 
     override fun close() {
-        later.launch { channel.disconnect() }
+        later.launch {
+            channel.disconnect()
+            free()
+        }
     }
 }
 
-private class ShellStream(private val channel: ChannelShell, later: CoroutineScope) : ChannelStream(channel, channel.inputStream, channel.outputStream, later), ShellChannel {
+private class ShellStream(private val channel: ChannelShell, later: CoroutineScope, free: () -> Unit) :
+    ChannelStream(channel, channel.inputStream, channel.outputStream, later, free), ShellChannel {
     override fun resize(columns: Int, rows: Int) {
         later.launch { channel.setPtySize(columns, rows, 0, 0) }
     }
 }
 
-private class JschSftp(private val channel: ChannelSftp, private val later: CoroutineScope) : SftpClient {
+private class JschSftp(private val channel: ChannelSftp, private val later: CoroutineScope, private val free: () -> Unit) : SftpClient {
     override suspend fun list(path: String): List<RemoteFile> = withContext(Dispatchers.IO) {
         channel.ls(path)
             .filter { it.filename != "." && it.filename != ".." }
@@ -278,7 +326,10 @@ private class JschSftp(private val channel: ChannelSftp, private val later: Coro
     override suspend fun mkdir(path: String) = withContext(Dispatchers.IO) { channel.mkdir(path) }
 
     override fun close() {
-        later.launch { channel.disconnect() }
+        later.launch {
+            channel.disconnect()
+            free()
+        }
     }
 }
 

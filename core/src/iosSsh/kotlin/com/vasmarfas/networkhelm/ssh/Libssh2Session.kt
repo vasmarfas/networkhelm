@@ -96,7 +96,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
-import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.io.Buffer
@@ -202,8 +201,9 @@ private fun lastError() = strerror(errno)?.toKString() ?: "errno $errno"
 private class Libssh2Session(private val session: CPointer<LIBSSH2_SESSION>, private val socket: Int) : SshSession {
     private val lock = Mutex()
 
-    // OpenSSH opens ten channels on one connection (MaxSessions): commands take six at most, the console and the files the rest
-    private val commands = Semaphore(6)
+    // OpenSSH opens ten session channels on one connection (MaxSessions): commands, streams, the console and the files share them,
+    // and a stream keeps its place until it is closed or ends
+    private val channels = Semaphore(SESSION_CHANNELS)
 
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var freed = false
@@ -336,9 +336,35 @@ private class Libssh2Session(private val session: CPointer<LIBSSH2_SESSION>, pri
         throw e
     }
 
-    override suspend fun exec(command: String): ExecResult = commands.withPermit { execute(command, null) }
+    override suspend fun exec(command: String): ExecResult = placed { execute(command, null) }
 
-    override suspend fun exec(command: String, input: String): ExecResult = commands.withPermit { execute(command, input.encodeToByteArray()) }
+    override suspend fun exec(command: String, input: String): ExecResult = placed { execute(command, input.encodeToByteArray()) }
+
+    private suspend fun <T> placed(action: suspend () -> T): T {
+        place()
+        try {
+            return action()
+        } finally {
+            channels.release()
+        }
+    }
+
+    private suspend fun place() {
+        withTimeoutOrNull(CHANNEL_WAIT_MILLIS) { channels.acquire() }
+            ?: throw DeviceException(ErrorCategory.General, "no channel of the connection got free in 30 seconds: the windows that stream hold them all")
+    }
+
+    // a channel that stays open takes its place before it is opened and gives it back through its Place
+    private suspend fun <T> held(open: suspend (Place) -> T): T {
+        place()
+        val held = Place(channels)
+        try {
+            return open(held)
+        } catch (e: Throwable) {
+            held.free()
+            throw e
+        }
+    }
 
     private suspend fun execute(command: String, input: ByteArray?): ExecResult {
         val channel = channel()
@@ -368,27 +394,27 @@ private class Libssh2Session(private val session: CPointer<LIBSSH2_SESSION>, pri
         return result
     }
 
-    override suspend fun process(command: String): ByteStream {
+    override suspend fun process(command: String): ByteStream = held { place ->
         val channel = channel()
-        return started(channel) {
+        started(channel) {
             call("exec") { libssh2_channel_process_startup(channel, "exec", 4u, command, command.encodeToByteArray().size.convert()).toLong() }
-            ChannelStream(this, channel)
+            ChannelStream(this, channel, place)
         }
     }
 
-    override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel {
+    override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel = held { place ->
         val channel = channel()
-        return started(channel) {
+        started(channel) {
             call("terminal") { libssh2_channel_request_pty_ex(channel, term, term.length.convert(), null, 0u, columns, rows, 0, 0).toLong() }
             call("shell") { libssh2_channel_process_startup(channel, "shell", 5u, null, 0u).toLong() }
-            ShellStream(this, channel)
+            ShellStream(this, channel, place)
         }
     }
 
-    override suspend fun sftp(): SftpClient = Libssh2Sftp(this, open("sftp") { libssh2_sftp_init(session) })
+    override suspend fun sftp(): SftpClient = held { place -> Libssh2Sftp(this, open("sftp") { libssh2_sftp_init(session) }, place) }
 
     override suspend fun forward(host: String, port: Int): ByteStream =
-        ChannelStream(this, open("forward") { libssh2_channel_direct_tcpip_ex(session, host, port, "127.0.0.1", 22) })
+        ChannelStream(this, open("forward") { libssh2_channel_direct_tcpip_ex(session, host, port, "127.0.0.1", 22) }, null)
 
     override fun close() = later {
         try {
@@ -442,19 +468,35 @@ private class Libssh2Session(private val session: CPointer<LIBSSH2_SESSION>, pri
         call("terminal") { libssh2_channel_request_pty_size_ex(channel, columns, rows, 0, 0).toLong() }
 }
 
-private open class ChannelStream(protected val ssh: Libssh2Session, protected val channel: CPointer<LIBSSH2_CHANNEL>) : ByteStream {
-    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = ssh.read(channel, buffer, offset, length)
+// the place a channel holds among the ten of a connection, given back once: on close or when its stream ends
+private class Place(private val channels: Semaphore) {
+    private val once = Mutex()
+    private var held = true
+
+    suspend fun free() = once.withLock {
+        if (held) {
+            held = false
+            channels.release()
+        }
+    }
+}
+
+private open class ChannelStream(protected val ssh: Libssh2Session, protected val channel: CPointer<LIBSSH2_CHANNEL>, private val place: Place?) : ByteStream {
+    override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = ssh.read(channel, buffer, offset, length).also { if (it < 0) place?.free() }
 
     override suspend fun write(bytes: ByteArray) = ssh.write(channel, bytes)
 
-    override fun close() = ssh.release(channel)
+    override fun close() {
+        ssh.release(channel)
+        ssh.later { place?.free() }
+    }
 }
 
-private class ShellStream(ssh: Libssh2Session, channel: CPointer<LIBSSH2_CHANNEL>) : ChannelStream(ssh, channel), ShellChannel {
+private class ShellStream(ssh: Libssh2Session, channel: CPointer<LIBSSH2_CHANNEL>, place: Place) : ChannelStream(ssh, channel, place), ShellChannel {
     override fun resize(columns: Int, rows: Int) = ssh.later { ssh.resize(channel, columns, rows) }
 }
 
-private class Libssh2Sftp(private val ssh: Libssh2Session, private val sftp: CPointer<LIBSSH2_SFTP>) : SftpClient {
+private class Libssh2Sftp(private val ssh: Libssh2Session, private val sftp: CPointer<LIBSSH2_SFTP>, private val place: Place) : SftpClient {
     override suspend fun list(path: String): List<RemoteFile> {
         val directory = handle(path, 0uL, 0L, LIBSSH2_SFTP_OPENDIR)
         try {
@@ -528,7 +570,13 @@ private class Libssh2Sftp(private val ssh: Libssh2Session, private val sftp: CPo
         ssh.call("mkdir") { libssh2_sftp_mkdir_ex(sftp, path, path.encodeToByteArray().size.convert(), 493L).toLong() }
     }
 
-    override fun close() = ssh.later { ssh.call("sftp") { libssh2_sftp_shutdown(sftp).toLong() } }
+    override fun close() = ssh.later {
+        try {
+            ssh.call("sftp") { libssh2_sftp_shutdown(sftp).toLong() }
+        } finally {
+            place.free()
+        }
+    }
 
     private suspend fun handle(path: String, flags: ULong, mode: Long, type: Int): CPointer<LIBSSH2_SFTP_HANDLE> = ssh.open(path) {
         libssh2_sftp_open_ex(sftp, path, path.encodeToByteArray().size.convert(), flags, mode, type)
@@ -538,3 +586,6 @@ private class Libssh2Sftp(private val ssh: Libssh2Session, private val sftp: CPo
         ssh.call("close") { libssh2_sftp_close_handle(handle).toLong() }
     }
 }
+
+private const val SESSION_CHANNELS = 10
+private const val CHANNEL_WAIT_MILLIS = 30_000L
