@@ -860,7 +860,7 @@ internal class LiveLists(private val ubus: Ubus, private val uci: Uci, private v
         val routeWords = mapOf("via" to "gateway", "dev" to "interface", "src" to "pref-src", "table" to "table", "metric" to "distance", "proto" to "protocol", "scope" to "scope")
         val processFields = mapOf("PID" to "pid", "PPID" to "ppid", "USER" to "user", "STAT" to "stat", "VSZ" to "vsz", "%MEM" to "memory", "%CPU" to "cpu", "COMMAND" to "command")
         val signals = mapOf("hang-up" to "-HUP", "terminate" to "-TERM", "kill" to "-KILL")
-        val kernelLine = Regex("<(\\d+)>\\s*\\[\\s*([\\d.]+)]\\s?(.*)")
+        val kernelLine = Regex("<(\\d+)>\\s*\\[\\s*([\\d.]+)\\]\\s?(.*)")
         val topLine = Regex("\\s*(\\d+)\\s+(\\d+)\\s+(\\S+)\\s+(.{1,4}?)\\s+(\\d+[kmgKMG]?)\\s+(\\d+%)\\s+(\\d+%)\\s+(.+)")
     }
 }

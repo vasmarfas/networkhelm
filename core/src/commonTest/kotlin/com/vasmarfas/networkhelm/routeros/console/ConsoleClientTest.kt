@@ -121,9 +121,9 @@ private class FakeConsole(stale: String = "", banner: Boolean = true, private va
     }
 }
 
-private val PICK = Regex("\\[:pick \\[[^\\]]*] (\\d+) (\\d+)]")
+private val PICK = Regex("\\[:pick \\[[^\\]]*\\] (\\d+) (\\d+)\\]")
 
-private val STOPPED_AT = Regex("column \\{([a-z-]+)}")
+private val STOPPED_AT = Regex("column \\{([a-z-]+)\\}")
 
 // answers a line one piece at a time, with a pause before each
 private class DrippingConsole(private val chunks: Int, private val millis: Long) : ShellChannel {

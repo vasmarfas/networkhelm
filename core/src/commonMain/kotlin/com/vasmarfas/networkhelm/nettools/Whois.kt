@@ -9,8 +9,8 @@ import kotlin.time.Duration.Companion.milliseconds
 private const val WHOIS_LIMIT = 1 shl 20
 private const val IANA = "whois.iana.org"
 
-private val referral = Regex("(?im)^(?:refer|whois):[ \\t]*(\\S+)")
-private val registrarServer = Regex("(?im)^[ \\t]*Registrar WHOIS Server:[ \\t]*(\\S+)")
+private val referral = Regex("^(?:refer|whois):[ \\t]*(\\S+)", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
+private val registrarServer = Regex("^[ \\t]*Registrar WHOIS Server:[ \\t]*(\\S+)", setOf(RegexOption.IGNORE_CASE, RegexOption.MULTILINE))
 private val serverName = Regex("[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?(\\.[A-Za-z0-9]([A-Za-z0-9-]*[A-Za-z0-9])?)+")
 
 // Complete: the server ended its answer; Cut: it stopped or stalled after sending something; Silent: nothing came; Unreachable: no connection

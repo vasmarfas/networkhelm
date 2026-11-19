@@ -46,8 +46,8 @@ private val luaWords = setOf(
 
 private val configWords = setOf("config", "option", "list", "package")
 
-private val badWords = Regex("(?i)\\b(error|fail(ed|ure)?|critical|fatal|panic|denied|refused)\\b")
-private val warnWords = Regex("(?i)\\b(warn(ing)?|timeout|retry|deprecated)\\b")
+private val badWords = Regex("\\b(error|fail(ed|ure)?|critical|fatal|panic|denied|refused)\\b", RegexOption.IGNORE_CASE)
+private val warnWords = Regex("\\b(warn(ing)?|timeout|retry|deprecated)\\b", RegexOption.IGNORE_CASE)
 private val stamp = Regex("^\\s*(\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}|[A-Z][a-z]{2} +\\d+ \\d{2}:\\d{2}:\\d{2}|[a-z]{3}/\\d{2}/\\d{4} \\d{2}:\\d{2}:\\d{2})")
 
 private class Scan(private val text: CharSequence, private val spans: MutableList<Span>, private val language: Language) {

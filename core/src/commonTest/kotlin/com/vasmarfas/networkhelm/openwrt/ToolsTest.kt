@@ -84,7 +84,7 @@ class ToolsTest {
         val (first, silent, last) = Tools(Rpcd(printed), setOf("file")).run("traceroute", mapOf("address" to "192.0.2.9")).toList()
         assertEquals(listOf("1", "192.168.99.1", "0%", "0.005ms"), listOf(first["hop"], first["address"], first["loss"], first["best"]))
         assertEquals(listOf(null, "100%", "3"), listOf(silent["address"], silent["loss"], silent["sent"]))
-        assertEquals(listOf("192.0.2.9", "33%", "2.0ms", "!H"), listOf(last["address"], last["loss"], last["last"], last["status"]))
+        assertEquals(listOf("192.0.2.9", "33%", "2ms", "!H"), listOf(last["address"], last["loss"], last["last"], last["status"]))
     }
 
     @Test

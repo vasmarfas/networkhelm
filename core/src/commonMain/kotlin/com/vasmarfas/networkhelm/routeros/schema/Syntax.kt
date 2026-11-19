@@ -33,14 +33,14 @@ private fun children(rows: List<SyntaxRow>, from: Int, parentLevel: Int): Pair<L
 }
 
 private val names = Regex("""^[A-Za-z][\w-]*(\s*\|\s*[A-Za-z][\w-]*)*$""")
-private val list = Regex("""^(\w+)\[,(\w+)\*?]$""")
-private val range = Regex("""^(\w+)\[-(\w+)]$""")
-private val masked = Regex("""^(\w+)(\[/\w+]|/\w+)$""")
-private val suffixed = Regex("""^(\w+)(?:\[/\w+])?(\[%\w+])?(\[@\w+])?$""")
+private val list = Regex("""^(\w+)\[,(\w+)\*?\]$""")
+private val range = Regex("""^(\w+)\[-(\w+)\]$""")
+private val masked = Regex("""^(\w+)(\[/\w+\]|/\w+)$""")
+private val suffixed = Regex("""^(\w+)(?:\[/\w+\])?(\[%\w+\])?(\[@\w+\])?$""")
 
 private val spans = mapOf("Min[-Max]" to true, "Min-Max" to false, "From-To" to false)
 
-private val unit = Regex("""^(\w+)\[(KiB|bps|%|C)]$""")
+private val unit = Regex("""^(\w+)\[(KiB|bps|%|C)\]$""")
 private val bounds = Regex("""^(-?\w+)\.\.(-?\w+)(\s+\(integer number\))?$""")
 private val decimals = Regex("""^(-?\d+(?:\.\d+)?)\.\.(-?\d+(?:\.\d+)?)\s+\(decimal number\)$""")
 private val string = Regex("""^string value(, min length \d+)?(, max length (\d+))?$""")
@@ -48,7 +48,7 @@ private val string = Regex("""^string value(, min length \d+)?(, max length (\d+
 private val remark = Regex("""\s+\([^()]*\)$""")
 
 private val variants = Regex("""^("[^"]*"|[\w.:/<>-]+)?(\s*\|\s*("[^"]*"|[\w.:/<>-]+))*(\s*\|\s*\.\.\.)?$""")
-private val variantList = Regex("""^[\w.:-]+(\s*\|\s*[\w.:-]+)+\[,\w+\*?]$""")
+private val variantList = Regex("""^[\w.:-]+(\s*\|\s*[\w.:-]+)+\[,\w+\*?\]$""")
 
 internal const val UNDOCUMENTED = "see documentation"
 

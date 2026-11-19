@@ -22,9 +22,10 @@ internal fun holds(condition: JgValue, facts: RouterFacts): Boolean? {
     }
 }
 
+// a pattern of the router that is no regular expression: IllegalArgumentException on the JVM, a SyntaxError of the browser in JavaScript
 private fun matches(pattern: String, name: String?): Boolean? = try {
     name?.let { Regex(pattern).containsMatchIn(it) } ?: false
-} catch (e: IllegalArgumentException) {
+} catch (e: Throwable) {
     null
 }
 

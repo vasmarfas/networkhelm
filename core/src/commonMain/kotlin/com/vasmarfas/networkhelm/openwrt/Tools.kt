@@ -173,7 +173,7 @@ internal class Tools(private val ubus: Ubus, private val objects: Set<String>) {
     private fun required(arguments: Map<String, String>, name: String) =
         arguments[name] ?: throw DeviceException(ErrorCategory.ArgumentValue, "missing value of argument $name")
 
-    private fun ms(value: Double) = "${(value * 1000).roundToLong() / 1000.0}ms"
+    private fun ms(value: Double) = "${(value * 1000).roundToLong() / 1000.0}".removeSuffix(".0") + "ms"
 
     private fun text(vararg names: String) = names.map { Argument(it, ValueType.Text()) }
 
