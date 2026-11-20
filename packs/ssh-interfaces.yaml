@@ -14,7 +14,7 @@ paths:
     monitor: { command: interface/monitor-traffic, argument: interface }
     form: interface
   interface/virtual:
-    columns: [name, type, parent, vlan-id, mtu, mac-address, running]
+    columns: [name, type, parent, vlan-id, remote, tunnel-id, mtu, mac-address, running]
     form: virtual
 forms:
   interface:
@@ -34,8 +34,12 @@ forms:
     title: "Interface <{name}>"
     tabs:
       - title: General
-        fields: [type, name, parent, vlan-id, persist]
+        fields: [type, name, parent, vlan-id, local, remote, tunnel-id, port, persist]
 labels:
   mtu: MTU
   vlan-id: VLAN ID
+  local: Local Address
+  remote: Remote Address
+  tunnel-id: Key or VNI
+  port: UDP Port
   persist: Keep After Reboot

@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.session
 
+import com.vasmarfas.networkhelm.journal.EditKind
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.DeviceInfo
 import com.vasmarfas.networkhelm.model.ErrorCategory
@@ -11,6 +12,8 @@ import com.vasmarfas.networkhelm.ssh.SftpClient
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import com.vasmarfas.networkhelm.ssh.SshSession
 import com.vasmarfas.networkhelm.transport.ByteStream
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.runTest
@@ -303,8 +306,10 @@ class LinuxAdminTest {
             ),
         )
         val session = SshHostSession(host, device, linux = true)
+        val menuAgain = async(start = CoroutineStart.UNDISPATCHED) { session.structure.first() }
         assertEquals("rd-test", session.add(MenuPath.parse("system/package"), mapOf("name" to "rd-test")))
         assertEquals("DEBIAN_FRONTEND=noninteractive apt-get -y -o DPkg::Lock::Timeout=60 install 'rd-test' 2>&1", host.ran.last())
+        menuAgain.await()
         val upgraded = session.run(MenuPath.parse("system/package/update"), "upgrade", mapOf("numbers" to "bash,apt")).toList()
         assertEquals("Setting up rd-test (1.0) ...", upgraded.single()["output"])
         assertTrue(host.ran.last().contains("install --only-upgrade 'bash' 'apt'"), host.ran.last())
@@ -313,6 +318,19 @@ class LinuxAdminTest {
         session.run(MenuPath.parse("system/service"), "restart", mapOf("numbers" to "sshd")).toList()
         session.run(MenuPath.parse("system/service"), "disable", mapOf("numbers" to "crond")).toList()
         assertEquals(listOf("rc-service sshd restart", "rc-update -a del crond"), host.ran.takeLast(2))
+    }
+
+    @Test
+    fun theFormOfAPackageShowsTheCommandOfTheManagerOfTheHost() = runTest {
+        val session = SshHostSession(Host(listOf("for t in" to ok("pacman\nsystemctl\n"), "id -u" to ok("0\n"))), device, linux = true)
+        val packages = MenuPath.parse("system/package")
+        val wireguard = mapOf("name" to "wireguard-tools")
+        assertEquals(null, session.hostCommand(packages, EditKind.Add, emptyList(), wireguard), "the manager is not known before the table is read")
+        session.describe(packages)
+        assertEquals("pacman --noconfirm -S 'wireguard-tools'", session.hostCommand(packages, EditKind.Add, emptyList(), wireguard))
+        assertEquals("pacman --noconfirm -R 'nano'", session.hostCommand(packages, EditKind.Remove, listOf("nano"), emptyMap()))
+        assertEquals(null, session.hostCommand(packages, EditKind.Add, emptyList(), mapOf("name" to "rd;rm")))
+        assertEquals(null, session.hostCommand(MenuPath.parse("system/service"), EditKind.Add, emptyList(), wireguard))
     }
 
     @Test

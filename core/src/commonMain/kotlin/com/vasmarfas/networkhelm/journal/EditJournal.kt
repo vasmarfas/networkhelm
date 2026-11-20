@@ -2,7 +2,9 @@ package com.vasmarfas.networkhelm.journal
 
 import com.vasmarfas.networkhelm.keenetic.keeneticCall
 import com.vasmarfas.networkhelm.model.MenuPath
+import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.Platform
+import com.vasmarfas.networkhelm.model.sensitive
 import com.vasmarfas.networkhelm.openwrt.uciCli
 import com.vasmarfas.networkhelm.opnsense.opnsenseCall
 import com.vasmarfas.networkhelm.pfsense.pfsenseCall
@@ -17,7 +19,8 @@ import kotlin.time.Instant
 
 enum class EditKind { Add, Set, Remove, Move }
 
-// secrets are not masked here: the journal is local and the UI hides them
+// secrets are not masked here: the journal is local and the UI hides them, by their names and by secret, the fields the form of the
+// path holds secrets by their type
 data class EditRecord(
     val time: Instant,
     val router: String,
@@ -27,6 +30,7 @@ data class EditRecord(
     val before: Map<String, String>,
     val after: Map<String, String?>,
     val moveBefore: String? = null,
+    val secret: Set<String> = emptySet(),
 )
 
 fun command(platform: Platform, path: MenuPath, kind: EditKind, ids: List<String>, values: Map<String, String?>, moveBefore: String? = null): String = when (platform) {
@@ -53,17 +57,24 @@ class JournalingSession(
     private val router: String,
     private val clock: Clock = Clock.System,
 ) : DeviceSession by delegate {
+    // the fields of each path that hold secrets by their type, as the schema a form was drawn from gave them
+    private val secrets = MutableStateFlow<Map<MenuPath, Set<String>>>(emptyMap())
+
+    override suspend fun describe(path: MenuPath): MenuSchema = delegate.describe(path).also { schema ->
+        val names = schema.arguments.filter { it.sensitive() }.map { it.name }.toSet()
+        if (names.isNotEmpty()) secrets.update { it + (path to names) }
+    }
 
     override suspend fun add(path: MenuPath, values: Map<String, String>): String {
         val id = delegate.add(path, values)
-        journal.append(EditRecord(clock.now(), router, path, EditKind.Add, listOf(id), emptyMap(), values))
+        journal.append(EditRecord(clock.now(), router, path, EditKind.Add, listOf(id), emptyMap(), values, secret = secrets.value[path].orEmpty()))
         return id
     }
 
     override suspend fun set(path: MenuPath, id: String?, changes: Map<String, String?>) {
         val old = delegate.get(path, id, changes.keys.toList())?.values.orEmpty().filterKeys { it in changes }
         delegate.set(path, id, changes)
-        journal.append(EditRecord(clock.now(), router, path, EditKind.Set, listOfNotNull(id), old, changes))
+        journal.append(EditRecord(clock.now(), router, path, EditKind.Set, listOfNotNull(id), old, changes, secret = secrets.value[path].orEmpty()))
     }
 
     override suspend fun remove(path: MenuPath, ids: List<String>) {

@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Images]
+window:
+  title: Images
+  tabs:
+    - { title: Images, path: container/image }
+paths:
+  container/image:
+    columns: [name, repository, tag, image-id, created, size, containers]
+    sort: name
+    bytes: [size]
+    actions:
+      - { title: Remove Forced, command: remove-forced, selection: true, confirm: true }
+    menu:
+      - { title: Pull, path: container/image, window: docker-pull, global: true }
+      - { title: Load from File, path: container/image, window: docker-load, global: true }
+      - { title: Prune, path: container/image, window: docker-prune-image, global: true }
+      - { title: Pull Again, path: container/image, window: docker-pull, fill: [{ to: image }] }
+      - { title: History, path: container/image, window: docker-image-history, fill: [{ to: image }] }
+      - { title: Inspect, path: container/image, window: docker-image-inspect, fill: [{ to: image }] }
+      - { title: Tag and Push, path: container/image, window: docker-image-push, fill: [{ to: image }] }
+      - { title: Save to File, path: container/image, window: docker-image-save, fill: [{ to: image }] }
+labels:
+  image-id: Image ID

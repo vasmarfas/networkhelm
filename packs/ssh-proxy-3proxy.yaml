@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, 3proxy]
+window:
+  title: 3proxy
+  tabs:
+    - { title: Settings, path: proxy/3proxy }
+    - { title: Access and Services, path: proxy/3proxy/access }
+    - { title: Users, path: proxy/3proxy/user }
+paths:
+  proxy/3proxy:
+    form: settings
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+  proxy/3proxy/access:
+    columns: [directive, arguments]
+    form: line
+  proxy/3proxy/user:
+    columns: [name, type]
+    form: user
+forms:
+  settings:
+    title: 3proxy
+    tabs:
+      - title: General
+        fields: [state, nserver, nscache, log, rotate, maxconn, timeouts, internal, external, "-", autostart]
+      - title: Status
+        readonly: true
+        fields: [config]
+  line:
+    title: "Line <{directive} {arguments}>"
+    tabs:
+      - title: General
+        fields: [directive, arguments]
+  user:
+    title: "User <{name}>"
+    tabs:
+      - title: General
+        fields: [name, type, password]
+labels:
+  nserver: DNS Servers
+  log: Log
+  maxconn: Max Connections
+  nscache: DNS Cache Size
+  rotate: Log Rotations
+  timeouts: Timeouts, s
+  autostart: Start at Boot

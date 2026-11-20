@@ -1,0 +1,91 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, Squid]
+window:
+  title: Squid
+  tabs:
+    - { title: Settings, path: proxy/squid }
+    - { title: Access, path: proxy/squid/access }
+    - { title: ACL, path: proxy/squid/acl }
+    - { title: Users, path: proxy/squid/user }
+    - { title: Clients, path: proxy/squid/client }
+    - { title: Sites, path: proxy/squid/domain }
+paths:
+  proxy/squid:
+    form: squid
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+  proxy/squid/access:
+    columns: [action, acls]
+    form: access
+  proxy/squid/acl:
+    columns: [name, type, values]
+    form: acl
+  proxy/squid/user:
+    columns: [name]
+    form: user
+  proxy/squid/client:
+    columns: [name, requests, day-bytes, week-bytes, month-bytes]
+  proxy/squid/domain:
+    columns: [name, requests, day-bytes, week-bytes, month-bytes]
+forms:
+  squid:
+    title: Squid
+    tabs:
+      - title: General
+        fields: [state, version, http-port, visible-hostname, "-", autostart, auth, users]
+      - title: Cache
+        fields: [cache, cache-dir, cache-mem, maximum-object-size, maximum-object-size-in-memory]
+      - title: Network
+        fields: [dns-nameservers, forwarded-for, via]
+      - title: Parent
+        fields: [parent, parent-user, parent-password]
+      - title: Timeouts
+        fields: [connect-timeout, read-timeout, request-timeout, shutdown-lifetime]
+      - title: Log
+        fields: [access-log, logfile-rotate]
+      - title: Status
+        readonly: true
+        fields: [config]
+  access:
+    title: "Rule <{action} {acls}>"
+    tabs:
+      - title: General
+        fields: [action, acls]
+  acl:
+    title: "ACL <{name}>"
+    tabs:
+      - title: General
+        fields: [name, type, values]
+  user:
+    title: "User <{name}>"
+    tabs:
+      - title: General
+        fields: [name, password]
+labels:
+  http-port: HTTP Ports
+  visible-hostname: Visible Hostname
+  auth: Basic Auth of Users
+  cache-dir: Cache Dirs
+  cache-mem: Cache Memory
+  maximum-object-size: Max Object Size
+  maximum-object-size-in-memory: Max Object Size in Memory
+  cache: Cache Objects
+  parent: Parent Proxy
+  parent-user: Parent User
+  parent-password: Parent Password
+  connect-timeout: Connect Timeout
+  read-timeout: Read Timeout
+  request-timeout: Request Timeout
+  shutdown-lifetime: Shutdown Lifetime
+  logfile-rotate: Log Rotations
+  dns-nameservers: DNS Servers
+  forwarded-for: X-Forwarded-For
+  access-log: Access Logs
+  acls: ACLs
+  requests: Requests in 30 Days
+  day-bytes: Last 24 Hours
+  week-bytes: Last 7 Days
+  month-bytes: Last 30 Days
+  autostart: Start at Boot

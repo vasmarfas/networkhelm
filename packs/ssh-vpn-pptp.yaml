@@ -1,0 +1,41 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, PPTP]
+window:
+  title: PPTP Server
+  tabs:
+    - { title: Server, path: vpn/pptp }
+paths:
+  vpn/pptp:
+    form: server
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+    links:
+      - { title: New Server, path: vpn/pptp/server, window: vpn-form }
+forms:
+  server:
+    title: PPTP Server
+    tabs:
+      - title: General
+        fields: [state, local-ip, remote-ip, connections, dns, "-", autostart, nat, insecure]
+      - title: PPP
+        fields: [mtu, mru, lcp-echo-interval, lcp-echo-failure]
+      - title: Status
+        readonly: true
+        fields: [name, mppe, options, users]
+labels:
+  local-ip: Local Address
+  remote-ip: Client Addresses
+  connections: Max Connections
+  dns: DNS for Clients
+  mtu: MTU
+  mru: MRU
+  lcp-echo-interval: LCP Echo Interval, s
+  lcp-echo-failure: LCP Echo Failures
+  mppe: MPPE Required
+  name: Name in chap-secrets
+  options: pppd Options File
+  autostart: Start at Boot
+  nat: NAT for Clients
+  insecure: Insecure, Change It

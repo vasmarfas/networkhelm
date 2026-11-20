@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, System Proxy]
+window:
+  title: System Proxy
+  tabs:
+    - { title: System Proxy, path: proxy/system }
+paths:
+  proxy/system:
+    form: system
+forms:
+  system:
+    title: System Proxy
+    tabs:
+      - title: General
+        fields: [http-proxy, https-proxy, no-proxy, user, password]
+      - title: Programs
+        fields: [environment, apt, dnf, zypper, docker]
+labels:
+  http-proxy: HTTP Proxy
+  https-proxy: HTTPS Proxy
+  no-proxy: No Proxy For
+  environment: /etc/environment
+  docker: Docker Daemon, Restarts Docker

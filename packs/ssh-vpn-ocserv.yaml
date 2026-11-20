@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, OpenConnect]
+window:
+  title: OpenConnect Server
+  tabs:
+    - { title: Server, path: vpn/ocserv }
+paths:
+  vpn/ocserv:
+    form: server
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+    links:
+      - { title: New Server, path: vpn/ocserv/server, window: vpn-form }
+forms:
+  server:
+    title: OpenConnect Server
+    tabs:
+      - title: General
+        fields: [state, server-name, pin, tcp-port, udp-port, network, ipv6-network, "-", autostart, nat]
+      - title: Clients
+        fields: [dns, routes, no-routes, default-domain, max-clients, max-same-clients, banner]
+      - title: Advanced
+        fields: [keepalive, dpd, mobile-dpd, idle-timeout, mobile-idle-timeout, isolate-workers, cisco-client-compat, camouflage, camouflage-secret]
+      - title: Status
+        readonly: true
+        fields: [server-cert, server-key, users]
+labels:
+  server-name: Server Name or Address
+  pin: Certificate Pin
+  tcp-port: TCP Port
+  udp-port: UDP Port
+  network: IPv4 Network
+  ipv6-network: IPv6 Network
+  dns: DNS for Clients
+  routes: Routes for Clients
+  no-routes: Routes Not Through VPN
+  default-domain: Default Domain
+  max-same-clients: Max Sessions per User
+  mobile-dpd: Mobile DPD, s
+  idle-timeout: Idle Timeout, s
+  mobile-idle-timeout: Mobile Idle Timeout, s
+  keepalive: Keepalive, s
+  dpd: DPD, s
+  isolate-workers: Isolate Workers
+  cisco-client-compat: Cisco Client Compatibility
+  camouflage-secret: Camouflage Secret
+  server-cert: Certificate
+  server-key: Key
+  autostart: Start at Boot
+  nat: NAT for Clients

@@ -1,0 +1,34 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Networks]
+window:
+  title: Networks
+  tabs:
+    - { title: Networks, path: container/network }
+paths:
+  container/network:
+    columns: [name, driver, subnet, gateway, ipv6-subnet, parent, mode, internal, containers, scope, created]
+    quick: driver
+    sort: name
+    form: network
+    menu:
+      - { title: Prune, path: container/network, window: docker-prune-network, global: true }
+      - { title: Containers, path: container/network, window: docker-network-containers, fill: [{ to: network }] }
+      - { title: Inspect, path: container/network, window: docker-network-inspect, fill: [{ to: network }] }
+forms:
+  network:
+    title: "Network <{name}>"
+    tabs:
+      - title: General
+        fields: [name, driver, parent, mode, internal, attachable, labels, options, "-", scope, created, containers, id]
+      - { title: IPv4, fields: [subnet, gateway, ip-range] }
+      - { title: IPv6, fields: [ipv6, ipv6-subnet, ipv6-gateway] }
+    only:
+      - { fields: [parent, mode], where: { driver: [macvlan, ipvlan] } }
+labels:
+  ip-range: IP Range
+  ipv6: IPv6
+  ipv6-subnet: IPv6 Subnet
+  ipv6-gateway: IPv6 Gateway
+  options: Driver Options
+  id: ID

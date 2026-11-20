@@ -123,6 +123,10 @@ class LinuxHostTest {
         assertEquals(null, resource?.get("cpu-load"))
         host["cat /proc/uptime"] = resource("cpu  120 0 120 960 0 0 0 0 0 0")
         assertEquals("20", session.get(MenuPath.parse("system/resource"), null)?.get("cpu-load"))
+        host["cat /proc/uptime"] = resource("cpu  121 0 120 960 0 0 0 0 0 0")
+        assertEquals("20", session.get(MenuPath.parse("system/resource"), null)?.get("cpu-load"), "a read a moment later keeps the load")
+        host["cat /proc/uptime"] = resource("cpu  220 0 220 1060 0 0 0 0 0 0")
+        assertEquals("66", session.get(MenuPath.parse("system/resource"), null)?.get("cpu-load"), "counted from the sample before the short read")
         assertEquals(listOf("2026-10-23", "17:41:47"), listOf("date", "time").map { session.get(MenuPath.parse("system/clock"), null)?.get(it) })
 
         val root = session.rows("system/storage").first()

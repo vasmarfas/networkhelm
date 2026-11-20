@@ -138,32 +138,38 @@ internal class LinuxNetworkConfig(private val ssh: SshSession, private val root:
         }
     }
 
-    // a link ip has just made: a VLAN goes where its parent is configured, a bridge and a dummy where the interface with the
-    // default route is
-    suspend fun addLink(kind: String, name: String, parent: String, vlanId: Int?) {
+    // a link ip has just made: a VLAN goes where its parent is configured, a bridge, a dummy and a tunnel where the interface with
+    // the default route is
+    suspend fun addLink(kind: String, name: String, parent: String, vlanId: Int?, tunnel: LinkTunnel? = null) {
         val group = LINKS[kind] ?: throw DeviceException(ErrorCategory.ArgumentValue, "type: $kind is none of vlan, bridge and dummy")
         valid(name)
         val vlan = kind == "vlan"
         if (vlan && (vlanId == null || vlanId !in 1..4094)) throw DeviceException(ErrorCategory.ArgumentValue, "vlan-id: $vlanId is not a number from 1 to 4094")
         val system = if (vlan) holder(parent) else systemHolder(name)
         when (system.kind) {
-            Kind.NetworkManager -> root.output(
-                "nmcli connection add type $kind con-name ${quote(name)} ifname ${quote(name)}" + (if (vlan) " dev ${quote(parent)} id $vlanId" else "") +
-                    (if (kind == "bridge") " bridge.stp no" else "") + " ipv4.method disabled ipv6.method ignore",
-            )
-            Kind.Netplan -> netplan(Holder(Kind.Netplan, system.name, "", group, name)) {
-                JsonObject(if (vlan) mapOf("id" to JsonPrimitive(vlanId), "link" to JsonPrimitive(system.id)) else emptyMap())
+            Kind.NetworkManager -> {
+                if (kind == "geneve") throw until("NetworkManager keeps no GENEVE tunnel")
+                root.output(
+                    tunnel?.nmcli(name, parent) ?: ("nmcli connection add type $kind con-name ${quote(name)} ifname ${quote(name)}" +
+                        (if (vlan) " dev ${quote(parent)} id $vlanId" else "") + (if (kind == "bridge") " bridge.stp no" else "") + " ipv4.method disabled ipv6.method ignore"),
+                )
+            }
+            Kind.Netplan -> {
+                if (kind == "geneve") throw until("netplan keeps no GENEVE tunnel")
+                netplan(Holder(Kind.Netplan, system.name, "", group, name)) {
+                    tunnel?.netplan() ?: JsonObject(if (vlan) mapOf("id" to JsonPrimitive(vlanId), "link" to JsonPrimitive(system.id)) else emptyMap())
+                }
             }
             Kind.Networkd -> {
                 // a .network made for the parent would take it over at boot without what configures it now
                 if (vlan && system.place.isEmpty()) throw until("systemd-networkd has no .network file for $parent")
                 val own = "$NETWORKD/00-networkhelm-$name"
-                update("$own.netdev") { "[NetDev]\nName=$name\nKind=$kind\n" + (if (vlan) "\n[VLAN]\nId=$vlanId\n" else "") }
+                update("$own.netdev") { tunnel?.netdev(name) ?: ("[NetDev]\nName=$name\nKind=$kind\n" + (if (vlan) "\n[VLAN]\nId=$vlanId\n" else "")) }
                 update("$own.network") { "[Match]\nName=$name\n" }
                 if (vlan) networkd(system, parent) { networkdWith(it, "Network", listOf("VLAN" to name)) }
             }
             Kind.Ifupdown -> {
-                val create = if (vlan) "ip link add link $parent name $name type vlan id $vlanId" else "ip link add name $name type $kind"
+                val create = tunnel?.command(name, parent) ?: if (vlan) "ip link add link $parent name $name type vlan id $vlanId" else "ip link add name $name type $kind"
                 interfaces(ifupdownOf(name, orNew = true) ?: system) { interfacesWith(it, name, listOf("pre-up $create", "post-down ip link del $name")) }
             }
         }
@@ -373,7 +379,7 @@ internal class LinuxNetworkConfig(private val ssh: SshSession, private val root:
         val MANAGERS = setOf("nmcli", "netplan", "networkctl", "ifup")
         val NM_OFF = setOf("disabled", "ignore", "link-local")
         val NM_MTU = mapOf("802-11-wireless" to "802-11-wireless.mtu", "wireguard" to "wireguard.mtu", "infiniband" to "infiniband.mtu", "ip-tunnel" to "ip-tunnel.mtu")
-        val LINKS = mapOf("vlan" to "vlans", "bridge" to "bridges", "dummy" to "dummy-devices")
+        val LINKS = mapOf("vlan" to "vlans", "bridge" to "bridges", "dummy" to "dummy-devices") + TUNNEL_KINDS.associateWith { "tunnels" }
         val DEVICE = Regex("[A-Za-z0-9_.@:-]+")
         val ADDRESS = Regex("[0-9A-Fa-f.:]+")
         val PREFIXED = Regex("[0-9A-Fa-f.:]+/\\d{1,3}")

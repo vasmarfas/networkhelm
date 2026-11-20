@@ -1,0 +1,105 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Containers]
+window:
+  title: Containers
+  tabs:
+    - { title: Containers, path: container }
+paths:
+  container:
+    columns: [name, project, image, status, created, ip-address, ports, cpu, memory]
+    flags:
+      - { property: running, letter: R }
+      - { property: paused, letter: P }
+      - { property: restarting, letter: S }
+      - { property: stopped, letter: X }
+      - { property: failed, letter: E }
+      - { property: healthy, letter: H }
+      - { property: unhealthy, letter: U }
+    quick: state
+    category: project
+    sort: name
+    form: container
+    bytes: [memory, memory-limit, rx-byte, tx-byte, read-byte, write-byte]
+    actions:
+      - { title: Start, command: start, selection: true }
+      - { title: Stop, command: stop, selection: true }
+      - { title: Restart, command: restart, selection: true }
+      - { title: Pause, command: pause, selection: true }
+      - { title: Resume, command: unpause, selection: true }
+      - { title: Kill, command: kill, selection: true, confirm: true }
+      - { title: Hang Up, command: hang-up, selection: true }
+      - { title: Recreate with Pulled Image, command: recreate, selection: true, confirm: true }
+      - { title: Duplicate, command: duplicate, selection: true }
+      - { title: Save as Image, command: commit, selection: true, output: image }
+      - { title: Remove with Volumes, command: remove-with-volumes, selection: true, confirm: true }
+    menu:
+      - { title: Logs, path: container, window: container-logs, fill: [{ to: container }] }
+      - { title: Terminal, path: container, window: container-terminal, fill: [{ to: container }] }
+      - { title: Stats, path: container, window: container-stats, fill: [{ to: container }] }
+      - { title: Processes, path: container, window: container-processes, fill: [{ to: container }] }
+      - { title: Inspect, path: container, window: container-inspect, fill: [{ to: container }] }
+      - { title: Changes, path: container, window: container-changes, fill: [{ to: container }] }
+      - { title: Files, path: container, window: container-files, fill: [{ to: container }] }
+forms:
+  container:
+    title: "Container <{name}>"
+    tabs:
+      - title: General
+        fields: [name, image, command, entrypoint, workdir, user, hostname, labels, tty, interactive, "-", state, health, started, created, ip-address, restart-count, exit-code, id]
+      - { title: Env, fields: [env, secret-env] }
+      - { title: Ports, fields: [ports, publish-all] }
+      - { title: Mounts, fields: [mounts] }
+      - { title: Network, fields: [network, aliases, ipv4-address, ipv6-address, mac-address, dns, dns-search, extra-hosts] }
+      - { title: Resources, fields: [cpus, cpu-shares, cpuset-cpus, memory, memory-swap, memory-reservation, pids-limit, shm-size, ulimits, oom-kill-disable] }
+      - { title: Restart, fields: [restart, restart-retries] }
+      - { title: Healthcheck, fields: [health-cmd, health-interval, health-timeout, health-start-period, health-retries] }
+      - { title: Security, fields: [privileged, cap-add, cap-drop, security-opt, read-only, userns, devices, gpus] }
+      - { title: Logging, fields: [log-driver, log-opt] }
+      - { title: Runtime, fields: [runtime, init, stop-signal, stop-timeout, auto-remove, "-", start, recreate] }
+    only:
+      - { fields: [restart-retries], where: { restart: [on-failure] } }
+labels:
+  project: Stack
+  cpu: CPU %
+  rx-byte: Rx
+  tx-byte: Tx
+  read-byte: Read
+  write-byte: Write
+  pids: PIDs
+  ip-address: IP Address
+  ipv4-address: IPv4 Address
+  ipv6-address: IPv6 Address
+  mac-address: MAC Address
+  workdir: Working Dir
+  tty: TTY
+  interactive: Keep Stdin Open
+  env: Variables
+  secret-env: Secret Variables
+  publish-all: Publish All Exposed Ports
+  dns: DNS
+  dns-search: DNS Search
+  cpus: CPUs
+  cpu-shares: CPU Shares
+  cpuset-cpus: CPU Set
+  pids-limit: PIDs Limit
+  shm-size: SHM Size
+  oom-kill-disable: OOM Kill Disable
+  restart: Restart Policy
+  restart-retries: Restart Retries
+  restart-count: Restart Count
+  health-cmd: Health Command
+  health-interval: Interval
+  health-timeout: Timeout
+  health-start-period: Start Period
+  health-retries: Retries
+  read-only: Read-Only Root
+  userns: User Namespace
+  gpus: GPUs
+  log-opt: Log Options
+  init: Init Process
+  stop-timeout: Stop Timeout
+  auto-remove: Remove on Exit
+  start: Start After Creating
+  recreate: Recreate
+  id: ID

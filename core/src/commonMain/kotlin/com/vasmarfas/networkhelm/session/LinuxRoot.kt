@@ -5,6 +5,7 @@ import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.openwrt.quote
 import com.vasmarfas.networkhelm.ssh.ExecResult
 import com.vasmarfas.networkhelm.ssh.SshSession
+import com.vasmarfas.networkhelm.transport.ByteStream
 
 // a command as root: the login is root, sudo lets the login in without a password, or sudo -S takes the password of the login
 internal class Root(private val ssh: SshSession, private val password: String?) {
@@ -16,6 +17,29 @@ internal class Root(private val ssh: SshSession, private val password: String?) 
         Way.Login -> ssh.exec(command)
         Way.Sudo -> ssh.exec("sudo -n sh -c ${quote(command)}")
         Way.Password -> ssh.exec("sudo -S -p '' sh -c ${quote(command)}", "$password\n")
+    }
+
+    // what the command reads goes after the password; -k has sudo take the password even while it holds it from a command
+    // before, which would leave the password to the command to read
+    suspend fun exec(command: String, input: String): ExecResult = when (way()) {
+        Way.Login -> ssh.exec(command, input)
+        Way.Sudo -> ssh.exec("sudo -n sh -c ${quote(command)}", input)
+        Way.Password -> ssh.exec("sudo -k -S -p '' sh -c ${quote(command)}", "$password\n$input")
+    }
+
+    // a command that keeps running, a relay to a socket: -k makes sudo read the password even when it took it a moment ago,
+    // so the password never reaches the command, and what the caller writes comes after it
+    suspend fun process(command: String): ByteStream = when (way()) {
+        Way.Login -> ssh.process(command)
+        Way.Sudo -> ssh.process("sudo -n sh -c ${quote(command)}")
+        Way.Password -> ssh.process("sudo -k -S -p '' sh -c ${quote(command)}").also { stream ->
+            try {
+                stream.write("$password\n".encodeToByteArray())
+            } catch (e: Exception) {
+                stream.close()
+                throw e
+            }
+        }
     }
 
     // the login is root itself: its commands leave no line of sudo in the log

@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Pods]
+window:
+  title: Pods
+  tabs:
+    - { title: Pods, path: container/pod }
+paths:
+  container/pod:
+    columns: [name, status, containers, running, networks, created, pod-id]
+    quick: status
+    sort: name
+    actions:
+      - { title: Start, command: start, selection: true }
+      - { title: Stop, command: stop, selection: true }
+      - { title: Restart, command: restart, selection: true }
+      - { title: Pause, command: pause, selection: true }
+      - { title: Resume, command: unpause, selection: true }
+      - { title: Kill, command: kill, selection: true, confirm: true }
+labels:
+  pod-id: Pod ID

@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.session
 
+import com.vasmarfas.networkhelm.journal.EditKind
 import com.vasmarfas.networkhelm.model.Capabilities
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.DeviceInfo
@@ -32,6 +33,9 @@ interface DeviceSession {
 
     suspend fun forgetStructure() {}
 
+    // what the device offers changed, as packages put on a Linux host: the menu is read again
+    val structure: Flow<Unit> get() = emptyFlow()
+
     fun watch(path: MenuPath, filter: Filter? = null, properties: List<String>? = null): Flow<ListEvent>
 
     suspend fun get(path: MenuPath, id: String?, properties: List<String>? = null): Item?
@@ -57,6 +61,9 @@ interface DeviceSession {
     suspend fun packs(store: TextStore? = null): List<Pack> = emptyList()
 
     suspend fun nativeMenu(): NativeMenu? = null
+
+    // what the host itself runs for an edit where that is not the command line of the platform, as the package manager of a Linux host
+    fun hostCommand(path: MenuPath, kind: EditKind, ids: List<String>, values: Map<String, String?>): String? = null
 
     // the titles and labels of the bundled windows as the router's own interface names them, in the language of the app
     suspend fun words(store: TextStore? = null): Map<String, String> = emptyMap()

@@ -1,0 +1,84 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, OpenVPN]
+window:
+  title: OpenVPN
+  tabs:
+    - { title: Servers, path: vpn/openvpn }
+    - { title: Clients, path: vpn/openvpn/client }
+    - { title: Connections, path: vpn/openvpn/connection }
+paths:
+  vpn/openvpn:
+    columns: [name, state, autostart, port, proto, dev, network, clients, nat, client-remote]
+    form: server
+    actions:
+      - { title: Start, command: up, selection: true }
+      - { title: Stop, command: down, selection: true, confirm: true }
+    menu:
+      - { title: New Server, path: vpn/openvpn/server, window: vpn-form, global: true }
+  vpn/openvpn/client:
+    columns: [server, name, state, expires, disabled, address]
+    quick: server
+    form: client
+    actions:
+      - { title: Client Config, command: client-config, selection: true, argument: number, output: conf, added: true }
+  vpn/openvpn/connection:
+    columns: [name, state, autostart, remote, user, file]
+    form: connection
+    actions:
+      - { title: Connect, command: up, selection: true }
+      - { title: Disconnect, command: down, selection: true, confirm: true }
+    menu:
+      - { title: Import Client Config, path: vpn/openvpn/import, window: vpn-form, global: true }
+forms:
+  server:
+    title: "OpenVPN <{name}>"
+    tabs:
+      - title: General
+        fields: [name, port, proto, network, network6, client-remote, "-", autostart, nat]
+      - title: Clients
+        fields: [dns, redirect-gateway, push-routes, client-to-client, duplicate-cn, max-clients]
+      - title: Advanced
+        fields: [data-ciphers, keepalive, user, group, verb]
+      - title: Status
+        readonly: true
+        fields: [state, dev, tls, management, clients, pki, file]
+  client:
+    title: "Client <{name}>"
+    tabs:
+      - title: General
+        fields: [server, name, address, disabled]
+      - title: Certificate
+        readonly: true
+        fields: [state, serial, expires, revoked]
+  connection:
+    title: "Connection <{name}>"
+    tabs:
+      - title: General
+        fields: [name, import, user, password, "-", autostart]
+      - title: Status
+        readonly: true
+        fields: [state, remote, proto, dev, file]
+labels:
+  autostart: Start at Boot
+  proto: Protocol
+  dev: Device
+  network: IPv4 Network
+  network6: IPv6 Network
+  client-remote: Address for Clients
+  nat: NAT for Clients
+  dns: DNS for Clients
+  redirect-gateway: All Traffic Through VPN
+  push-routes: Routes for Clients
+  client-to-client: Client to Client
+  duplicate-cn: Same Certificate Twice
+  max-clients: Max Clients
+  data-ciphers: Data Ciphers
+  tls: TLS Key
+  verb: Log Level
+  pki: PKI
+  address: Fixed Address
+  expires: Expires
+  revoked: Revoked
+  import: Import From
+  remote: Remote

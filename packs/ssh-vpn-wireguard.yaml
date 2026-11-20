@@ -1,0 +1,74 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, WireGuard]
+window:
+  title: WireGuard
+  tabs:
+    - { title: WireGuard, path: vpn/wireguard }
+    - { title: Peers, path: vpn/wireguard/peer }
+paths:
+  vpn/wireguard:
+    columns: [name, source, running, autostart, listen-port, endpoint, address, public-key, peers, nat, rx, tx]
+    bytes: [rx, tx]
+    form: interface
+    actions:
+      - { title: Up, command: up, selection: true }
+      - { title: Down, command: down, selection: true, confirm: true }
+    menu:
+      - { title: New Server, path: vpn/wireguard/server, window: vpn-form, global: true }
+      - { title: Import Client Config, path: vpn/wireguard/import, window: vpn-form, global: true }
+    labels:
+      endpoint: Endpoint for Clients
+      client-endpoint: Address for Clients
+  vpn/wireguard/peer:
+    columns: [interface, name, public-key, endpoint, allowed-ips, current-endpoint, last-handshake, rx, tx, disabled]
+    bytes: [rx, tx]
+    quick: interface
+    form: peer
+    actions:
+      - { title: Client Config, command: client-config, selection: true, argument: number, output: conf, added: true }
+forms:
+  interface:
+    title: "WireGuard <{name}>"
+    tabs:
+      - title: General
+        fields: [name, private-key, public-key, listen-port, address, mtu, "-", autostart, nat]
+      - title: Clients
+        fields: [client-endpoint, client-dns, client-allowed-ips, client-keepalive]
+      - title: Advanced
+        fields: [dns, table, fwmark, pre-up, post-up, pre-down, post-down]
+      - title: Status
+        readonly: true
+        fields: [source, file, running, endpoint, peers, rx, tx]
+  peer:
+    title: "Peer <{name}>"
+    tabs:
+      - title: General
+        fields: [interface, name, public-key, keep-key, preshared-key, allowed-ips, endpoint, persistent-keepalive, disabled]
+      - title: Client
+        fields: [client-key, client-address, client-dns, client-allowed-ips, client-endpoint, client-mtu, client-keepalive]
+      - title: Status
+        readonly: true
+        fields: [current-endpoint, last-handshake, rx, tx]
+labels:
+  source: Kept By
+  autostart: Start at Boot
+  dns: Host DNS
+  mtu: MTU
+  fwmark: Firewall Mark
+  table: Routing Table
+  pre-up: PreUp
+  post-up: PostUp
+  pre-down: PreDown
+  post-down: PostDown
+  nat: NAT for Clients
+  rx: Received
+  tx: Sent
+  keep-key: Keep Client Key on Host
+  allowed-ips: Allowed IPs
+  persistent-keepalive: Persistent Keepalive, s
+  client-key: Client Key Kept
+  client-dns: Client DNS
+  client-mtu: Client MTU
+  client-allowed-ips: Client Allowed IPs
+  client-keepalive: Client Keepalive, s

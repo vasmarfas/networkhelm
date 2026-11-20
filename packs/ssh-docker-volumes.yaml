@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Volumes]
+window:
+  title: Volumes
+  tabs:
+    - { title: Volumes, path: container/volume }
+paths:
+  container/volume:
+    columns: [name, driver, containers, anonymous, mountpoint, created]
+    sort: name
+    form: volume
+    menu:
+      - { title: Prune, path: container/volume, window: docker-prune-volume, global: true }
+      - { title: Browse, path: container/volume, window: docker-volume-files, fill: [{ to: volume }] }
+forms:
+  volume:
+    title: "Volume <{name}>"
+    tabs:
+      - title: General
+        fields: [name, driver, options, labels, "-", mountpoint, scope, created, containers, anonymous]
+labels:
+  mountpoint: Mount Point
+  options: Driver Options

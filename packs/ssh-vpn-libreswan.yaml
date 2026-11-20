@@ -1,0 +1,37 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, Libreswan]
+window:
+  title: Libreswan
+  tabs:
+    - { title: Conns, path: vpn/libreswan }
+paths:
+  vpn/libreswan:
+    columns: [name, loaded, sas, left, right, leftsubnet, rightsubnet, authby, auto, file]
+    form: conn
+    actions:
+      - { title: Up, command: up, selection: true }
+      - { title: Down, command: down, selection: true, confirm: true }
+forms:
+  conn:
+    title: "Conn <{name}>"
+    tabs:
+      - title: General
+        fields: [name, left, leftid, leftsubnet, right, rightid, rightsubnet, "-", keyexchange, authby, psk, type, auto]
+      - title: Advanced
+        fields: [ike, esp, dpddelay]
+      - title: Status
+        readonly: true
+        fields: [loaded, sas, file]
+labels:
+  sas: SAs
+  leftid: Left ID
+  leftsubnet: Left Subnet
+  rightid: Right ID
+  rightsubnet: Right Subnet
+  keyexchange: Key Exchange
+  authby: Auth By
+  psk: Preshared Key
+  ike: IKE
+  esp: ESP
+  dpddelay: DPD Delay, s

@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.session
 
 import com.vasmarfas.networkhelm.discovery.formatIpv6
+import com.vasmarfas.networkhelm.journal.EditKind
 import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
@@ -9,6 +10,8 @@ import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.model.duration
 import com.vasmarfas.networkhelm.openwrt.quote
 import com.vasmarfas.networkhelm.ssh.SshSession
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
@@ -35,18 +38,36 @@ internal class HostTable(
     val move: (suspend (List<String>, String?) -> Unit)? = null,
     val commands: List<String> = emptyList(),
     val run: (suspend (String, Map<String, String>) -> List<Item>)? = null,
+    // commands whose answer goes on until the caller stops reading it: a followed log, the load of a container
+    val streams: Map<String, (Map<String, String>) -> Flow<Item>> = emptyMap(),
+    // one element read by itself, with what the list leaves out: every setting of a container for its form
+    val item: (suspend (String) -> Item?)? = null,
     val present: suspend () -> Boolean = { true },
+    // the command the host runs for an add or a removal, for the form to show before it is applied
+    val shown: ((EditKind, List<String>, Map<String, String?>) -> String?)? = null,
 )
 
 internal class LinuxHost(private val ssh: SshSession, password: String? = null, login: (suspend () -> Unit)? = null) {
     private var cpu: List<Long>? = null
+    private var cpuLoad: String? = null
     private var found: Set<String>? = null
+
+    // packages put in or taken out change the tools, and with them the windows of the menu
+    val toolsChanged = MutableSharedFlow<Unit>(extraBufferCapacity = 1)
     private val root = Root(ssh, password)
-    private val firewall = LinuxFirewall(ssh, root, ::tools, login)
-    private val packages = LinuxPackages(ssh, root, ::tools) { found = null }
+    private val guard = LinuxGuard(ssh, root, login)
+    private val firewall = LinuxFirewall(ssh, root, ::tools, guard)
+    private val packages = LinuxPackages(ssh, root, ::tools) {
+        found = null
+        toolsChanged.tryEmit(Unit)
+    }
     private val storage = LinuxStorage(ssh, root, ::tools)
     private val config = LinuxNetworkConfig(ssh, root, ::tools)
     private val logs = LinuxLogs(ssh, root, ::tools)
+    private val vpn = LinuxVpn(ssh, root, ::tools, guard, packages)
+    private val proxy = LinuxProxy(ssh, root, ::tools, packages, guard)
+    private val docker = LinuxDocker(ssh, root, ::tools, guard, packages)
+    private val proxmox = LinuxProxmox(root, ::tools)
 
     val tables: Map<String, HostTable> = mapOf(
         "interface" to HostTable(INTERFACE, ::interfaces, arguments = { INTERFACE_ARGUMENTS + PERSIST }, set = ::setInterface, commands = listOf("monitor-traffic")),
@@ -88,7 +109,7 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
             listOf("name", "enabled", "load", "status", "running", "disabled", "description"), ::services,
             commands = listOf("start", "stop", "restart", "reload", "enable", "disable"), run = ::service, present = { "systemctl" in tools() || "rc-service" in tools() },
         ),
-    ) + firewall.tables + packages.tables + storage.tables + logs.tables
+    ) + firewall.tables + packages.tables + storage.tables + logs.tables + vpn.tables + proxy.tables + docker.tables + proxmox.tables
 
     // the tools of the host by name, wherever they lie: over SSH Debian and openSUSE leave /usr/sbin out of PATH, and
     // command -v of busybox answers for the first name only
@@ -177,15 +198,14 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
         }
     }
 
-    // VLANs, bridges and dummies: made with ip, and written to the network configuration where asked
+    // VLANs, bridges, dummies and tunnels of the kernel: made with ip, and written to the network configuration where asked
     private suspend fun virtuals(): List<Item> {
-        val ids = if (iproute()) {
-            json("ip -j -d link show type vlan").mapNotNull { it as? JsonObject }
-                .associate { it.text("ifname") to ((it["linkinfo"] as? JsonObject)?.get("info_data") as? JsonObject)?.text("id").orEmpty() }
+        val data = if (iproute()) {
+            json("ip -j -d link show").mapNotNull { it as? JsonObject }.associate { it.text("ifname") to ((it["linkinfo"] as? JsonObject)?.get("info_data") as? JsonObject) }
         } else {
             emptyMap()
         }
-        return interfaces().filter { it["type"] in VIRTUAL_KINDS }.map { Item(it.id, it.values + ("vlan-id" to ids[it["name"]].orEmpty())) }
+        return interfaces().filter { it["type"] in VIRTUAL_KINDS && !kernelFallback(it) }.map { Item(it.id, it.values + virtualData(it["type"].orEmpty(), data[it["name"]])) }
     }
 
     private suspend fun addVirtual(values: Map<String, String>): String {
@@ -193,7 +213,8 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
         val name = values["name"].orEmpty().also { if (!DEVICE.matches(it)) throw DeviceException(ErrorCategory.ArgumentValue, "name: $it is no name of an interface") }
         val parent = values["parent"].orEmpty()
         val id = values["vlan-id"]?.toIntOrNull()
-        val command = when (kind) {
+        val tunnel = if (kind in TUNNEL_KINDS) linkTunnel(kind, values) { output("ip -o route get ${quote(it)}").substringAfter(" src ", "").substringBefore(' ') } else null
+        val command = tunnel?.command(name, parent) ?: when (kind) {
             "vlan" -> {
                 if (!DEVICE.matches(parent)) throw DeviceException(ErrorCategory.ArgumentValue, "parent: a VLAN goes on an interface")
                 if (id == null || id !in 1..4094) throw DeviceException(ErrorCategory.ArgumentValue, "vlan-id: a VLAN has a number from 1 to 4094")
@@ -203,7 +224,7 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
             else -> throw DeviceException(ErrorCategory.ArgumentValue, "type: $kind is none of ${VIRTUAL_KINDS.joinToString()}")
         }
         root.output("$command && ip link set dev ${quote(name)} up")
-        if (values["persist"] in ValueType.Flag.on) config.addLink(kind, name, parent, id)
+        if (values["persist"] in ValueType.Flag.on) config.addLink(kind, name, parent, id, tunnel)
         return interfaces().firstOrNull { it["name"] == name }?.id.orEmpty()
     }
 
@@ -484,15 +505,24 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
         val meminfo = memory.lines().associate { it.substringBefore(':') to (it.substringAfter(':').trim().substringBefore(' ').toLongOrNull() ?: 0) }
         val times = stat.trim().split(blanks).drop(1).mapNotNull(String::toLongOrNull)
         val previous = cpu
-        cpu = times
+        if (previous == null || times.size < 8 || previous.size < 8) {
+            cpu = times
+        } else {
+            val busy = listOf(0, 1, 2, 5, 6, 7).sumOf { times[it] - previous[it] }
+            val all = busy + times[3] - previous[3] + times[4] - previous[4]
+            // windows that read the resources a moment apart would see a few ticks, most of them the reading itself: the load
+            // comes from half a second of every core at least, and the sample before stays until then
+            if (all < 0) {
+                cpu = times
+            } else if (all >= SAMPLE_TICKS * (count.trim().toIntOrNull() ?: 1)) {
+                cpuLoad = "${busy * 100 / all}"
+                cpu = times
+            }
+        }
         return buildMap {
             uptime.trim().substringBefore(' ').substringBefore('.').toLongOrNull()?.let { put("uptime", duration(it)) }
             put("load", load.trim().split(blanks).take(3).joinToString(" "))
-            if (previous != null && times.size >= 8 && previous.size >= 8) {
-                val busy = listOf(0, 1, 2, 5, 6, 7).sumOf { times[it] - previous[it] }
-                val all = busy + times[3] - previous[3] + times[4] - previous[4]
-                if (all > 0) put("cpu-load", "${busy * 100 / all}")
-            }
+            cpuLoad?.let { put("cpu-load", it) }
             put("cpu-count", count.trim())
             meminfo["MemTotal"]?.let { put("total-memory", "${it * 1024}") }
             (meminfo["MemAvailable"] ?: meminfo["MemFree"])?.let { put("free-memory", "${it * 1024}") }
@@ -630,13 +660,17 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
             Argument("routing-table", ValueType.Text(), optional = true),
         )
         val PERSIST = Argument("persist", ValueType.YesNo, optional = true)
-        val VIRTUAL_KINDS = listOf("vlan", "bridge", "dummy")
-        val VIRTUAL = listOf("name", "type", "parent", "vlan-id", "mtu", "mac-address", "running", "disabled", "comment")
+        val VIRTUAL_KINDS = listOf("vlan", "bridge", "dummy") + TUNNEL_KINDS
+        val VIRTUAL = listOf("name", "type", "parent", "vlan-id", "local", "remote", "tunnel-id", "port", "mtu", "mac-address", "running", "disabled", "comment")
         val VIRTUAL_ARGUMENTS = listOf(
             Argument("type", ValueType.Enumeration(closed = true), VIRTUAL_KINDS, default = "vlan"),
             Argument("name", ValueType.Text()),
-            Argument("parent", ValueType.Text(), optional = true, depends = listOf(mapOf("type" to "vlan"))),
+            Argument("parent", ValueType.Text(), optional = true, depends = listOf(mapOf("type" to "vlan"), mapOf("type" to "vxlan"))),
             Argument("vlan-id", ValueType.Integer(min = 1, max = 4094), optional = true, depends = listOf(mapOf("type" to "vlan"))),
+            Argument("local", ValueType.Ip4, optional = true, depends = TUNNEL_KINDS.filter { it != "geneve" }.map { mapOf("type" to it) }),
+            Argument("remote", ValueType.Ip4, optional = true, depends = TUNNEL_KINDS.map { mapOf("type" to it) }),
+            Argument("tunnel-id", ValueType.Integer(min = 0, max = 4_294_967_295), optional = true, depends = listOf("gre", "gretap", "vxlan", "geneve").map { mapOf("type" to it) }),
+            Argument("port", ValueType.Integer(min = 1, max = 65535), optional = true, depends = listOf("vxlan", "geneve").map { mapOf("type" to it) }),
         )
         val NEIGHBOUR = listOf("address", "mac-address", "interface", "status", "dynamic", "complete")
         val NEIGHBOUR_ARGUMENTS = listOf(
@@ -661,7 +695,15 @@ internal class LinuxHost(private val ssh: SshSession, password: String? = null, 
 
 private const val SECTION = "--rd-section--"
 
-private const val TOOLS = $$"""for t in ufw firewall-cmd nft iptables-save ip6tables-save apt-get dnf yum zypper pacman apk systemctl rc-service journalctl ss findmnt lsblk smartctl nmcli netplan networkctl ifup; do """ +
+// half a second of one core at USER_HZ 100
+private const val SAMPLE_TICKS = 50
+
+private val HOST_TOOLS = listOf(
+    "ufw", "firewall-cmd", "nft", "iptables-save", "ip6tables-save", "apt-get", "dnf", "yum", "zypper", "pacman", "apk", "systemctl", "rc-service", "journalctl",
+    "ss", "findmnt", "lsblk", "smartctl", "nmcli", "netplan", "networkctl", "ifup",
+)
+
+private val TOOLS = "for t in ${(HOST_TOOLS + VPN_TOOLS + DOCKER_TOOLS + PROXMOX_TOOLS).joinToString(" ")}; do " +
     $$"""for d in $(echo "$PATH" | tr : ' ') /usr/local/sbin /usr/sbin /sbin /usr/bin /bin; do if [ -x "$d/$t" ]; then echo "$t"; break; fi; done; done"""
 
 private val blanks = Regex("\\s+")

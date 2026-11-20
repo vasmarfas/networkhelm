@@ -1,0 +1,38 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, shadowsocks-libev]
+window:
+  title: shadowsocks-libev
+  tabs:
+    - { title: Server, path: proxy/shadowsocks }
+paths:
+  proxy/shadowsocks:
+    form: server
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+      - { title: Client Link, command: client-link, output: conf }
+forms:
+  server:
+    title: shadowsocks-libev
+    tabs:
+      - title: General
+        fields: [state, server, server-port, password, method, mode, timeout, "-", autostart]
+      - title: Network
+        fields: [fast-open, reuse-port, no-delay, ipv6-first, nameserver]
+      - title: Plugin
+        fields: [plugin, plugin-opts]
+      - title: Status
+        readonly: true
+        fields: [service, config]
+labels:
+  server: Server Addresses
+  server-port: Server Port
+  timeout: Timeout, s
+  plugin-opts: Plugin Options
+  fast-open: TCP Fast Open
+  reuse-port: Reuse Port
+  no-delay: TCP No Delay
+  ipv6-first: IPv6 First
+  nameserver: DNS Servers
+  autostart: Start at Boot

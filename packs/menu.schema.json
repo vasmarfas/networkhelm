@@ -35,8 +35,8 @@
                     "type": "string"
                 },
                 "window": {
-                    "description": "A window of the client rather than a path of the router: the terminal, a console over SSH, shown only where the platform has a terminal and the router an SSH login; the tunnels, ports of this computer that lead through the SSH of the router, shown where the router has an SSH login and the platform listens on ports; the dashboard and the topology of the controller, drawn from the tables of the path the entry names, shown where the router has that path; the telnet window, an address that the telnet client of the router is started with in a console, shown where the router has an SSH login.",
-                    "enum": ["terminal", "tunnels", "dashboard", "topology", "telnet"]
+                    "description": "A window of the client rather than a path of the router: the terminal, a console over SSH, shown only where the platform has a terminal and the router an SSH login; the tunnels, ports of this computer that lead through the SSH of the router, shown where the router has an SSH login and the platform listens on ports; the dashboard and the topology of the controller, drawn from the tables of the path the entry names, shown where the router has that path; the telnet window, an address that the telnet client of the router is started with in a console, shown where the router has an SSH login; the VPN panel of a Linux host, its services, live sessions and the sessions its journals keep, drawn from the path the entry names and shown where the host has it; the registry logins, the overview and the daemon settings of the container engine of a Linux host, shown where the host has the path the entry names.",
+                    "enum": ["terminal", "tunnels", "dashboard", "topology", "telnet", "vpn-panel", "docker-registries", "docker-system-overview", "docker-system-daemon"]
                 },
                 "since": { "description": "The first RouterOS version with the entry.", "$ref": "#/definitions/version" },
                 "until": {

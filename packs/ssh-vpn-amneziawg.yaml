@@ -1,0 +1,92 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, AmneziaWG]
+window:
+  title: AmneziaWG
+  tabs:
+    - { title: AmneziaWG, path: vpn/amneziawg }
+    - { title: Peers, path: vpn/amneziawg/peer }
+paths:
+  vpn/amneziawg:
+    columns: [name, running, autostart, listen-port, endpoint, address, public-key, peers, nat, rx, tx]
+    bytes: [rx, tx]
+    form: interface
+    actions:
+      - { title: Up, command: up, selection: true }
+      - { title: Down, command: down, selection: true, confirm: true }
+    menu:
+      - { title: New Server, path: vpn/amneziawg/server, window: vpn-form, global: true }
+      - { title: Import Client Config, path: vpn/amneziawg/import, window: vpn-form, global: true }
+    labels:
+      endpoint: Endpoint for Clients
+      client-endpoint: Address for Clients
+  vpn/amneziawg/peer:
+    columns: [interface, name, public-key, endpoint, allowed-ips, current-endpoint, last-handshake, rx, tx, disabled]
+    bytes: [rx, tx]
+    quick: interface
+    form: peer
+    actions:
+      - { title: Client Config, command: client-config, selection: true, argument: number, output: conf, added: true }
+forms:
+  interface:
+    title: "AmneziaWG <{name}>"
+    tabs:
+      - title: General
+        fields: [name, private-key, public-key, listen-port, address, mtu, "-", autostart, nat]
+      - title: Disguise
+        fields: [jc, jmin, jmax, s1, s2, s3, s4, h1, h2, h3, h4, i1, i2, i3, i4, i5]
+      - title: Clients
+        fields: [client-endpoint, client-dns, client-allowed-ips, client-keepalive]
+      - title: Advanced
+        fields: [dns, table, fwmark, pre-up, post-up, pre-down, post-down]
+      - title: Status
+        readonly: true
+        fields: [source, file, running, endpoint, peers, rx, tx]
+  peer:
+    title: "Peer <{name}>"
+    tabs:
+      - title: General
+        fields: [interface, name, public-key, keep-key, preshared-key, allowed-ips, endpoint, persistent-keepalive, disabled]
+      - title: Client
+        fields: [client-key, client-address, client-dns, client-allowed-ips, client-endpoint, client-mtu, client-keepalive]
+      - title: Status
+        readonly: true
+        fields: [current-endpoint, last-handshake, rx, tx]
+labels:
+  source: Kept By
+  autostart: Start at Boot
+  dns: Host DNS
+  mtu: MTU
+  fwmark: Firewall Mark
+  table: Routing Table
+  pre-up: PreUp
+  post-up: PostUp
+  pre-down: PreDown
+  post-down: PostDown
+  nat: NAT for Clients
+  rx: Received
+  tx: Sent
+  jc: Junk Packets (Jc)
+  jmin: Junk Min Size (Jmin)
+  jmax: Junk Max Size (Jmax)
+  s1: Init Padding (S1)
+  s2: Response Padding (S2)
+  s3: Cookie Padding (S3)
+  s4: Data Padding (S4)
+  h1: Init Type (H1)
+  h2: Response Type (H2)
+  h3: Cookie Type (H3)
+  h4: Data Type (H4)
+  i1: Special Junk (I1)
+  i2: Special Junk (I2)
+  i3: Special Junk (I3)
+  i4: Special Junk (I4)
+  i5: Special Junk (I5)
+  keep-key: Keep Client Key on Host
+  allowed-ips: Allowed IPs
+  persistent-keepalive: Persistent Keepalive, s
+  client-key: Client Key Kept
+  client-dns: Client DNS
+  client-mtu: Client MTU
+  client-allowed-ips: Client Allowed IPs
+  client-keepalive: Client Keepalive, s

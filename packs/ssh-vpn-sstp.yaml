@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, SSTP Client]
+window:
+  title: SSTP Connections
+  tabs:
+    - { title: Connections, path: vpn/sstp }
+paths:
+  vpn/sstp:
+    columns: [name, state, autostart, server, user, default-route, interface]
+    form: connection
+    actions:
+      - { title: Connect, command: up, selection: true }
+      - { title: Disconnect, command: down, selection: true, confirm: true }
+forms:
+  connection:
+    title: "Connection <{name}>"
+    tabs:
+      - title: General
+        fields: [name, server, user, password, "-", autostart]
+      - title: Security
+        fields: [ca-file, skip-cert-check]
+      - title: Network
+        fields: [default-route, peer-dns, mtu]
+      - title: Status
+        readonly: true
+        fields: [state, interface]
+labels:
+  server: Server
+  ca-file: CA File
+  skip-cert-check: Skip Certificate Check
+  default-route: All Traffic Through the Tunnel
+  peer-dns: DNS of the Server
+  mtu: MTU
+  autostart: Start at Boot
+  interface: Device

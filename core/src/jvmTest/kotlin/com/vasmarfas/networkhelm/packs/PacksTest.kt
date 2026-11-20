@@ -144,6 +144,7 @@ class PacksTest {
         listOfNotNull(pack.since, pack.until).filter { RouterOsVersion.parse(it) == null }.forEach { add("$it is not a RouterOS version") }
         pack.paths.forEach { (path, shown) -> shown.form?.takeIf { it !in pack.forms }?.let { add("$path: no form $it") } }
         pack.forms.keys.filter { name -> pack.paths.values.none { it.form == name } }.forEach { add("form $it is not opened by any path") }
+        pack.paths.filter { (_, shown) -> shown.form != null && shown.columns.isEmpty() && shown.menu.isNotEmpty() }.forEach { (path, _) -> add("$path: its form shows links, not the items of menu") }
         addAll(lineProblems(pack))
     }
 

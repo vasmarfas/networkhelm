@@ -96,6 +96,6 @@ class PackTest {
     @Test
     fun theLogsOfRouterOsOpenWrtKeeneticAndHostsOverSshAreFlaggedAsLogs() {
         val logs = bundledPacks().values.flatMap { pack -> pack.paths.filterValues { it.log }.keys.map { pack.platform to it } }
-        assertEquals(listOf("keenetic" to "show/log", "openwrt" to "status/kernel-log", "openwrt" to "status/log", "routeros" to "log", "ssh" to "log", "ssh" to "log/auth", "ssh" to "log/boot", "ssh" to "log/errors", "ssh" to "log/kernel"), logs.sortedWith(compareBy({ it.first }, { it.second })))
+        assertEquals(listOf("keenetic" to "show/log", "openwrt" to "status/kernel-log", "openwrt" to "status/log", "routeros" to "log", "ssh" to "log", "ssh" to "log/auth", "ssh" to "log/boot", "ssh" to "log/errors", "ssh" to "log/kernel", "ssh" to "proxmox/log"), logs.sortedWith(compareBy({ it.first }, { it.second })))
     }
 }

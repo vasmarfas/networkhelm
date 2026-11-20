@@ -24,4 +24,13 @@ class SensitiveTest {
         assertEquals(true, Argument("auth-key", ValueType.Text()).sensitive())
         assertEquals(true, Argument("key", ValueType.Secret, listOf("none")).sensitive(), "the type of the platform counts")
     }
+
+    @Test
+    fun linesOfSecretsAreSecretByTheirType() {
+        val lines = ValueType.Many(ValueType.Secret, "\n")
+        assertEquals(true, Argument("secret-env", lines).sensitive())
+        assertEquals(true, sensitive("secret-env", lines))
+        assertEquals(false, sensitive("secret-env"))
+        assertEquals(false, Argument("env", ValueType.Many(ValueType.Text(), "\n")).sensitive())
+    }
 }

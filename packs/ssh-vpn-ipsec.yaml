@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, IPsec]
+window:
+  title: IPsec
+  tabs:
+    - { title: Connections, path: vpn/ipsec }
+    - { title: Clients, path: vpn/ipsec/client }
+paths:
+  vpn/ipsec:
+    columns: [name, loaded, version, local-auth, remote-auth, server-id, pool, dns, kept, file]
+    form: connection
+    actions:
+      - { title: Load All, command: load, output: output }
+    menu:
+      - { title: New Server, path: vpn/ipsec/server, window: vpn-form, global: true }
+  vpn/ipsec/client:
+    columns: [name, state, loaded, server, auth, user, networks, vip]
+    form: client
+    actions:
+      - { title: Connect, command: up, selection: true }
+      - { title: Disconnect, command: down, selection: true, confirm: true }
+    menu:
+      - { title: Import Client Config, path: vpn/ipsec/import, window: vpn-form, global: true }
+forms:
+  client:
+    title: "IPsec Client <{name}>"
+    tabs:
+      - title: General
+        fields: [name, server, auth, user, secret, "-", server-id, ca-file]
+      - title: Networks
+        fields: [networks, local-networks, vip]
+      - title: Status
+        readonly: true
+        fields: [state, loaded, file]
+  connection:
+    title: "IPsec <{name}>"
+    tabs:
+      - title: General
+        fields: [name, server-id, pool, pool6, dns, local-ts, "-", autostart, nat]
+      - title: Proposals
+        fields: [proposals, esp-proposals, rekey-time, child-rekey-time, send-cert]
+      - title: Advanced
+        fields: [dpd-delay, mobike, fragmentation, encap, unique]
+      - title: Status
+        readonly: true
+        fields: [loaded, version, local-auth, remote-auth, remote-addrs, kept, file]
+labels:
+  server-id: Server Name or Address
+  pool: IPv4 Pool
+  pool6: IPv6 Pool
+  dns: DNS for Clients
+  local-ts: Networks for Clients
+  local-auth: Local Auth
+  remote-auth: Remote Auth
+  remote-addrs: Remote Addresses
+  kept: Made By
+  autostart: Start at Boot
+  nat: NAT for Clients
+  server: Server
+  auth: Auth
+  ca-file: CA File
+  networks: Networks Through VPN
+  local-networks: Local Networks
+  vip: Ask for Address
+  proposals: IKE Proposals
+  esp-proposals: ESP Proposals
+  rekey-time: IKE Rekey Time
+  child-rekey-time: CHILD Rekey Time
+  send-cert: Send Certificate
+  dpd-delay: DPD Delay
+  mobike: MOBIKE
+  fragmentation: IKE Fragmentation
+  encap: Force UDP Encapsulation
+  unique: Unique IDs

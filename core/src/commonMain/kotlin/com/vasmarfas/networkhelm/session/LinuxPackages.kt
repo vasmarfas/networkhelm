@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.session
 
+import com.vasmarfas.networkhelm.journal.EditKind
 import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
@@ -14,14 +15,17 @@ internal class LinuxPackages(private val ssh: SshSession, private val root: Root
     val tables: Map<String, HostTable> = mapOf(
         "system/package" to HostTable(
             INSTALLED, ::installed, slow = true, arguments = { listOf(Argument("name", ValueType.Text())) }, add = ::install, remove = ::uninstall,
-            commands = listOf("refresh"), run = ::command, present = { manager() != null },
+            commands = listOf("refresh"), run = ::command, present = { manager() != null }, shown = ::shown,
         ),
         "system/package/update" to HostTable(UPDATE, ::updates, slow = true, commands = listOf("upgrade", "upgrade-all", "refresh"), run = ::command, present = { manager() != null }),
     )
 
     private enum class Manager(val tool: String) { Apt("apt-get"), Dnf("dnf"), Yum("yum"), Zypper("zypper"), Pacman("pacman"), Apk("apk") }
 
-    private suspend fun manager(): Manager? = tools().let { present -> Manager.entries.firstOrNull { it.tool in present } }
+    // the manager found last, for the form that shows the command before it runs
+    private var known: Manager? = null
+
+    private suspend fun manager(): Manager? = tools().let { present -> Manager.entries.firstOrNull { it.tool in present } }.also { known = it }
 
     private suspend fun need() = manager() ?: throw DeviceException(ErrorCategory.Unsupported, "the host has none of apt, dnf, yum, zypper, pacman and apk")
 
@@ -55,27 +59,47 @@ internal class LinuxPackages(private val ssh: SshSession, private val root: Root
 
     private suspend fun install(values: Map<String, String>): String {
         val names = names(values["name"].orEmpty())
-        run(when (need()) {
-            Manager.Apt -> "$APT install ${names.joined()}"
-            Manager.Dnf -> "dnf -y install ${names.joined()}"
-            Manager.Yum -> "yum -y install ${names.joined()}"
-            Manager.Zypper -> "zypper --non-interactive install ${names.joined()}"
-            Manager.Pacman -> "pacman --noconfirm -S ${names.joined()}"
-            Manager.Apk -> "apk add ${names.joined()}"
-        })
+        install(names)
         return names.first()
     }
 
+    // what the manager printed as it installed what an overview offers: the engines of containers, the kinds of VPN and of proxies
+    suspend fun install(names: List<String>): String = run(installing(need(), names))
+
     private suspend fun uninstall(ids: List<String>) {
-        val names = names(ids.joinToString(" "))
-        run(when (need()) {
-            Manager.Apt -> "$APT remove ${names.joined()}"
-            Manager.Dnf -> "dnf -y remove ${names.joined()}"
-            Manager.Yum -> "yum -y remove ${names.joined()}"
-            Manager.Zypper -> "zypper --non-interactive remove ${names.joined()}"
-            Manager.Pacman -> "pacman --noconfirm -R ${names.joined()}"
-            Manager.Apk -> "apk del ${names.joined()}"
-        })
+        run(removing(need(), names(ids.joinToString(" "))))
+    }
+
+    private fun installing(manager: Manager, names: List<String>) = when (manager) {
+        Manager.Apt -> "$APT install ${names.joined()}"
+        Manager.Dnf -> "dnf -y install ${names.joined()}"
+        Manager.Yum -> "yum -y install ${names.joined()}"
+        Manager.Zypper -> "zypper --non-interactive install ${names.joined()}"
+        Manager.Pacman -> "pacman --noconfirm -S ${names.joined()}"
+        Manager.Apk -> "apk add ${names.joined()}"
+    }
+
+    private fun removing(manager: Manager, names: List<String>) = when (manager) {
+        Manager.Apt -> "$APT remove ${names.joined()}"
+        Manager.Dnf -> "dnf -y remove ${names.joined()}"
+        Manager.Yum -> "yum -y remove ${names.joined()}"
+        Manager.Zypper -> "zypper --non-interactive remove ${names.joined()}"
+        Manager.Pacman -> "pacman --noconfirm -R ${names.joined()}"
+        Manager.Apk -> "apk del ${names.joined()}"
+    }
+
+    // a name the manager refuses is no command at all, and the form falls back to the line of its own
+    private fun shown(kind: EditKind, ids: List<String>, values: Map<String, String?>): String? {
+        val manager = known ?: return null
+        return try {
+            when (kind) {
+                EditKind.Add -> installing(manager, names(values["name"].orEmpty()))
+                EditKind.Remove -> removing(manager, names(ids.joinToString(" ")))
+                else -> null
+            }
+        } catch (e: DeviceException) {
+            null
+        }
     }
 
     private suspend fun command(command: String, arguments: Map<String, String>): List<Item> {
@@ -112,7 +136,9 @@ internal class LinuxPackages(private val ssh: SshSession, private val root: Root
         return listOf(Item("", mapOf("output" to run(line))))
     }
 
-    private suspend fun run(line: String): String {
+    // a command as root that changes what the host has installed: its tools are looked up anew after it, and a failure ends with the last
+    // lines it printed; the overview of proxies installs the releases of Xray and sing-box through it
+    suspend fun run(line: String): String {
         val result = root.exec("$line 2>&1")
         changed()
         if (result.exitStatus != 0) throw DeviceException(ErrorCategory.Api, result.output.trim().lines().takeLast(12).joinToString("\n").ifEmpty { result.error.trim() })
@@ -164,7 +190,7 @@ private fun bytes(size: String): String {
 }
 
 // acl-libs-2.3.2-r1 x86_64 {acl} (LGPL-2.1-or-later AND GPL-2.0-or-later) [installed]
-private val APK = Regex("""(.+)-([^-]+-r\d+) (\S+) \{([^}]*)}.*""")
+private val APK = Regex("""(.+)-([^-]+-r\d+) (\S+) \{([^}]*)\}.*""")
 
 internal fun parseApk(text: String): List<Item> = text.lines().mapNotNull { APK.matchEntire(it.trim()) }.map {
     row(it.groupValues[1], "version" to it.groupValues[2], "architecture" to it.groupValues[3], "size" to "", "description" to "")

@@ -1,0 +1,48 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, ZeroTier]
+window:
+  title: ZeroTier
+  tabs:
+    - { title: Networks, path: vpn/zerotier }
+    - { title: Peers, path: vpn/zerotier/peer }
+    - { title: Node, path: vpn/zerotier/node }
+paths:
+  vpn/zerotier:
+    columns: [id, name, status, type, device, addresses, allow-default]
+    form: network
+  vpn/zerotier/peer:
+    columns: [address, role, version, latency, path, paths]
+  vpn/zerotier/node:
+    form: node
+forms:
+  network:
+    title: "Network <{id}>"
+    tabs:
+      - title: General
+        fields: [id, "-", allow-managed, allow-global, allow-default, allow-dns]
+      - title: Status
+        readonly: true
+        fields: [name, status, type, mac-address, device, addresses, mtu, routes, dns, dns-domain]
+  node:
+    title: ZeroTier Node
+    tabs:
+      - title: General
+        fields: [address, version, online, "-", primary-port, port-mapping, tcp-fallback, force-tcp]
+labels:
+  id: Network ID
+  allow-managed: Managed Addresses
+  allow-global: Global Addresses
+  allow-default: Default Route
+  allow-dns: DNS of the Network
+  routes: Routes
+  dns: DNS Servers
+  dns-domain: DNS Domain
+  role: Role
+  latency: Latency, ms
+  path: Path
+  paths: Paths
+  primary-port: Port
+  port-mapping: Port Mapping (UPnP, NAT-PMP)
+  tcp-fallback: TCP Relay Fallback
+  force-tcp: TCP Relay Only

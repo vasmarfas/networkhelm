@@ -1,0 +1,31 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, OpenConnect Client]
+window:
+  title: OpenConnect Connections
+  tabs:
+    - { title: Connections, path: vpn/openconnect }
+paths:
+  vpn/openconnect:
+    columns: [name, state, autostart, server, protocol, user, interface]
+    form: connection
+    actions:
+      - { title: Connect, command: up, selection: true }
+      - { title: Disconnect, command: down, selection: true, confirm: true }
+    menu:
+      - { title: Import Client Config, path: vpn/openconnect/import, window: vpn-form, global: true }
+forms:
+  connection:
+    title: "Connection <{name}>"
+    tabs:
+      - title: General
+        fields: [name, server, protocol, user, password, pin, "-", autostart]
+      - title: Status
+        readonly: true
+        fields: [state, interface]
+labels:
+  server: Server
+  protocol: Protocol
+  pin: Certificate Pin
+  autostart: Start at Boot
+  interface: Device

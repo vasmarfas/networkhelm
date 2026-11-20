@@ -1,0 +1,54 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, Tailscale]
+window:
+  title: Tailscale
+  tabs:
+    - { title: Nodes, path: vpn/tailscale }
+paths:
+  vpn/tailscale:
+    columns: [name, kind, addresses, os, online, connection, exit-node, last-seen, state]
+    form: node
+    actions:
+      - { title: Connect, command: up }
+      - { title: Disconnect, command: down, confirm: true }
+      - { title: Log Out, command: logout, confirm: true }
+      - { title: Use as Exit Node, command: exit-node, selection: true, argument: numbers, confirm: true }
+      - { title: No Exit Node, command: no-exit-node }
+forms:
+  node:
+    title: "Node <{name}>"
+    tabs:
+      - title: General
+        fields: [name, dns-name, addresses, os, state, tailnet, version, "-", auth-key, login-server]
+      - title: Settings
+        fields: [hostname, accept-routes, accept-dns, ssh, shields-up, advertise-routes, advertise-exit-node, exit-node-allow-lan-access, "-", auto-update, webclient, operator]
+      - title: Firewall
+        fields: [snat-subnet-routes, stateful-filtering, netfilter-mode]
+      - title: Connection
+        readonly: true
+        fields: [online, active, connection, rx, tx, last-seen, exit-node, exit-node-option, auth-url]
+labels:
+  dns-name: DNS Name
+  os: OS
+  connection: Reached By
+  rx: Received
+  tx: Sent
+  exit-node: Exit Node
+  exit-node-option: Offers Exit Node
+  auth-url: Login URL
+  auth-key: Auth Key
+  login-server: Login Server
+  accept-routes: Accept Routes
+  accept-dns: Accept DNS
+  ssh: Tailscale SSH
+  shields-up: Shields Up
+  advertise-routes: Advertise Routes
+  advertise-exit-node: Advertise Exit Node
+  exit-node-allow-lan-access: LAN Access Through Exit Node
+  auto-update: Update Automatically
+  webclient: Web Interface
+  operator: Operator User
+  snat-subnet-routes: SNAT for Subnet Routes
+  stateful-filtering: Stateful Filtering
+  netfilter-mode: Netfilter Mode

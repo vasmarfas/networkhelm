@@ -80,6 +80,16 @@
                 "form": { "description": "The item dialog, a key of forms.", "type": "string" },
                 "actions": { "type": "array", "items": { "$ref": "#/definitions/action" } },
                 "quick": { "description": "The column of the drop-down filter next to the search box.", "type": "string" },
+                "flags": {
+                    "description": "The letters at the head of a row, as the flags of RouterOS: each shows where its property of the row is true.",
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": { "property": { "type": "string" }, "letter": { "type": "string", "minLength": 1, "maxLength": 1 } },
+                        "required": ["property", "letter"],
+                        "additionalProperties": false
+                    }
+                },
                 "category": { "description": "The column Show Categories groups the rows by.", "type": "string" },
                 "iconBy": { "description": "The property whose value picks the icon before the first column, by the keys value/<property>=<value> of the theme: the type of an interface.", "type": "string" },
                 "sort": { "description": "The column the rows are sorted by until the user sorts them another way.", "type": "string" },
@@ -233,7 +243,8 @@
                             "path": { "type": "string" },
                             "window": { "type": "string", "description": "A window of the client instead of the path: dhcp-setup." },
                             "argument": { "type": "string", "description": "The argument of the command the link opens that takes the element it is opened for: number of a WiFi scan." },
-                            "autostart": { "type": "boolean", "description": "The command the link opens runs as its window opens, for an element chosen in the table: Torch of an interface." }
+                            "autostart": { "type": "boolean", "description": "The command the link opens runs as its window opens, for an element chosen in the table: Torch of an interface." },
+                            "item": { "type": "boolean", "description": "The link opens the form of a new row of the table at path: New Server of Xray." }
                         }
                     }
                 },
@@ -310,7 +321,8 @@
                 "argument": { "description": "What the command takes the rows by: numbers takes them all at once, number one, and then the command runs once a row: run of /system/script.", "enum": ["numbers", "number"] },
                 "confirm": { "description": "Ask before running: Uninstall of a package.", "type": "boolean" },
                 "depends": { "description": "The button stands where one of these sets of fields holds the values it names; an empty value stands for a field the window does not show: the buttons of the update window by its .state.", "type": "array", "items": { "type": "object", "additionalProperties": { "type": "string" } } },
-                "output": { "description": "The property of the reply that is text to read and copy, shown with its QR code: conf of show-client-config of a WireGuard peer.", "type": "string" }
+                "output": { "description": "The property of the reply that is text to read and copy, shown with its QR code: conf of show-client-config of a WireGuard peer.", "type": "string" },
+                "added": { "description": "The form runs the action by itself for the row it has just added and stays open with its output: Client Links of a new server of Xray.", "type": "boolean" }
             }
         },
         "form": {

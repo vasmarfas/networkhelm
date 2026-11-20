@@ -1,0 +1,26 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Stacks]
+window:
+  title: Stacks
+  tabs:
+    - { title: Stacks, path: container/stack }
+paths:
+  container/stack:
+    columns: [name, status, services, containers, dir]
+    sort: name
+    actions:
+      - { title: Up, command: up, selection: true }
+      - { title: Restart, command: restart, selection: true }
+      - { title: Pull, command: pull, selection: true }
+      - { title: Build, command: build, selection: true }
+      - { title: Down, command: down, selection: true, confirm: true }
+      - { title: Down with Volumes, command: down-volumes, selection: true, confirm: true }
+    menu:
+      - { title: New Stack, path: container/stack, window: docker-stack-new, global: true }
+      - { title: Services, path: container/stack, window: docker-stack-services, fill: [{ to: stack }] }
+      - { title: Log, path: container/stack, window: docker-stack-log, fill: [{ to: stack }] }
+      - { title: Edit compose.yaml, path: container/stack, window: docker-stack-compose, fill: [{ to: stack }] }
+      - { title: Edit .env, path: container/stack, window: docker-stack-env, fill: [{ to: stack }] }
+labels:
+  dir: Folder

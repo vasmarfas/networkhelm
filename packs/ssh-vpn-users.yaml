@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, Users]
+window:
+  title: VPN Users
+  tabs:
+    - { title: Users, path: vpn/user }
+paths:
+  vpn/user:
+    columns: [name, disabled, servers, addresses, rate-limit]
+    form: user
+    actions:
+      - { title: Client Configs, command: client-config, selection: true, argument: number, output: conf }
+      - { title: Apple Profile, command: mobileconfig, selection: true, argument: number, output: conf }
+      - { title: Android Profile, command: sswan, selection: true, argument: number, output: conf }
+      - { title: Windows Script, command: windows, selection: true, argument: number, output: conf }
+forms:
+  user:
+    title: "User <{name}>"
+    tabs:
+      - title: General
+        fields: [name, servers, password, disabled, rate-limit, addresses]
+labels:
+  rate-limit: Rate Limit, Up/Down

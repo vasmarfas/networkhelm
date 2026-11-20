@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Containers, Overview]
+window:
+  title: Container Engines
+  tabs:
+    - { title: Overview, path: container-engine }
+paths:
+  container-engine:
+    columns: [name, installed, version, packages]
+    actions:
+      - { title: Install Now, command: install, selection: true, confirm: true, output: output }

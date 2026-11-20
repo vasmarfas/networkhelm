@@ -10,6 +10,35 @@ items:
       - { title: Firewall, path: firewall }
       - { title: Routes, path: ip/route }
       - { title: Sockets, path: ip/socket }
+  - title: VPN
+    items:
+      - { title: Connections, path: vpn/session, window: vpn-panel }
+      - { title: Users, path: vpn/user }
+      - { title: WireGuard, path: vpn/wireguard }
+      - { title: AmneziaWG, path: vpn/amneziawg }
+      - { title: OpenVPN, path: vpn/openvpn }
+      - { title: IPsec, path: vpn/ipsec }
+      - { title: OpenConnect, path: vpn/ocserv }
+      - { title: OpenConnect Client, path: vpn/openconnect }
+      - { title: SSTP Client, path: vpn/sstp }
+      - { title: Tailscale, path: vpn/tailscale }
+      - { title: ZeroTier, path: vpn/zerotier }
+      - { title: Libreswan, path: vpn/libreswan }
+      - { title: L2TP, path: vpn/l2tp }
+      - { title: PPTP, path: vpn/pptp }
+      - { title: PPTP Connections, path: vpn/pptp/client }
+      - { title: Overview, path: vpn/overview }
+  - title: Proxy
+    items:
+      - { title: Overview, path: proxy/overview }
+      - { title: Squid, path: proxy/squid }
+      - { title: tinyproxy, path: proxy/tinyproxy }
+      - { title: shadowsocks-libev, path: proxy/shadowsocks }
+      - { title: Dante, path: proxy/dante }
+      - { title: 3proxy, path: proxy/3proxy }
+      - { title: sing-box, path: proxy/sing-box }
+      - { title: Xray, path: proxy/xray }
+      - { title: System Proxy, path: proxy/system }
   - title: System
     items:
       - { title: Packages, path: system/package }
@@ -17,6 +46,19 @@ items:
       - { title: Resources, path: system/resource }
       - { title: Services, path: system/service }
       - { title: Storage, path: system/storage }
+  - title: Containers
+    items:
+      - { title: Overview, path: container-engine }
+      - { title: Containers, path: container }
+      - { title: Images, path: container/image }
+      - { title: Volumes, path: container/volume }
+      - { title: Networks, path: container/network }
+      - { title: Stacks, path: container/stack }
+      - { title: Pods, path: container/pod }
+      - { title: Registries, path: container/image, window: docker-registries }
+      - { title: Monitor, path: container/system, window: docker-system-overview }
+      - { title: System, path: container/system, window: docker-system-daemon }
+  - { title: Proxmox, path: proxmox/node }
   - { title: Files, path: file }
   - { title: Log, path: log }
   - { title: New Terminal, window: terminal }

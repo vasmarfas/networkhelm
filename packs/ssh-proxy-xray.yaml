@@ -1,0 +1,109 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, Xray]
+window:
+  title: Xray
+  tabs:
+    - { title: Service, path: proxy/xray }
+    - { title: Inbounds, path: proxy/xray/inbound }
+    - { title: Users, path: proxy/xray/user }
+    - { title: Outbounds, path: proxy/xray/outbound }
+    - { title: Routing, path: proxy/xray/rule }
+    - { title: Clients, path: proxy/xray/client }
+paths:
+  proxy/xray:
+    form: service
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+    links:
+      - { title: New Server, path: proxy/xray/inbound, item: true }
+      - { title: Edit config.json, path: proxy/xray, window: proxy-xray-config }
+  proxy/xray/inbound:
+    columns: [tag, type, listen, port, security, network, users]
+    form: inbound
+    actions:
+      - { title: Client Links, command: client-link, selection: true, argument: number, output: conf, added: true }
+  proxy/xray/user:
+    columns: [inbound, type, name]
+    form: user
+    actions:
+      - { title: Client Link, command: client-link, selection: true, argument: number, output: conf }
+  proxy/xray/outbound:
+    columns: [tag, type, server, through, default]
+    form: outbound
+    actions:
+      - { title: Make Default, command: default, selection: true, argument: number }
+  proxy/xray/rule:
+    columns: [domain, geosite, geoip, ip, inbound, outbound, more]
+    form: rule
+    actions:
+      - { title: Block Ads, command: block-ads }
+  proxy/xray/client:
+    columns: [name, type, server, local-port, state, autostart]
+    form: client
+    actions:
+      - { title: Start, command: up, selection: true }
+      - { title: Stop, command: down, selection: true, confirm: true }
+forms:
+  service:
+    title: Xray
+    tabs:
+      - title: General
+        fields: [state, version, inbounds, "-", autostart]
+      - title: Status
+        readonly: true
+        fields: [config]
+  inbound:
+    title: "Inbound <{tag}>"
+    tabs:
+      - title: General
+        fields: [scheme, tag, port, listen, server-name, user, path, "-", method, password, sniffing, "-", type, users]
+      - title: Certificate
+        fields: [certificate, certificate-file, key-file]
+      - title: Transport
+        fields: [network, transport-path, transport-host, service-name]
+      - title: Security
+        fields: [security, server-names, alpn, certificate-path, key-path, dest, short-ids, private-key]
+  user:
+    title: "User <{name}>"
+    tabs:
+      - title: General
+        fields: [inbound, type, name, secret, flow]
+  outbound:
+    title: "Outbound <{tag}>"
+    tabs:
+      - title: General
+        fields: [kind, tag, link, through, "-", type, server, default]
+  rule:
+    title: Rule
+    tabs:
+      - title: General
+        fields: [domain, geosite, geoip, ip, inbound, "-", outbound, more]
+  client:
+    title: "Client <{name}>"
+    tabs:
+      - title: General
+        fields: [name, link, local-port, "-", autostart]
+      - title: Status
+        readonly: true
+        fields: [type, server, state, config]
+labels:
+  secret: UUID or Password
+  autostart: Start at Boot
+  user: First User
+  link: Link of the Server
+  local-port: Local SOCKS Port
+  path: WebSocket Path
+  transport-path: Path
+  transport-host: Host
+  server-names: Server Names
+  alpn: ALPN
+  certificate-path: Certificate File
+  key-path: Key File
+  dest: Target
+  short-ids: Short IDs
+  through: Dial Through
+  geoip: GeoIP
+  ip: IP
+  more: Other Conditions

@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, Overview]
+window:
+  title: Proxy
+  tabs:
+    - { title: Overview, path: proxy/overview }
+paths:
+  proxy/overview:
+    columns: [name, installed, state, autostart, ports, config, packages]
+    actions:
+      - { title: Install Now, command: install, selection: true, confirm: true, output: output }
+labels:
+  autostart: Start at Boot

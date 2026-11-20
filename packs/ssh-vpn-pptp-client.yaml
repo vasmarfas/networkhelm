@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, PPTP Connections]
+window:
+  title: PPTP Connections
+  tabs:
+    - { title: Connections, path: vpn/pptp/client }
+paths:
+  vpn/pptp/client:
+    columns: [name, state, autostart, server, user, interface]
+    actions:
+      - { title: Connect, command: up, selection: true }
+      - { title: Disconnect, command: down, selection: true, confirm: true }
+    menu:
+      - { title: Import Client Config, path: vpn/pptp/import, window: vpn-form, global: true }
+labels:
+  server: Server
+  user: Login
+  autostart: Start at Boot
+  interface: Device

@@ -1,0 +1,52 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, tinyproxy]
+window:
+  title: tinyproxy
+  tabs:
+    - { title: Settings, path: proxy/tinyproxy }
+    - { title: Users, path: proxy/tinyproxy/user }
+paths:
+  proxy/tinyproxy:
+    form: tinyproxy
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+  proxy/tinyproxy/user:
+    columns: [name]
+    form: user
+forms:
+  tinyproxy:
+    title: tinyproxy
+    tabs:
+      - title: General
+        fields: [state, version, port, listen, bind, "-", autostart, users]
+      - title: Access
+        fields: [allow, deny, connect-ports]
+      - title: Limits
+        fields: [max-clients, timeout, log-level]
+      - title: Headers
+        fields: [disable-via-header, via-proxy-name, xtinyproxy]
+      - title: Upstream
+        fields: [upstream, upstream-user, upstream-password]
+      - title: Status
+        readonly: true
+        fields: [config]
+  user:
+    title: "User <{name}>"
+    tabs:
+      - title: General
+        fields: [name, password]
+labels:
+  max-clients: Max Clients
+  timeout: Timeout, s
+  log-level: Log Level
+  disable-via-header: Disable Via Header
+  via-proxy-name: Name in Via
+  xtinyproxy: X-Tinyproxy Header
+  bind: Outgoing Addresses
+  connect-ports: CONNECT Ports
+  upstream: Upstream Proxy
+  upstream-user: Upstream User
+  upstream-password: Upstream Password
+  autostart: Start at Boot

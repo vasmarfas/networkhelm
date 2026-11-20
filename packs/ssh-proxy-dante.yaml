@@ -1,0 +1,61 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxy, Dante]
+window:
+  title: Dante
+  tabs:
+    - { title: Settings, path: proxy/dante }
+    - { title: Rules, path: proxy/dante/rule }
+    - { title: Users, path: proxy/dante/user }
+paths:
+  proxy/dante:
+    form: dante
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+  proxy/dante/rule:
+    columns: [kind, action, from, to, options]
+    form: rule
+  proxy/dante/user:
+    columns: [name]
+    form: user
+forms:
+  dante:
+    title: Dante
+    tabs:
+      - title: General
+        fields: [state, version, internal, external, external-rotation, "-", autostart]
+      - title: Methods
+        fields: [socksmethod, clientmethod]
+      - title: Users
+        fields: [user-privileged, user-unprivileged]
+      - title: Timeouts
+        fields: [timeout-negotiate, timeout-connect, timeout-io]
+      - title: Log
+        fields: [logoutput]
+      - title: Status
+        readonly: true
+        fields: [config]
+  rule:
+    title: "Rule <{kind} {action}>"
+    tabs:
+      - title: General
+        fields: [kind, action, from, to, options]
+  user:
+    title: "User <{name}>"
+    tabs:
+      - title: General
+        fields: [name, password]
+labels:
+  internal: Internal
+  external: External
+  socksmethod: SOCKS Methods
+  clientmethod: Client Methods
+  user-privileged: Privileged User
+  user-unprivileged: Unprivileged User
+  logoutput: Log Output
+  external-rotation: External Rotation
+  timeout-negotiate: Negotiate Timeout
+  timeout-connect: Connect Timeout
+  timeout-io: Idle Timeout
+  autostart: Start at Boot

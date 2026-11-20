@@ -7,13 +7,6 @@ import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.openwrt.quote
 import com.vasmarfas.networkhelm.ssh.SshSession
-import kotlinx.coroutines.CancellationException
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Job
-import kotlinx.coroutines.async
-import kotlinx.coroutines.currentCoroutineContext
-import kotlinx.coroutines.withTimeoutOrNull
-import kotlin.time.Duration.Companion.seconds
 
 // the firewalls of a Linux host, each where its tool is: ufw and firewalld through their own commands, nftables and
 // iptables rule by rule. Before a change the host keeps the rules it had and puts them back by itself a minute later
@@ -22,12 +15,8 @@ internal class LinuxFirewall(
     private val ssh: SshSession,
     private val root: Root,
     private val tools: suspend () -> Set<String>,
-    private val login: (suspend () -> Unit)? = null,
+    private val guard: LinuxGuard,
 ) {
-    // whether a new login got in before the first change: a host that refuses the user a second session, or asks it for more than
-    // the session gave, is checked through the session alone
-    private var admitted: Boolean? = null
-
     val tables: Map<String, HostTable> = mapOf(
         "firewall" to HostTable(OVERVIEW, { listOf(Item("", overview())) }, settings = true, slow = true, present = { tools().any { it in KNOWN } }),
         "firewall/ufw" to HostTable(
@@ -96,7 +85,7 @@ internal class LinuxFirewall(
     }
 
     private suspend fun addUfw(values: Map<String, String>): String {
-        guarded(UFW_BACKUP) { root.output(ufwRule(values, values["position"].orEmpty())) }
+        guard.guarded(UFW_BACKUP) { root.output(ufwRule(values, values["position"].orEmpty())) }
         return ""
     }
 
@@ -127,7 +116,7 @@ internal class LinuxFirewall(
 
     private suspend fun removeUfw(ids: List<String>) {
         val numbers = ids.map { it.toIntOrNull() ?: throw DeviceException(ErrorCategory.MissingItem, "ufw has no rule $it") }.sortedDescending()
-        guarded(UFW_BACKUP) { root.output(numbers.joinToString(" && ") { "ufw --force delete $it" }) }
+        guard.guarded(UFW_BACKUP) { root.output(numbers.joinToString(" && ") { "ufw --force delete $it" }) }
     }
 
     private suspend fun changeUfwRule(id: String?, changes: Map<String, String?>) {
@@ -151,7 +140,7 @@ internal class LinuxFirewall(
         val numbers = gone.flatMap { listOfNotNull(it, twin(it, rules)) }.map { it.id.toInt() }.distinct().sortedDescending()
         val at = place?.let { it - numbers.count { number -> number < it } }?.takeIf { it in 1..rules.size - numbers.size }
         val steps = numbers.map { "ufw --force delete $it" } + added.mapIndexed { index, values -> ufwRule(values, at?.let { "${it + index}" }.orEmpty()) }
-        guarded(UFW_BACKUP) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(UFW_BACKUP) { root.output(steps.joinToString(" && ")) }
     }
 
     private fun ufwValues(rule: Item): Map<String, String> {
@@ -179,7 +168,7 @@ internal class LinuxFirewall(
         }
         if (steps.isEmpty()) return
         if (changes["enabled"] in ValueType.Flag.on) sshAllowedByUfw()
-        guarded(UFW_BACKUP) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(UFW_BACKUP) { root.output(steps.joinToString(" && ")) }
     }
 
     // ufw on keeps the session it runs in and drops a new one, so it does not go on without a rule for the port of the session
@@ -228,7 +217,7 @@ internal class LinuxFirewall(
         val kind = values["kind"].orEmpty().also { require(it in KINDS.values, "kind", it) }
         val value = values["value"].orEmpty().also { require(it.isNotEmpty() && '\n' !in it, "value", it) }
         val option = quote(if (kind == "interface") "--change-interface=$value" else "--add-$kind=$value")
-        guarded(FIREWALLD_BACKUP) { root.output("firewall-cmd --zone=$zone $option && firewall-cmd --permanent --zone=$zone $option") }
+        guard.guarded(FIREWALLD_BACKUP) { root.output("firewall-cmd --zone=$zone $option && firewall-cmd --permanent --zone=$zone $option") }
         return "$zone|$kind|$value"
     }
 
@@ -240,7 +229,7 @@ internal class LinuxFirewall(
             // what the runtime has the permanent configuration may lack
             "firewall-cmd --zone=$zone $option && { firewall-cmd --permanent --zone=$zone $option >/dev/null 2>&1; true; }"
         }
-        guarded(FIREWALLD_BACKUP) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(FIREWALLD_BACKUP) { root.output(steps.joinToString(" && ")) }
     }
 
     // firewalld keeps no order: the new entry goes in, then the old one out
@@ -255,7 +244,7 @@ internal class LinuxFirewall(
 
     private suspend fun firewalldCommand(command: String, arguments: Map<String, String>): List<Item> {
         when (command) {
-            "reload" -> guarded(FIREWALLD_BACKUP) { root.output("firewall-cmd --reload") }
+            "reload" -> guard.guarded(FIREWALLD_BACKUP) { root.output("firewall-cmd --reload") }
             "runtime-to-permanent" -> root.output("firewall-cmd --runtime-to-permanent")
             else -> throw DeviceException(ErrorCategory.MissingItem, "firewalld has no command $command")
         }
@@ -272,12 +261,12 @@ internal class LinuxFirewall(
             // the target is a setting of the permanent configuration only, and comes into force with a reload
             changes["target"]?.ifEmpty { null }?.let { require(it in TARGETS, "target", it); add("firewall-cmd --permanent --zone=$zone --set-target=${quote(it)} && firewall-cmd --reload") }
         }
-        if (steps.isNotEmpty()) guarded(FIREWALLD_BACKUP) { root.output(steps.joinToString(" && ")) }
+        if (steps.isNotEmpty()) guard.guarded(FIREWALLD_BACKUP) { root.output(steps.joinToString(" && ")) }
     }
 
     private suspend fun setDefaultZone(command: String, arguments: Map<String, String>): List<Item> {
         val zone = arguments["number"].orEmpty().also { require(NAME.matches(it), "zone", it) }
-        guarded(FIREWALLD_BACKUP) { root.output("firewall-cmd --set-default-zone=$zone") }
+        guard.guarded(FIREWALLD_BACKUP) { root.output("firewall-cmd --set-default-zone=$zone") }
         return emptyList()
     }
 
@@ -288,13 +277,13 @@ internal class LinuxFirewall(
         val table = values["table"].orEmpty().also { require(NAME.matches(it), "table", it) }
         val chain = values["chain"].orEmpty().also { require(NAME.matches(it), "chain", it) }
         val rule = values["rule"].orEmpty().trim().also { require(it.isNotEmpty() && '\n' !in it, "rule", it) }
-        guarded(NFT_BACKUP) { root.output("nft add rule $family $table $chain ${quote(rule)}") }
+        guard.guarded(NFT_BACKUP) { root.output("nft add rule $family $table $chain ${quote(rule)}") }
         return ""
     }
 
     private suspend fun removeNft(ids: List<String>) {
         val steps = ids.map { id -> nftRule(id).let { (family, table, chain, handle) -> "nft delete rule $family $table $chain handle $handle" } }
-        guarded(NFT_BACKUP) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(NFT_BACKUP) { root.output(steps.joinToString(" && ")) }
     }
 
     private fun nftRule(id: String): List<String> {
@@ -315,7 +304,7 @@ internal class LinuxFirewall(
         val comment = changes["comment"] ?: old["comment"].orEmpty()
         if (rule == old["rule"] && comment == old["comment"]) return
         require(rule.isNotBlank() && '\n' !in rule, "rule", rule)
-        guarded(NFT_BACKUP) { root.output("nft replace rule $family $table $chain handle $handle ${quote(nftText(rule, comment))}") }
+        guard.guarded(NFT_BACKUP) { root.output("nft replace rule $family $table $chain handle $handle ${quote(nftText(rule, comment))}") }
     }
 
     // a rule of nftables cannot move: it goes and comes back before the rule it is put above, in the same chain
@@ -330,7 +319,7 @@ internal class LinuxFirewall(
             val text = quote(nftText(rule["rule"].orEmpty(), rule["comment"].orEmpty()))
             if (anchor == null) "nft add rule $family $table $chain $text" else "nft insert rule $family $table $chain position ${anchor["handle"]} $text"
         }
-        guarded(NFT_BACKUP) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(NFT_BACKUP) { root.output(steps.joinToString(" && ")) }
     }
 
     // the file the nftables service loads at boot; ufw and firewalld write the ruleset again when they start
@@ -368,14 +357,14 @@ internal class LinuxFirewall(
         val chain = values["chain"].orEmpty().ifEmpty { "INPUT" }.also { require(NAME.matches(it), "chain", it) }
         val position = values["position"].orEmpty().also { require(it.isEmpty() || it.toIntOrNull() != null, "position", it) }
         val where = if (position.isEmpty()) "-A $chain" else "-I $chain $position"
-        guarded(backup(family)) { root.output("${family.tool} -w -t $table $where ${spec(values["rule"].orEmpty())}") }
+        guard.guarded(backup(family)) { root.output("${family.tool} -w -t $table $where ${spec(values["rule"].orEmpty())}") }
         return ""
     }
 
     // the numbers of a chain go down from the last, so each still points at its rule
     private suspend fun removeRules(family: Family, ids: List<String>) {
         val rules = ids.map { iptRule(family, it) }.sortedWith(compareBy<Triple<String, String, Int>>({ it.first }, { it.second }).thenByDescending { it.third })
-        guarded(backup(family)) { root.output(rules.joinToString(" && ") { (table, chain, number) -> "${family.tool} -w -t $table -D $chain $number" }) }
+        guard.guarded(backup(family)) { root.output(rules.joinToString(" && ") { (table, chain, number) -> "${family.tool} -w -t $table -D $chain $number" }) }
     }
 
     private fun iptRule(family: Family, id: String): Triple<String, String, Int> {
@@ -401,7 +390,7 @@ internal class LinuxFirewall(
         } else {
             "${family.tool} -w -t $newTable -A $newChain ${spec(rule)} && ${family.tool} -w -t $table -D $chain $number"
         }
-        guarded(backup(family)) { root.output(line) }
+        guard.guarded(backup(family)) { root.output(line) }
     }
 
     // the moved rules leave their chain from the last up and come back in their order before the rule they are put above
@@ -416,7 +405,7 @@ internal class LinuxFirewall(
         val place = anchor?.let { left.indexOf(it) + 1 } ?: (left.size + 1)
         val steps = moved.sortedByDescending { it["number"]?.toIntOrNull() ?: 0 }.map { "${family.tool} -w -t $table -D $chain ${it["number"]}" } +
             moved.mapIndexed { index, rule -> "${family.tool} -w -t $table -I $chain ${place + index} ${spec(rule["rule"].orEmpty())}" }
-        guarded(backup(family)) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(backup(family)) { root.output(steps.joinToString(" && ")) }
     }
 
     private suspend fun addChain(family: Family, values: Map<String, String>): String {
@@ -430,7 +419,7 @@ internal class LinuxFirewall(
         val (table, chain) = id?.split('/')?.takeIf { it.size == 2 && it[0] in IPT_TABLES && NAME.matches(it[1]) } ?: throw DeviceException(ErrorCategory.MissingItem, "${family.tool} has no chain $id")
         val policy = changes["policy"]?.ifEmpty { null } ?: return
         require(policy == "ACCEPT" || policy == "DROP", "policy", policy)
-        guarded(backup(family)) { root.output("${family.tool} -w -t $table -P $chain $policy") }
+        guard.guarded(backup(family)) { root.output("${family.tool} -w -t $table -P $chain $policy") }
     }
 
     private suspend fun removeChains(family: Family, ids: List<String>) {
@@ -438,7 +427,7 @@ internal class LinuxFirewall(
             val (table, chain) = id.split('/').takeIf { it.size == 2 && it[0] in IPT_TABLES && NAME.matches(it[1]) } ?: throw DeviceException(ErrorCategory.MissingItem, "${family.tool} has no chain $id")
             "${family.tool} -w -t $table -F $chain && ${family.tool} -w -t $table -X $chain"
         }
-        guarded(backup(family)) { root.output(steps.joinToString(" && ")) }
+        guard.guarded(backup(family)) { root.output(steps.joinToString(" && ")) }
     }
 
     // where the service of each family of distributions loads the rules at boot
@@ -456,70 +445,13 @@ internal class LinuxFirewall(
         return emptyList()
     }
 
-    private fun backup(family: Family) = Backup("${family.tool}-save > \"\$B/rules\"", "${family.tool}-restore < \"\$1/rules\"")
-
-    // the rules as they were come back by themselves unless the session still answers after the change, and at once after a change
-    // of several steps that failed in the middle
-    private suspend fun guarded(backup: Backup, change: suspend () -> Unit) {
-        val checked = admitted ?: admits().also { admitted = it }
-        val armed = root.output(
-            "B=\$(mktemp -d /tmp/networkhelm-firewall.XXXXXX) || exit 1\n${backup.save} || exit 1\n" +
-                "nohup sh -c ${quote("sleep $GUARD_SECONDS; ${backup.restore}; rm -rf \"\$1\"")} guard \"\$B\" >/dev/null 2>&1 </dev/null &\necho \"\$! \$B\"",
-        ).trim().split(' ')
-        val pid = armed.getOrNull(0)?.takeIf { it.all(Char::isDigit) } ?: throw DeviceException(ErrorCategory.Api, "the host did not keep the rules it had: ${armed.joinToString(" ")}")
-        val kept = armed.getOrNull(1)?.takeIf { it.startsWith("/tmp/networkhelm-firewall.") } ?: throw DeviceException(ErrorCategory.Api, "the host did not keep the rules it had")
-        try {
-            change()
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            root.exec("kill $pid; sh -c ${quote(backup.restore)} restore ${quote(kept)}; rm -rf ${quote(kept)}")
-            throw e
-        }
-        if (!answers()) throw DeviceException(ErrorCategory.ConnectionLost, "the host stopped answering after the change: the rules it had come back in a minute")
-        // a rule that keeps the sessions that are open and drops new ones would lock the user out once this session ends
-        if (checked && !admits()) {
-            root.exec("kill $pid; sh -c ${quote(backup.restore)} restore ${quote(kept)}; rm -rf ${quote(kept)}")
-            throw DeviceException(ErrorCategory.ArgumentValue, "after the change the host let no new SSH session in: the rules it had are back")
-        }
-        root.exec("kill $pid; rm -rf ${quote(kept)}")
-    }
-
-    // as the probe of the session, the login has a job of its own: a connection a firewall drops does not give up when its caller does
-    private suspend fun admits(): Boolean {
-        val login = login ?: return false
-        val attempt = CoroutineScope(currentCoroutineContext().minusKey(Job)).async { login() }
-        return try {
-            withTimeoutOrNull(GUARD_LOGIN) { attempt.await() } != null
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    // the probe has a job of its own: a command over a connection that went silent does not give up when its caller does
-    private suspend fun answers(): Boolean {
-        val probe = CoroutineScope(currentCoroutineContext().minusKey(Job)).async { ssh.exec("true") }
-        return try {
-            withTimeoutOrNull(GUARD_CHECK) { probe.await() } != null
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            false
-        }
-    }
-
-    private class Backup(val save: String, val restore: String)
+    private fun backup(family: Family) = LinuxGuard.Backup("firewall", "${family.tool}-save > \"\$B/rules\"", "${family.tool}-restore < \"\$1/rules\"")
 
     private fun require(valid: Boolean, field: String, value: String) {
         if (!valid) throw DeviceException(ErrorCategory.ArgumentValue, "$field: $value is not a value it takes")
     }
 
     private companion object {
-        const val GUARD_SECONDS = 60
-        val GUARD_CHECK = 10.seconds
-        val GUARD_LOGIN = 20.seconds
         val KNOWN = setOf("ufw", "firewall-cmd", "nft", "iptables-save", "ip6tables-save")
         val NAME = Regex("[A-Za-z0-9_.@:-]+")
         val ADDRESS = Regex("[0-9A-Fa-f.:/]+")
@@ -528,12 +460,7 @@ internal class LinuxFirewall(
         val TARGETS = listOf("default", "ACCEPT", "DROP", "%%REJECT%%")
         val NFT_FAMILIES = listOf("inet", "ip", "ip6", "arp", "bridge", "netdev")
         val IPT_TABLES = listOf("filter", "nat", "mangle", "raw", "security")
-        val UFW_BACKUP = Backup(
-            "cp -a /etc/ufw \"\$B/ufw\"",
-            "rm -rf /etc/ufw && cp -a \"\$1/ufw\" /etc/ufw && if grep -q '^ENABLED=yes' /etc/ufw/ufw.conf; then ufw --force enable; else ufw disable; fi",
-        )
-        val FIREWALLD_BACKUP = Backup("cp -a /etc/firewalld \"\$B/firewalld\"", "rm -rf /etc/firewalld && cp -a \"\$1/firewalld\" /etc/firewalld && firewall-cmd --reload")
-        val NFT_BACKUP = Backup("nft list ruleset > \"\$B/rules\"", "{ echo 'flush ruleset'; cat \"\$1/rules\"; } | nft -f -")
+        val NFT_BACKUP = LinuxGuard.Backup("firewall", "nft list ruleset > \"\$B/rules\"", "{ echo 'flush ruleset'; cat \"\$1/rules\"; } | nft -f -")
 
         val OVERVIEW = listOf("manager", "ufw", "firewalld", "nftables-rules", "iptables-rules", "ip6tables-rules", "iptables-backend")
         val UFW = listOf("number", "action", "direction", "protocol", "to", "to-port", "from", "from-port", "interface", "comment", "v6")

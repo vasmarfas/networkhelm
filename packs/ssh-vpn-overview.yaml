@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, Overview]
+window:
+  title: VPN
+  tabs:
+    - { title: Overview, path: vpn/overview }
+paths:
+  vpn/overview:
+    columns: [name, installed, packages]
+    actions:
+      - { title: Install Now, command: install, selection: true, confirm: true, output: output }

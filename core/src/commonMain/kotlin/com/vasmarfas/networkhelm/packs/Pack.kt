@@ -272,6 +272,7 @@ class PackOwner(val path: String, val by: String, val title: String)
 @Serializable
 class PackMonitor(val command: String, val argument: String? = null)
 
+// added: the form runs the action by itself for the row it has just added and stays open with what it gave, as Client Links of a new server
 @Serializable
 data class PackAction(
     val title: String,
@@ -285,6 +286,7 @@ data class PackAction(
     val beside: String? = null,
     val below: String? = null,
     val row: Int = 0,
+    val added: Boolean = false,
 ) {
     fun runs(ids: List<String>): List<Map<String, String>> = when {
         !selection -> listOf(emptyMap())

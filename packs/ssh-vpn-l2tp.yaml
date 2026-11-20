@@ -1,0 +1,51 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [VPN, L2TP]
+window:
+  title: L2TP Server
+  tabs:
+    - { title: Server, path: vpn/l2tp }
+    - { title: Connections, path: vpn/l2tp/client }
+paths:
+  vpn/l2tp:
+    form: server
+    actions:
+      - { title: Start, command: up }
+      - { title: Stop, command: down, confirm: true }
+    links:
+      - { title: New Server, path: vpn/l2tp/server, window: vpn-form }
+  vpn/l2tp/client:
+    columns: [name, state, autostart, server, user, interface]
+    actions:
+      - { title: Connect, command: up, selection: true }
+      - { title: Disconnect, command: down, selection: true, confirm: true }
+    menu:
+      - { title: Import Client Config, path: vpn/l2tp/import, window: vpn-form, global: true }
+forms:
+  server:
+    title: L2TP Server
+    tabs:
+      - title: General
+        fields: [state, local-ip, pool, dns, mtu, psk, "-", autostart, nat]
+      - title: PPP
+        fields: [lcp-echo-interval, lcp-echo-failure, idle]
+      - title: Status
+        readonly: true
+        fields: [ipsec-loaded, users, kept]
+labels:
+  local-ip: Local Address
+  pool: Client Addresses
+  dns: DNS for Clients
+  mtu: MTU
+  lcp-echo-interval: LCP Echo Interval, s
+  lcp-echo-failure: LCP Echo Failures
+  idle: Idle Timeout, s
+  psk: IPsec Secret
+  ipsec-loaded: IPsec Loaded
+  users: Users
+  autostart: Start at Boot
+  nat: NAT for Clients
+  kept: Made By
+  server: Server
+  user: Login
+  interface: Device

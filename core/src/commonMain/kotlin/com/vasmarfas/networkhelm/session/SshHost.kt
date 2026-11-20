@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.session
 
+import com.vasmarfas.networkhelm.journal.EditKind
 import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.Capabilities
 import com.vasmarfas.networkhelm.model.DeviceException
@@ -24,7 +25,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.emitAll
+import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.onCompletion
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.seconds
 import kotlin.time.TimeMark
@@ -58,6 +61,11 @@ class SshHostSession(
 
     private suspend fun table(path: MenuPath): HostTable? = if (linux) host.tables[path.toString()]?.takeIf { it.present() } else null
 
+    override val structure: Flow<Unit> get() = if (linux) host.toolsChanged else emptyFlow()
+
+    override fun hostCommand(path: MenuPath, kind: EditKind, ids: List<String>, values: Map<String, String?>): String? =
+        if (linux) host.tables[path.toString()]?.shown?.invoke(kind, ids, values) else null
+
     override suspend fun describe(path: MenuPath): MenuSchema = calls {
         val known = listOf(FILES) + if (linux) host.tables.filter { it.value.present() }.keys.map(MenuPath::parse) else emptyList()
         val children = known.flatMap { key -> (1..key.segments.size).map { MenuPath(key.segments.take(it)) } }.filter { it.parent == path }.map { it.segments.last() }.distinct().sorted()
@@ -68,7 +76,7 @@ class SshHostSession(
                 val typed = table.arguments()
                 MenuSchema(
                     path, if (table.settings) NodeKind.Settings else NodeKind.List, children,
-                    listOf("print") + listOfNotNull("add".takeIf { table.add != null }, "set".takeIf { table.set != null }, "remove".takeIf { table.remove != null }, "move".takeIf { table.move != null }) + table.commands,
+                    listOf("print") + listOfNotNull("add".takeIf { table.add != null }, "set".takeIf { table.set != null }, "remove".takeIf { table.remove != null }, "move".takeIf { table.move != null }) + table.commands + table.streams.keys,
                     table.fields.map { field -> typed.firstOrNull { it.name == field } ?: Argument(field, ValueType.Text(), readOnly = true) } + typed.filter { it.name !in table.fields },
                 )
             }
@@ -80,11 +88,18 @@ class SshHostSession(
     // what needs root is read seldom, so sudo does not fill the log of the host, and again at once after a change made here
     override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
         val table = if (path == FILES) null else calls { table(path) } ?: throw DeviceException(ErrorCategory.MissingItem, "$path is not on this host")
-        emitAll(polled(if (table?.slow == true) SLOW else pollInterval, changed) { calls { read(path) }.filter { filter?.matches(it) != false } })
+        // the form of one element of a table that reads an element by itself polls that element alone
+        val one = (filter as? Filter.Equals)?.takeIf { it.property == ".id" }?.value
+        val item = table?.item
+        emitAll(polled(if (table?.slow == true) SLOW else pollInterval, changed) {
+            if (item != null && one != null) calls { listOfNotNull(item(one)) } else calls { read(path) }.filter { filter?.matches(it) != false }
+        })
     }
 
-    override suspend fun get(path: MenuPath, id: String?, properties: List<String>?): Item? =
-        if (linux || path == FILES) calls { read(path).firstOrNull { id == null || it.id == id } } else null
+    override suspend fun get(path: MenuPath, id: String?, properties: List<String>?): Item? = if (linux || path == FILES) calls {
+        val item = if (path == FILES) null else table(path)?.item
+        if (item != null && id != null) item(id) else read(path).firstOrNull { id == null || it.id == id }
+    } else null
 
     override suspend fun count(path: MenuPath, filter: Filter?): Int =
         if (linux || path == FILES) calls { read(path).count { filter?.matches(it) != false } } else 0
@@ -110,7 +125,12 @@ class SshHostSession(
             emitAll(traffic(arguments))
             return@flow
         }
-        val action = calls { table(path) }?.takeIf { command in it.commands }?.run ?: throw DeviceException(ErrorCategory.MissingItem, "$path/$command is not on this host")
+        val table = calls { table(path) }
+        table?.streams?.get(command)?.let { stream ->
+            emitAll(stream(arguments).onCompletion { changed.tryEmit(Unit) })
+            return@flow
+        }
+        val action = table?.takeIf { command in it.commands }?.run ?: throw DeviceException(ErrorCategory.MissingItem, "$path/$command is not on this host")
         changing { action(command, arguments) }.forEach { emit(it) }
     }
 

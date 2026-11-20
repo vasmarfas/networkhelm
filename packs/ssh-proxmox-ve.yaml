@@ -1,0 +1,137 @@
+# yaml-language-server: $schema=./pack.schema.json
+platform: ssh
+menu: [Proxmox]
+window:
+  title: Proxmox
+  tabs:
+    - { title: Node, path: proxmox/node }
+    - { title: Storage, path: proxmox/storage }
+    - { title: Virtual Machines, path: proxmox/vm }
+    - { title: LXC Containers, path: proxmox/ct }
+    - { title: Snapshots, path: proxmox/snapshot }
+    - { title: Backups, path: proxmox/backup }
+    - { title: Tasks, path: proxmox/task }
+    - { title: Cluster Log, path: proxmox/log }
+paths:
+  proxmox/node:
+    form: node
+    bytes: [total-memory, used-memory, total-swap, used-swap, root-total, root-used, ksm-shared]
+  proxmox/storage:
+    columns: [name, type, content, active, enabled, shared, used, total, available, usage]
+    bytes: [used, total, available]
+    sort: name
+  proxmox/vm:
+    columns: [vmid, name, status, node, cpu, cpus, memory, max-memory, max-disk, uptime, tags, template, lock]
+    bytes: [memory, max-memory, disk, max-disk]
+    quick: status
+    sort: vmid
+    form: vm
+    actions:
+      - { title: Start, command: start, selection: true }
+      - { title: Shutdown, command: shutdown, selection: true, confirm: true }
+      - { title: Stop, command: stop, selection: true, confirm: true }
+      - { title: Reboot, command: reboot, selection: true, confirm: true }
+      - { title: Suspend, command: suspend, selection: true }
+      - { title: Resume, command: resume, selection: true }
+    menu:
+      - { title: Console, path: proxmox/vm, window: terminal, fill: [{ to: name, from: Name }, { to: command, from: Console }] }
+  proxmox/ct:
+    columns: [vmid, name, status, node, cpu, cpus, memory, max-memory, disk, max-disk, uptime, tags, template, lock]
+    bytes: [memory, max-memory, disk, max-disk]
+    quick: status
+    sort: vmid
+    form: ct
+    actions:
+      - { title: Start, command: start, selection: true }
+      - { title: Shutdown, command: shutdown, selection: true, confirm: true }
+      - { title: Stop, command: stop, selection: true, confirm: true }
+      - { title: Reboot, command: reboot, selection: true, confirm: true }
+      - { title: Suspend, command: suspend, selection: true }
+      - { title: Resume, command: resume, selection: true }
+    menu:
+      - { title: Console, path: proxmox/ct, window: terminal, fill: [{ to: name, from: Name }, { to: command, from: Console }] }
+  proxmox/snapshot:
+    columns: [guest, name, time, ram, description, parent]
+    quick: guest
+    sort: guest
+    form: snapshot
+    actions:
+      - { title: Roll Back, command: rollback, selection: true, argument: number, confirm: true }
+  proxmox/backup:
+    columns: [guest, created, size, storage, format, notes, protected, verified]
+    bytes: [size]
+    quick: guest
+    form: backup
+  proxmox/task:
+    columns: [start, end, type, guest, user, status, node]
+    quick: type
+    actions:
+      - { title: Log, command: log, selection: true, argument: number, output: output }
+      - { title: Stop Task, command: stop, selection: true, confirm: true }
+  proxmox/log:
+    columns: [time, topics, message]
+    quick: topics
+    log: true
+forms:
+  node:
+    title: Node
+    tabs:
+      - title: General
+        readonly: true
+        fields: [node, version, kernel, boot-mode, uptime, "-", cpu-model, cpu-count, sockets, cores, cpu-load, io-delay, load]
+      - title: Memory
+        readonly: true
+        fields: [total-memory, used-memory, total-swap, used-swap, ksm-shared, "-", root-total, root-used]
+  vm:
+    title: "VM <{name}>"
+    tabs:
+      - title: General
+        fields: [vmid, name, status, node, uptime, tags, template, lock]
+      - title: Resources
+        fields: [cores, sockets, memory-size]
+      - title: Options
+        fields: [onboot, description]
+  ct:
+    title: "CT <{name}>"
+    tabs:
+      - title: General
+        fields: [vmid, name, status, node, uptime, tags, template, lock]
+      - title: Resources
+        fields: [cores, memory-size, swap-size]
+      - title: Options
+        fields: [onboot, description]
+  snapshot:
+    title: "Snapshot <{name}>"
+    tabs:
+      - title: General
+        fields: [guest, name, description, ram, "-", time, parent]
+  backup:
+    title: "Backup <{guest}>"
+    tabs:
+      - title: General
+        fields: [guest, storage, mode, compress, notes, "-", created, size, format, protected, verified, volid]
+labels:
+  vmid: VMID
+  cpu: CPU %
+  cpus: CPUs
+  max-memory: Max Memory
+  max-disk: Disk Size
+  memory-size: Memory, MiB
+  swap-size: Swap, MiB
+  onboot: Start at Boot
+  boot-mode: Boot Mode
+  cpu-model: CPU Model
+  cpu-count: CPUs
+  cpu-load: CPU Load, %
+  io-delay: IO Delay, %
+  total-memory: Total Memory
+  used-memory: Used Memory
+  total-swap: Total Swap
+  used-swap: Used Swap
+  ksm-shared: KSM Shared
+  root-total: Root Disk
+  root-used: Root Disk Used
+  usage: Usage, %
+  ram: RAM
+  compress: Compression
+  volid: Volume
