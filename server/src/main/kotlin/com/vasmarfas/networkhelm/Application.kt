@@ -18,6 +18,7 @@ import com.vasmarfas.networkhelm.server.Session
 import com.vasmarfas.networkhelm.server.administer
 import com.vasmarfas.networkhelm.server.isLocal
 import com.vasmarfas.networkhelm.server.jvmReach
+import com.vasmarfas.networkhelm.server.synchronisation
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.connectOpenWrtWithSsh
 import com.vasmarfas.networkhelm.session.connectWithSsh
@@ -93,8 +94,8 @@ fun main(args: Array<String>) {
 private fun ask(prompt: String): String? = System.console()?.readPassword(prompt)?.concatToString()
 
 // a login waits for its key on one of two threads, so a flood of them leaves the rest of Dispatchers.IO to the routers
-private val logins = Dispatchers.IO.limitedParallelism(2)
-private const val LOGIN_MOST = 8 * 1024
+internal val logins = Dispatchers.IO.limitedParallelism(2)
+internal const val LOGIN_MOST = 8 * 1024
 
 fun serve(
     gateway: Gateway,
@@ -217,6 +218,7 @@ fun Application.gateway(
                 gateway.detach(session, job)
             }
         }
+        synchronisation(gateway)
         if (web != null) staticFiles("/", web) else staticResources("/", "web")
     }
 }
