@@ -18,23 +18,28 @@ The text of the license is in [licenses/Apache-2.0.txt](licenses/Apache-2.0.txt)
 | Material Color Utilities, the Kotlin port inside MaterialKolor (`com.materialkolor:material-color-utilities`), the colours of the Material theme | Copyright 2021-2025 Google LLC |
 | Poko annotations (`dev.drewhamilton.poko:poko-annotations`), pulled in by MaterialKolor | Drew Hamilton |
 | AndroidX DataStore, pulled in by KSafe | The Android Open Source Project |
-| Okio, pulled in by DataStore | Square, Inc. |
+| Okio, pulled in by DataStore and OkHttp | Square, Inc. |
+| OkHttp, pulled in by the OkHttp engine of the Ktor client on Android | Square, Inc. |
 | Compose Multiplatform — animation, runtime, foundation, material, material3, ui, ui-backhandler, components-resources, ui-tooling-preview, collection and annotation, including their AndroidX counterparts | The Android Open Source Project, JetBrains s.r.o. |
 | AndroidX lifecycle, navigationevent and savedstate, including the JetBrains multiplatform builds | The Android Open Source Project, JetBrains s.r.o. |
 | AndroidX activity (including activity-compose), startup and profileinstaller | The Android Open Source Project |
 | AndroidX annotation, arch.core, collection, concurrent, core (including core-ktx), resourceinspection, tracing and versionedparcelable | The Android Open Source Project |
 | AndroidX appcompat, autofill, cardview, constraintlayout, coordinatorlayout, cursoradapter, customview, drawerlayout, fragment, loader, recyclerview, viewpager, viewpager2 and window | The Android Open Source Project |
 | AndroidX documentfile, dynamicanimation, emoji2, exifinterface, graphics, interpolator, transition and vectordrawable | The Android Open Source Project |
+| CameraX 1.6.2 (`androidx.camera`: camera-core, camera-camera2, camera-camera2-pipe, camera-lifecycle, camera-compose, viewfinder-core, viewfinder-compose and featurecombinationquery), the camera that reads the QR code of synchronisation on Android | The Android Open Source Project |
+| AutoValue annotations (`com.google.auto.value:auto-value-annotations`), pulled in by CameraX | Google LLC |
+| ZXing core (`com.google.zxing:core` 3.5.4), the decoder of the QR code on Android | Copyright 2007-2024 ZXing authors |
 | JetBrains annotations (`org.jetbrains:annotations`) | JetBrains s.r.o. |
 | JSpecify (`org.jspecify:jspecify`) | Copyright 2022 The JSpecify Authors |
 | Error Prone annotations (`com.google.errorprone:error_prone_annotations`) | Copyright 2017 The Error Prone Authors |
 | Guava ListenableFuture (`com.google.guava:listenablefuture`) | Copyright (C) 2007 The Guava Authors |
-| Ktor (server core, Netty engine, WebSockets, compression and the generator of self-signed certificates for the gateway; network sockets on iOS) | JetBrains s.r.o. |
+| Ktor (server core, Netty engine, WebSockets, compression and the generator of self-signed certificates for the gateway; network sockets on iOS; the HTTP client of the synchronisation with its Java, OkHttp, Darwin and JavaScript engines, and the mock engine in tests) | JetBrains s.r.o. |
+| Kotlin Multiplatform libsodium bindings (`com.ionspin.kotlin:multiplatform-crypto-libsodium-bindings`), the cryptography of the synchronisation on the desktop, Android and iOS and in the JavaScript build of the browser page | Ugljesa Jovanovic |
 | Netty, pulled in by the Ktor Netty engine (server) | The Netty Project |
 | Typesafe Config (`com.typesafe:config`), pulled in by Ktor | Typesafe Inc. |
 | Jetty ALPN API (`org.eclipse.jetty.alpn:alpn-api`, Apache-2.0 chosen of Apache-2.0 or EPL-1.0), pulled in by the Ktor Netty engine | Copyright (c) 1995-2015 Mort Bay Consulting Pty. Ltd. |
 | Skiko (`org.jetbrains.skiko:skiko-awt` and its platform runtime), the desktop graphics bindings | JetBrains s.r.o. |
-| JNA and jna-platform, pulled in by FileKit for the file dialogs of the desktop and by Jewel (Apache-2.0 chosen of Apache-2.0 or LGPL-2.1) | Java Native Access contributors |
+| JNA and jna-platform, pulled in by FileKit for the file dialogs of the desktop and by Jewel, and on the desktop and Android by the libsodium bindings (Apache-2.0 chosen of Apache-2.0 or LGPL-2.1) | Java Native Access contributors |
 | Jewel (`org.jetbrains.jewel:jewel-decorated-window` with `jewel-int-ui-standalone`, `jewel-ui` and `jewel-foundation`), the title bar of the desktop windows | JetBrains s.r.o. |
 | IntelliJ Platform icons (`com.jetbrains.intellij.platform:icons-api`, `icons-impl`, `icons-api-rendering`), pulled in by Jewel | JetBrains s.r.o. |
 | JetBrains Runtime API (`org.jetbrains.runtime:jbr-api`), pulled in by Jewel for the custom title bar | JetBrains s.r.o. |
@@ -112,6 +117,10 @@ Swift Package Manager also fetches swift-png, h and swift-argument-parser (Apach
 ## ISC License
 
 **jBCrypt**, bundled inside JSch — Copyright (c) 2006 Damien Miller <djm@mindrot.org>
+
+**libsodium**, inside the libsodium bindings on the desktop, Android and iOS — Copyright (c) 2013-2026 Frank Denis <j at pureftpd dot org>
+
+**libsodium.js** (`libsodium-wrappers-sumo` and `libsodium-sumo` 0.8.4), the cryptography of the synchronisation in the browser — Copyright (c) 2015-2026 Ahmad Ben Mrad, Frank Denis, Ryan Lester
 
 **Lucide icons** (`com.composables:icons-lucide-cmp`, application UI) — Copyright (c) 2026 Lucide Icons and Contributors. The icons Lucide took from Feather are under the MIT License, listed below.
 
@@ -196,7 +205,10 @@ Used unmodified. Its source is at https://github.com/JetBrains/pty4j; the text o
 
 | Component | Copyright |
 |---|---|
-| SLF4J API, pulled in by Logback (server) and by KSafe | QOS.ch Sarl |
+| SLF4J API, pulled in by Logback (server), by KSafe and by resource-loader | QOS.ch Sarl |
+| ws (npm `ws` 8.20.1), pulled in by the JavaScript engine of the Ktor client; the page in a browser carries only its browser stub | Copyright (c) 2011 Einar Otto Stangvik, Copyright (c) 2013 Arnout Kazemier and contributors, Copyright (c) 2016 Luigi Pinca and contributors |
+| resource-loader (`com.goterl:resource-loader` 2.0.2), pulled in by the libsodium bindings on the desktop and Android to unpack the native library | Copyright (c) Libly - Terl Tech Ltd |
+| The list of common passwords in `app/shared/src/commonMain/composeResources/files/sync/passwords.txt`: the 10 000 most frequent passwords and the ones of 12 characters and longer among the 100 000 most frequent of the xato list in SecLists (https://github.com/danielmiessler/SecLists, revision 39657bc of 16.05.2023) | Copyright (c) 2018 Daniel Miessler |
 | Compose Unstyled (`com.composables:composeunstyled`, `composeunstyled-colored-indication`, application UI) | Copyright (c) 2026 Composable Horizons |
 | Ripple indication (`com.composables:ripple-indication`), pulled in by Compose Unstyled on Android | Composable Horizons |
 | Compose Icons, the Kotlin packaging of Lucide (`com.composables:icons-lucide-cmp`) | Copyright (c) 2025 Composable Horizons |
@@ -363,6 +375,10 @@ Bundled with the application as TTF files in `app/shared/src/commonMain/composeR
 | Component | Copyright |
 |---|---|
 | puff.c of zlib (contrib/puff): the inflater of the backups of OpenWrt in `core/src/commonMain/kotlin/com/vasmarfas/networkhelm/offline/Archive.kt` reads deflate its way, codes counted by length and read bit by bit; it is written anew in Kotlin, no code is copied | Copyright (C) 2002-2013 Mark Adler |
+
+## Creative Commons Attribution 3.0 United States
+
+The words of the passphrase generator in `app/shared/src/commonMain/composeResources/files/sync/words.txt` are the EFF Large Wordlist for Passphrases (https://www.eff.org/dice, 2016) of the Electronic Frontier Foundation, licensed under CC BY 3.0 US (https://creativecommons.org/licenses/by/3.0/us/). The dice numbers in front of the words are removed; the 7776 words are unchanged.
 
 ## Other sources
 
