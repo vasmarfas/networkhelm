@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_error_sign_in_refused">%1$s refused the sign-in: %2$s</string>
+    <string name="sync_error_sign_in_other">the answer of the sign-in came for another request</string>
+    <string name="sync_error_sign_in_empty">the browser came back without the answer of the sign-in</string>
+    <string name="sync_error_sign_in_late">the sign-in was not finished in the browser in time</string>
+    <string name="sync_error_sign_in_port">the port %1$s of this computer is taken by another program</string>
+    <string name="sync_error_sign_in_closed">the sign-in was closed before it ended</string>
+    <string name="sync_error_sign_in_popup">the browser did not open the window of the sign-in: allow pop-up windows for this page</string>
+    <string name="sync_service_yandex">Yandex Disk</string>
+    <string name="sync_service_dropbox">Dropbox</string>
+    <string name="sync_service_google">Google Drive</string>
+    <string name="sync_service_onedrive">OneDrive</string>
+    <string name="sync_service_icloud">iCloud</string>
+    <string name="sync_hint_yandex">The folder of the app on Yandex Disk, Applications/NetworkHelm: the app sees nothing else on the disk. You sign in in the browser.</string>
+    <string name="sync_hint_dropbox">The folder of the app in Dropbox, Apps/NetworkHelm: the app sees nothing else in Dropbox. You sign in in the browser.</string>
+    <string name="sync_hint_google">The hidden folder of the app on Google Drive: it takes space on the drive but is not shown among its files, and the app sees nothing else there. You sign in in the browser.</string>
+    <string name="sync_hint_onedrive">The folder of the app on OneDrive, Apps/NetworkHelm: the app sees nothing else on OneDrive. You sign in in the browser with a personal Microsoft account.</string>
+    <string name="sync_hint_icloud">The private database of NetworkHelm in iCloud: the app sees nothing else of the account. You sign in in the browser with your Apple ID.</string>
+    <string name="sync_sign_in">Sign in in the browser</string>
+    <string name="sync_signed_in">Signed in</string>
+    <string name="sync_sign_in_waiting">Finish the sign-in in the browser that opened.</string>
+    <string name="sync_sign_in_page">NetworkHelm got the answer</string>
+    <string name="sync_sign_in_page_text">Go back to the app: it finishes the sign-in by itself. This tab can be closed.</string>
+    <string name="sync_sign_in_page_refused">The sign-in did not go through</string>
+    <string name="sync_sign_in_page_refused_text">The cloud gave no access. Go back to NetworkHelm: the window of synchronisation tells why.</string>
+    <string name="sync_sign_in_back">Back to NetworkHelm</string>
+    <string name="sync_sign_in_elsewhere">This device cannot sign in to %1$s yet: join the vault on a desktop computer, or move the vault to another service.</string>
+</resources>

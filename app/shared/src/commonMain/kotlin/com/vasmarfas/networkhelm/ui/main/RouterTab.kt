@@ -51,6 +51,7 @@ import com.vasmarfas.networkhelm.ui.form.FormState
 import com.vasmarfas.networkhelm.ui.log.LogEntryWindow
 import com.vasmarfas.networkhelm.ui.log.LogRequest
 import com.vasmarfas.networkhelm.ui.log.LogWindows
+import com.vasmarfas.networkhelm.ui.sync.RouterFiles
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.terminal.Consoles
 import com.vasmarfas.networkhelm.ui.terminal.TelnetCall
@@ -149,6 +150,9 @@ class RouterTab(
     val tables: TableLayouts,
     val journal: EditJournal = EditJournal(),
     val login: RouterOsLogin? = null,
+    private val routerFiles: RouterFiles = RouterFiles(storage),
+    // the password sudo takes on a Linux host, for its terminals: the session the tab holds is wrapped and gives none
+    val sudo: String? = null,
     private val tablesAsTabs: () -> Boolean = { false },
 ) {
     private val base: DeviceSession = if (session.capabilities.menuContents || session.device.platform != Platform.RouterOs) session else PackFieldsSession(session, packs)
@@ -170,8 +174,13 @@ class RouterTab(
         logEntries -= id
         comparisons -= id
         terminals -= id
+        terminalStarts -= id
         telnets -= id
         telnetCalls -= id
+        containers -= id
+        dockers -= id
+        proxies -= id
+        vpns -= id
         consoles.close(id)
     }
     val specs = mutableStateMapOf<Long, WindowSpec>()
@@ -180,8 +189,13 @@ class RouterTab(
     val logEntries = mutableStateMapOf<Long, LogEntryWindow>()
     val logWindows = LogWindows(::openLogEntry, ::showInLog)
     val terminals = mutableStateListOf<Long>()
+    val terminalStarts = mutableStateMapOf<Long, String>()
     val telnets = mutableStateListOf<Long>()
     val telnetCalls = mutableStateMapOf<Long, TelnetCall>()
+    internal val containers = mutableStateMapOf<Long, ContainerCall>()
+    internal val dockers = mutableStateMapOf<Long, DockerCall>()
+    internal val proxies = mutableStateMapOf<Long, ProxyCall>()
+    internal val vpns = mutableStateMapOf<Long, VpnCall>()
     val consoles = Consoles()
     val transfers = TransferQueues()
     var menu by mutableStateOf<List<MenuEntry>?>(null)
@@ -200,6 +214,7 @@ class RouterTab(
     var tunnelsWindow by mutableStateOf<Long?>(null)
     var dashboardWindow by mutableStateOf<Long?>(null)
     var topologyWindow by mutableStateOf<Long?>(null)
+    var vpnPanelWindow by mutableStateOf<Long?>(null)
     val tunnels = Tunnels()
     var savedTunnels by mutableStateOf(emptyList<SavedTunnel>())
         private set
@@ -242,9 +257,16 @@ class RouterTab(
             topologyWindow = single(topologyWindow, entry.title, DpSize(860.dp, 560.dp))
             return
         }
+        if (entry.window == "vpn-panel") {
+            vpnPanelWindow = single(vpnPanelWindow, entry.title, DpSize(1000.dp, 720.dp))
+            return
+        }
         if (entry.window == "terminal") {
             val shift = (workspace.windows.size % 8) * 24
-            terminals += workspace.open("Terminal", DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(760.dp, 440.dp)).id
+            val id = workspace.open(entry.fill["name"]?.let { "${entry.title}: $it" } ?: "Terminal", DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(760.dp, 440.dp)).id
+            terminals += id
+            // a terminal opened from a row starts with the command the row names: the console of a guest of Proxmox
+            entry.fill["command"]?.let { terminalStarts[id] = it }
             return
         }
         if (entry.window == "telnet" || entry.window == "mac-telnet") {
@@ -252,6 +274,32 @@ class RouterTab(
             val id = workspace.open(entry.title, DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(760.dp, 440.dp)).id
             telnets += id
             entry.fill.values.firstOrNull()?.let { telnetCalls[id] = TelnetCall(it, entry.window == "mac-telnet") }
+            return
+        }
+        if (openContainers(entry)) return
+        val kind = entry.window
+        if (kind != null && kind.startsWith("container-")) {
+            val container = entry.fill.values.firstOrNull() ?: return
+            val shift = (workspace.windows.size % 8) * 24
+            containers[workspace.open("${entry.title}: $container", DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(920.dp, 560.dp)).id] = ContainerCall(container, kind.removePrefix("container-"))
+            return
+        }
+        if (kind != null && kind.startsWith("docker-")) {
+            val target = entry.fill.values.firstOrNull().orEmpty()
+            val shift = (workspace.windows.size % 8) * 24
+            val title = if (target.isEmpty()) entry.title else "${entry.title}: $target"
+            dockers[workspace.open(title, DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(900.dp, 560.dp)).id] = DockerCall(kind.removePrefix("docker-"), target)
+            return
+        }
+        if (kind != null && kind.startsWith("proxy-")) {
+            val shift = (workspace.windows.size % 8) * 24
+            proxies[workspace.open(entry.title, DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(900.dp, 560.dp)).id] = ProxyCall(kind.removePrefix("proxy-"))
+            return
+        }
+        if (kind == "vpn-form") {
+            val target = entry.path ?: return
+            val shift = (workspace.windows.size % 8) * 24
+            vpns[workspace.open(entry.title, DpOffset((40 + shift).dp, (30 + shift).dp), DpSize(760.dp, 640.dp)).id] = VpnCall(target)
             return
         }
         val path = MenuPath.parse(entry.path ?: return)
@@ -497,7 +545,7 @@ class RouterTab(
         }.awaitAll().filterNotNull().toSet()
     }
 
-    private fun windowTab(title: String, path: String, owner: Pack? = null, prefill: Map<String, String> = emptyMap(), start: Boolean = false): WindowTab {
+    internal fun windowTab(title: String, path: String, owner: Pack? = null, prefill: Map<String, String> = emptyMap(), start: Boolean = false): WindowTab {
         val pack = owner?.takeIf { path in it.paths } ?: packs.firstOrNull { path in it.paths }
         val shown = pack?.paths?.get(path)
         return WindowTab(title, MenuPath.parse(path), shown, pack?.labels.orEmpty() + owner?.labels.orEmpty() + shown?.labels.orEmpty(), shown?.form?.let { pack.forms[it] }, prefill, recall, start)
@@ -508,6 +556,7 @@ class RouterTab(
 
     suspend fun keepLayout() {
         if (!restored) {
+            routerFiles.opened(router)
             snapshotFlow { menu }.first { it != null }
             readWorkspaces()
             restoreLayout()
@@ -525,9 +574,7 @@ class RouterTab(
         try {
             saveLayout(layout())
             for (window in workspace.windows.toList()) workspace.close(window)
-            val saved = workspaces()
-            val layouts = if (name.isEmpty() || name in saved.layouts) saved.layouts else saved.layouts + (name to emptyList())
-            writeWorkspaces(SavedWorkspaces(name, layouts))
+            changeWorkspaces { saved -> SavedWorkspaces(name, if (name.isEmpty() || name in saved.layouts) saved.layouts else saved.layouts + (name to emptyList())) }
             restoreLayout()
         } finally {
             switching = false
@@ -538,13 +585,13 @@ class RouterTab(
         if (name == workspaceName || name in workspaceNames) return
         val layout = layout()
         saveLayout(layout)
-        writeWorkspaces(SavedWorkspaces(name, workspaces().layouts + (name to layout)))
+        changeWorkspaces { SavedWorkspaces(name, it.layouts + (name to layout)) }
     }
 
     suspend fun renameWorkspace(name: String) {
         val old = workspaceName.takeIf { it.isNotEmpty() } ?: return
         if (name == old || name in workspaceNames) return
-        writeWorkspaces(SavedWorkspaces(name, workspaces().layouts - old + (name to layout())))
+        changeWorkspaces { SavedWorkspaces(name, it.layouts - old + (name to layout())) }
     }
 
     suspend fun removeWorkspace() {
@@ -552,7 +599,7 @@ class RouterTab(
         switching = true
         try {
             for (window in workspace.windows.toList()) workspace.close(window)
-            writeWorkspaces(SavedWorkspaces("", workspaces().layouts - name))
+            changeWorkspaces { SavedWorkspaces("", it.layouts - name) }
             restoreLayout()
         } finally {
             switching = false
@@ -563,8 +610,7 @@ class RouterTab(
         if (workspaceName.isEmpty()) {
             storage.keep(layoutFile, json.encodeToString(layoutSerializer, layout))
         } else {
-            val saved = workspaces()
-            writeWorkspaces(SavedWorkspaces(workspaceName, saved.layouts + (workspaceName to layout)))
+            changeWorkspaces { SavedWorkspaces(workspaceName, it.layouts + (workspaceName to layout)) }
         }
     }
 
@@ -603,6 +649,9 @@ class RouterTab(
         workspaceName = saved.current
     }
 
+    // another copy of the app, or the records of another device, may have changed the file since this one read it
+    private suspend fun changeWorkspaces(change: (SavedWorkspaces) -> SavedWorkspaces) = routerFiles.change { writeWorkspaces(change(workspaces())) }
+
     suspend fun readTunnels() {
         savedTunnels = storage.read(tunnelsFile)?.let { text ->
             try {
@@ -613,15 +662,15 @@ class RouterTab(
         }.orEmpty()
     }
 
-    // another copy of the app may have kept or forgotten a tunnel of the same router since this one read them
-    suspend fun keepTunnel(tunnel: SavedTunnel) {
-        readTunnels()
-        writeTunnels(listOf(tunnel) + (savedTunnels - tunnel))
-    }
+    // another copy of the app, or the records of another device, may have kept or forgotten a tunnel of the same router since this one
+    // read them
+    suspend fun keepTunnel(tunnel: SavedTunnel) = changeTunnels { listOf(tunnel) + (it - tunnel) }
 
-    suspend fun forgetTunnel(tunnel: SavedTunnel) {
+    suspend fun forgetTunnel(tunnel: SavedTunnel) = changeTunnels { it - tunnel }
+
+    private suspend fun changeTunnels(change: (List<SavedTunnel>) -> List<SavedTunnel>) = routerFiles.change {
         readTunnels()
-        writeTunnels(savedTunnels - tunnel)
+        writeTunnels(change(savedTunnels))
     }
 
     private suspend fun writeTunnels(tunnels: List<SavedTunnel>) {
@@ -630,6 +679,7 @@ class RouterTab(
     }
 
     private fun restore(saved: SavedWindow) {
+        if (restoreContainers(saved)) return
         val owner = packs.firstOrNull { it.window.title == saved.title }
         val tabs = withoutOwnLinks(saved.tabs.map { windowTab(it.title, it.path, owner) })
         if (tabs.isEmpty()) return
@@ -642,7 +692,7 @@ class RouterTab(
     }
 
     private fun layout(): List<SavedWindow> = workspace.windows.mapNotNull { window ->
-        val spec = specs[window.id] ?: return@mapNotNull null
+        val spec = specs[window.id] ?: return@mapNotNull containersLayout(window)
         SavedWindow(
             spec.title,
             spec.tabs.map { SavedTab(it.title, it.path.toString()) },

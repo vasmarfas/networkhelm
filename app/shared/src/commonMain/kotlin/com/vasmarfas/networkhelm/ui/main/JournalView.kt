@@ -44,7 +44,7 @@ internal fun JournalView(journal: EditJournal, platform: Platform) {
     val hide = LocalSettings.current.hidePasswords
     fun time(record: EditRecord) = record.time.toLocalDateTime(zone).time.let { listOf(it.hour, it.minute, it.second) }
         .joinToString(":") { it.toString().padStart(2, '0') }
-    fun written(record: EditRecord) = (if (hide) record.copy(after = record.after.mapValues { (name, value) -> if (!value.isNullOrEmpty() && sensitive(name)) HiddenValue else value }) else record)
+    fun written(record: EditRecord) = (if (hide) record.copy(after = record.after.mapValues { (name, value) -> if (!value.isNullOrEmpty() && (name in record.secret || sensitive(name))) HiddenValue else value }) else record)
         .command(platform)
     Column(Modifier.fillMaxSize().background(palette.surface)) {
         if (records.isEmpty()) Note(stringResource(Res.string.journal_empty))

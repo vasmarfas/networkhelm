@@ -1,5 +1,6 @@
 package com.vasmarfas.networkhelm.app
 
+import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.server.FileGatewayStore
 import com.vasmarfas.networkhelm.server.Gateway
 import com.vasmarfas.networkhelm.server.Master
@@ -120,11 +121,23 @@ class DesktopGatewayTest {
         val store = DesktopStore(storage, secrets, FileGatewayStore(gatewayHome, Master(ByteArray(32)).sealing))
         store.write("routers.json", "[]")
         store.write("settings.json", "{}")
+        store.write("routers.records.json", "{\"records\": []}")
         store.keep("password/192.0.2.1/admin", "rd-test-secret")
         assertEquals("[]", storage.read("routers.json"))
+        assertEquals("{\"records\": []}", storage.read("routers.records.json"))
         assertNull(storage.read("settings.json"))
         assertEquals("{}", File(gatewayHome, "documents/settings.json").readText())
         assertEquals("rd-test-secret", secrets.get("password/192.0.2.1/admin"))
         assertFalse(File(gatewayHome, "secrets.json").exists())
+    }
+
+    @Test
+    fun theBrowserNeitherReadsNorChangesTheKeysOfSynchronisation() = runBlocking {
+        val store = DesktopStore(storage, secrets, FileGatewayStore(gatewayHome, Master(ByteArray(32)).sealing))
+        secrets.put("sync/key", "rd-test-key")
+        assertNull(store.secret("sync/key"))
+        assertFailsWith<DeviceException> { store.keep("sync/key", "rd-test-other") }
+        assertFailsWith<DeviceException> { store.forget("sync/key") }
+        assertEquals("rd-test-key", secrets.get("sync/key"))
     }
 }

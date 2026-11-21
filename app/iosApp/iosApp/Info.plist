@@ -6,6 +6,10 @@
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>NetworkHelm connects to the routers on your local network to manage them.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>NetworkHelm reads the QR code another of your devices shows, to join it in synchronisation.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>NetworkHelm asks for Face ID before a new password of synchronisation is set without the current one.</string>
 	<key>NetworkHelmBroadcasts</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>

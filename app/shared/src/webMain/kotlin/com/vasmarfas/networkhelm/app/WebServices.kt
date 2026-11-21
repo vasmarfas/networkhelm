@@ -28,6 +28,7 @@ import com.vasmarfas.networkhelm.transport.browserHttp
 import com.vasmarfas.networkhelm.ui.connect.GatewayAnswer
 import com.vasmarfas.networkhelm.ui.connect.GatewayLogin
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
+import eu.anifantakis.lib.ksafe.KSafe
 import kotlinx.browser.localStorage
 import kotlinx.browser.window
 import kotlinx.coroutines.CompletableDeferred
@@ -128,6 +129,7 @@ private suspend fun routerServices(): Services {
         MemoryTrustStore(),
         neighbors = null,
         scan = null,
+        syncLock = null,
         connectOpenWrt = { login, _ ->
             if (login.host != host) throw DeviceException(ErrorCategory.Unsupported, "this page reaches only $host, the router that served it")
             connectOpenWrt(login.user, login.password, FetchUbusWeb(), encrypted)
@@ -145,7 +147,8 @@ private suspend fun standaloneServices(): Services {
         demoRouters().forEach { saved.save(it) }
         storage.write(DEMO_SEEDED, "yes")
     }
-    return Services(storage, BrowserTrust(), neighbors = null, scan = null, standalone = true).withDemo()
+    // passwords and the keys of synchronisation lie in localStorage under a WebCrypto key that never leaves IndexedDB
+    return Services(storage, BrowserTrust(), neighbors = null, secrets = KSafeSecrets(KSafe(fileName = "routers")), scan = null, standalone = true).withDemo()
 }
 
 private const val DEMO_SEEDED = "demo-seeded"

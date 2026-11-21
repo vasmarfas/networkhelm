@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 11 and earlier. The setup and the memory of synchronisation stay out of a backup: the keys that open the vault stay in the
+     Android Keystore of the device, and a device restored from it joins the vault again -->
+<full-backup-content>
+    <exclude domain="file" path="sync.json" />
+    <exclude domain="file" path="sync-memory.json" />
+</full-backup-content>

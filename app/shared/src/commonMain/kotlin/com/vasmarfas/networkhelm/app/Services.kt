@@ -14,11 +14,16 @@ import com.vasmarfas.networkhelm.routeros.connectRouterOs
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.Login
 import com.vasmarfas.networkhelm.session.TextStore
+import com.vasmarfas.networkhelm.sync.Folder
+import com.vasmarfas.networkhelm.transport.TrustKind
 import com.vasmarfas.networkhelm.transport.TrustPolicy
 import com.vasmarfas.networkhelm.transport.TrustStore
 import com.vasmarfas.networkhelm.winbox.WinBoxSession
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 
@@ -35,9 +40,9 @@ class MemoryStorage : Storage {
 
 class Services(
     val storage: Storage,
-    val trust: TrustStore,
+    trust: TrustStore,
     val neighbors: Flow<MndpSighting>?,
-    val secrets: Secrets = MemorySecrets(),
+    secrets: Secrets = MemorySecrets(),
     val refreshNeighbors: (suspend () -> Unit)? = null,
     val localNetwork: () -> Boolean = { true },
     val browserAccess: BrowserAccess? = null,
@@ -58,5 +63,34 @@ class Services(
     val releases: (suspend () -> String?)? = null,
     val changelog: (suspend (version: String) -> String?)? = null,
     val standalone: Boolean = false,
+    // whether this copy of the app synchronises: of two copies on one data folder of the desktop, the one that holds its lock. Null on a
+    // page a router or a gateway serves, which works with the data of that host and never synchronises
+    val syncLock: (() -> Boolean)? = { true },
+    // the folder of synchronisation the user picked, by the place the platform names it with, where the platform has folders
+    val syncFolder: (String) -> Folder? = { null },
     val connect: suspend (RouterOsLogin, TrustPolicy, CoroutineScope) -> DeviceSession = { login, trust, scope -> connectRouterOs(login, trust, scope) },
-)
+) {
+    private val changed = MutableSharedFlow<Unit>(extraBufferCapacity = 1, onBufferOverflow = BufferOverflow.DROP_OLDEST)
+
+    // a password, key or fingerprint kept or forgotten, for synchronisation to take with a round soon
+    val edits: SharedFlow<Unit> = changed
+
+    val trust: TrustStore = object : TrustStore by trust {
+        override suspend fun put(host: String, port: Int, kind: TrustKind, fingerprint: String) {
+            trust.put(host, port, kind, fingerprint)
+            changed.tryEmit(Unit)
+        }
+    }
+
+    val secrets: Secrets = object : Secrets by secrets {
+        override suspend fun put(key: String, value: String) {
+            secrets.put(key, value)
+            changed.tryEmit(Unit)
+        }
+
+        override suspend fun delete(key: String) {
+            secrets.delete(key)
+            changed.tryEmit(Unit)
+        }
+    }
+}

@@ -121,6 +121,7 @@ import com.vasmarfas.networkhelm.packs.PackFill
 import com.vasmarfas.networkhelm.packs.PackLink
 import com.vasmarfas.networkhelm.packs.PackPath
 import com.vasmarfas.networkhelm.packs.comboCounts
+import com.vasmarfas.networkhelm.packs.packName
 import com.vasmarfas.networkhelm.packs.withCombos
 import com.vasmarfas.networkhelm.packs.withDefaults
 import com.vasmarfas.networkhelm.packs.withRadios
@@ -446,7 +447,10 @@ private fun ListView(
     val lacking = if (pack?.join != null || pack?.monitor != null) emptySet() else schema.lacks
     fun named(property: String): String = older[property]?.let { named(it) } ?: tab.labels[property] ?: schema.argument(property)?.label ?: label(property)
     val scope = rememberCoroutineScope()
-    val name = path.toString()
+    // the paths of the platforms meet, as /container of RouterOS and container of a Linux host, so a layout is kept for its platform;
+    // RouterOS keeps the bare path its layouts were saved under
+    val platform = session.device.platform
+    val name = if (platform == Platform.RouterOs) path.toString() else "${platform.packName}:$path"
     var refresh by remember { mutableIntStateOf(0) }
     val filter = pack?.where?.takeIf { it.isNotEmpty() }?.map { (property, values) -> Filter.Or(values.map { Filter.Equals(property, it) }) }?.let(Filter::And)
     val fixed = pack?.where.orEmpty().filterValues { it.size == 1 }.mapValues { it.value.single() }
@@ -481,7 +485,13 @@ private fun ListView(
     }
     if (arrived != null && reading == null && arrived.size <= RECALLED_ROWS) SideEffect { recall?.rows?.set(recalled, arrived) }
     val rows = arrived.orEmpty().heldWhile(paused)
-    val saved = remember(name) { tables[name] }
+    // a layout of an older build under the bare path is this table's only where every column it chose is one of the table's
+    val saved = remember(name) {
+        tables[name] ?: tables[path.toString()]?.takeIf { old ->
+            val own = pack?.columns.orEmpty() + pack?.readonly.orEmpty() + schema.arguments.map { it.name }
+            name != path.toString() && old.columns.all { it in own }
+        }
+    }
     val state = remember(name) {
         TableState<String>().apply {
             sort = saved?.sort?.map { SortKey(it.column, it.ascending) } ?: listOfNotNull(pack?.sort?.let { SortKey(it, true) })
@@ -837,13 +847,17 @@ private fun ListView(
                     actions.size == 1 -> ToolbarButton(actions[0].title, icons["command/${actions[0].command}"]?.vector ?: Lucide.Zap, { run(actions[0]) }, enabled = available(actions[0]), iconOnly = compact)
                     else -> ActionsMenu(stringResource(Res.string.form_actions), Lucide.Zap, actions, ::available, { it.title }, iconOnly = compact, iconOf = { icons["command/${it.command}"] }, onRun = ::run)
                 }
-                val links = linked + tools.filter { it.global && filled(it) }
                 val open: (PackLink) -> Unit = ::openLink
+                // what opens a window of its own that needs no row, as New Server or Prune, is a button of its own; the windows of settings
+                // the pack links stay in Configuration
+                for (link in tools.filter { it.global && filled(it) }) {
+                    ToolbarButton(link.title, if (classic && !compact) null else icons["link/${link.title}"]?.vector ?: Lucide.Settings, { open(link) }, iconOnly = compact)
+                }
                 when {
-                    links.isEmpty() -> {}
-                    classic && !compact -> for (link in links) ToolbarButton(link.title, null, { open(link) })
-                    links.size == 1 -> ToolbarButton(links[0].title, Lucide.Settings, { open(links[0]) }, iconOnly = compact)
-                    else -> ActionsMenu(stringResource(Res.string.form_configuration), Lucide.Settings, links, { true }, { it.title }, iconOnly = compact, onRun = open)
+                    linked.isEmpty() -> {}
+                    classic && !compact -> for (link in linked) ToolbarButton(link.title, null, { open(link) })
+                    linked.size == 1 -> ToolbarButton(linked[0].title, icons["link/${linked[0].title}"]?.vector ?: Lucide.Settings, { open(linked[0]) }, iconOnly = compact)
+                    else -> ActionsMenu(stringResource(Res.string.form_configuration), Lucide.Settings, linked, { true }, { it.title }, iconOnly = compact, iconOf = { icons["link/${it.title}"] }, onRun = open)
                 }
                 if (!compact) Spacer(Modifier.weight(1f))
                 if (!classic) filterButton()
@@ -997,9 +1011,13 @@ private fun ListView(
             }
         }
         confirming?.let { (action, ids) ->
-            Confirm(stringResource(Res.string.command_question, action.title), action.title, onCancel = { confirming = null }) {
+            // the rows the action goes to, with the packages an overview puts in
+            val named = rows.filter { it.id in ids }.map { row -> listOfNotNull(visible.firstOrNull()?.let(row::get), row["packages"]).filter { it.isNotEmpty() }.joinToString(": ") }.filter { it.isNotEmpty() }
+            val listed: (@Composable () -> Unit)? = if (named.isEmpty()) null else ({ Text(named.joinToString("\n"), style = Theme.type.mono) })
+            Confirm(stringResource(Res.string.command_question, action.title), action.title, onCancel = { confirming = null }, content = listed) {
                 confirming = null
-                perform(action, ids)
+                val property = action.output
+                if (property != null) act { output = action.title to session.output(path, action, ids, property) } else perform(action, ids)
             }
         }
         output?.let { (heading, reply) -> Output(heading, reply) { output = null } }

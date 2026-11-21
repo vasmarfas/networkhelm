@@ -1,1 +1,3 @@
 "NSLocalNetworkUsageDescription" = "NetworkHelm подключается к роутерам в вашей локальной сети, чтобы управлять ими.";
+"NSCameraUsageDescription" = "NetworkHelm читает QR-код, который показывает другое ваше устройство, чтобы подключиться к синхронизации.";
+"NSFaceIDUsageDescription" = "NetworkHelm спрашивает Face ID, прежде чем задать новый пароль синхронизации без текущего.";

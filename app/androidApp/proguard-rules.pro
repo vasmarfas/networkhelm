@@ -8,3 +8,8 @@
 -dontwarn org.newsclub.net.unix.**
 -dontwarn org.apache.logging.log4j.**
 -dontwarn org.slf4j.**
+
+# libsodium of the synchronisation is reached through JNA, which finds the native functions by the names of the methods of the interface
+-keep class com.sun.jna.** { *; }
+-keep class * implements com.sun.jna.Library { *; }
+-dontwarn java.awt.**

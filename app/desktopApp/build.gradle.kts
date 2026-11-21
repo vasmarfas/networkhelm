@@ -208,8 +208,9 @@ compose.desktop {
         }
 
         nativeDistributions {
-            // JNA of KSafe needs sun.misc.Unsafe; Netty and logback of the gateway refer to JNDI and JFR; the Java Access Bridge of Windows loads jdk.accessibility at the first window
-            modules("jdk.unsupported", "java.naming", "jdk.jfr", "jdk.accessibility")
+            // JNA of KSafe needs sun.misc.Unsafe; Netty and logback of the gateway refer to JNDI and JFR; the Java Access Bridge of Windows loads jdk.accessibility at the first window;
+            // the HTTP client of synchronisation runs on java.net.http
+            modules("jdk.unsupported", "java.naming", "jdk.jfr", "jdk.accessibility", "java.net.http")
             appResourcesRootDir.set(layout.buildDirectory.dir("appResources"))
             targetFormats(
                 TargetFormat.Dmg,

@@ -14,6 +14,7 @@ import com.vasmarfas.networkhelm.miknative.nativeSide
 import com.vasmarfas.networkhelm.routeros.schema.FileSchemaCache
 import com.vasmarfas.networkhelm.session.connectWithSsh
 import com.vasmarfas.networkhelm.transport.FileTrustStore
+import com.vasmarfas.networkhelm.ui.sync.bookmarkedFolder
 import eu.anifantakis.lib.ksafe.KSafe
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.onCompletion
@@ -35,6 +36,7 @@ fun androidServices(context: Context): Services {
         releases = ::fetchReleases,
         changelog = ::fetchChangelog,
         localNetwork = { localNetworkAllowed(context) },
+        syncFolder = { bookmarkedFolder(context, it) },
     )
 }
 

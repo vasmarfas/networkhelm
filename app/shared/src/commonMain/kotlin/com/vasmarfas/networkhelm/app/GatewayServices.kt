@@ -19,6 +19,7 @@ fun gatewayServices(gateway: GatewayClient): Services {
         networkInterfaces = if (offers.interfaces.isEmpty()) null else ({ offers.interfaces }),
         connectMacTelnet = if (offers.interfaces.isEmpty()) null else ({ mac, user, pass, interfaceName, encoding, _ -> gateway.connect(MacTelnetLogin(mac, user, pass, interfaceName, encoding)) }),
         connectTcp8291 = if (offers.native) ({ host, port, user, pass, encoding, _ -> gateway.connect(NativeLogin(host, port, user, pass, encoding)) }) else null,
+        syncLock = null,
         connect = { login, trust, _ -> gateway.connect(login, trust) },
     )
 }

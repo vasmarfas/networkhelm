@@ -4,10 +4,13 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import com.vasmarfas.networkhelm.gateway.GatewayStore
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.serve
 import com.vasmarfas.networkhelm.server.FileGatewayStore
 import com.vasmarfas.networkhelm.server.Gateway
 import com.vasmarfas.networkhelm.server.isLocal
+import com.vasmarfas.networkhelm.sync.recordsFile
 import com.vasmarfas.networkhelm.transport.TrustStore
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -172,13 +175,23 @@ class DesktopGateway(
 }
 
 internal class DesktopStore(private val storage: Storage, private val secrets: Secrets, private val own: GatewayStore) : GatewayStore {
-    override suspend fun read(name: String) = if (name == SavedRouters.FILE) storage.read(name) else own.read(name)
+    override suspend fun read(name: String) = if (name in shared) storage.read(name) else own.read(name)
 
-    override suspend fun write(name: String, text: String) = if (name == SavedRouters.FILE) storage.write(name, text) else own.write(name, text)
+    override suspend fun write(name: String, text: String) = if (name in shared) storage.write(name, text) else own.write(name, text)
 
-    override suspend fun secret(key: String) = secrets.get(key)
+    // the keys of synchronisation stay with the app: the page of the gateway works with its data and never synchronises
+    override suspend fun secret(key: String) = if (key.startsWith(SYNC_SECRETS)) null else secrets.get(key)
 
-    override suspend fun keep(key: String, value: String) = secrets.put(key, value)
+    override suspend fun keep(key: String, value: String) = secrets.put(changeable(key), value)
 
-    override suspend fun forget(key: String) = secrets.delete(key)
+    override suspend fun forget(key: String) = secrets.delete(changeable(key))
+
+    private fun changeable(key: String) = key.also {
+        if (it.startsWith(SYNC_SECRETS)) throw DeviceException(ErrorCategory.PermissionDenied, "the page of the gateway does not change the keys of synchronisation")
+    }
 }
+
+// the browser edits the list of routers of the app and its records as another copy of the app would
+private val shared = setOf(SavedRouters.FILE, recordsFile(SavedRouters.FILE))
+
+private const val SYNC_SECRETS = "sync/"

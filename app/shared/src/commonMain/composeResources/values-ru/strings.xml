@@ -27,6 +27,8 @@
     <string name="kind_linux">Linux / хост по SSH</string>
     <string name="kind_other">Другое устройство: SNMP, UPnP</string>
     <string name="connect_group">Группа</string>
+    <string name="connect_in_groups">Группами</string>
+    <string name="connect_no_group">Без группы</string>
     <string name="connect_comment">Комментарий</string>
     <string name="connect">Подключиться</string>
     <string name="connect_stop">Остановить</string>
@@ -1211,6 +1213,7 @@
     <string name="error_native_no_query">нет запроса для [%1$s]</string>
     <string name="error_native_no_lines">в объектной модели нет строк там, где они есть в консоли</string>
     <string name="error_native_channel_dropped">канал окна оборвался</string>
+    <string name="error_ssh_no_free_channel">за 30 секунд не освободился ни один канал соединения: все держат окна с живыми потоками</string>
     <string name="error_native_drops">роутер обрывает канал при каждом чтении [%1$s]</string>
     <string name="error_session_closed">сеанс закрыт</string>
     <string name="error_native_none">у этого подключения нет канала TCP 8291</string>
@@ -1250,9 +1253,9 @@
     <string name="error_no_rule">%1$s: нет правила %2$s</string>
     <string name="error_rule_parts">правилу нужны условия и действие, например -p tcp --dport 22 -j ACCEPT</string>
     <string name="error_no_chain">%1$s: нет цепочки %2$s</string>
-    <string name="error_rules_lost_detail">хост не сохранил прежние правила: %1$s</string>
-    <string name="error_rules_lost">хост не сохранил прежние правила</string>
-    <string name="error_rules_rollback">после изменения хост перестал отвечать: прежние правила вернутся через минуту</string>
+    <string name="error_rules_lost_detail">хост не сохранил то, что было до правки: %1$s</string>
+    <string name="error_rules_lost">хост не сохранил то, что было до правки</string>
+    <string name="error_rules_rollback">после правки хост перестал отвечать: прежнее состояние вернётся через минуту</string>
     <string name="error_value_not_taken">%1$s: значение %2$s не подходит</string>
     <string name="error_value_needed">%1$s: нужно значение</string>
     <string name="error_command_no_json">%1$s не выдал JSON</string>
@@ -1569,5 +1572,5 @@
     <string name="error_keenetic_ping_check_mode">%1$s — не режим Ping Check</string>
     <string name="error_keenetic_wisp_security">%1$s — не тип защиты, который программа задаёт подключению Wi-Fi</string>
     <string name="error_keenetic_wisp_key">для сети Wi-Fi нужен ключ</string>
-    <string name="error_linux_new_login_refused">после правки хост не пустил новый сеанс SSH: прежние правила возвращены</string>
+    <string name="error_linux_new_login_refused">после правки хост не пустил новый сеанс SSH: прежнее состояние возвращено</string>
 </resources>

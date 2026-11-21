@@ -100,7 +100,8 @@ internal fun Output(title: String, text: String, onClose: () -> Unit) {
     }
 }
 
-private val line = Regex("^(\\s*)([A-Za-z]+)(\\s*=\\s*)(.+)$")
+// key = value of WireGuard and key: value of the logins the servers of IKEv2 and ocserv give
+private val line = Regex("^(\\s*)([A-Za-z]+)(\\s*[=:]\\s*)(.+)$")
 
 private fun masked(text: String): String = text.lines().joinToString("\n") { row ->
     val match = line.matchEntire(row) ?: return@joinToString row

@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="sync_error_sign_in_refused">%1$s отказал во входе: %2$s</string>
+    <string name="sync_error_sign_in_other">ответ на вход пришёл для другого запроса</string>
+    <string name="sync_error_sign_in_empty">браузер вернулся без ответа на вход</string>
+    <string name="sync_error_sign_in_late">вход в браузере не завершён вовремя</string>
+    <string name="sync_error_sign_in_port">порт %1$s этого компьютера занят другой программой</string>
+    <string name="sync_error_sign_in_closed">вход закрыт до завершения</string>
+    <string name="sync_error_sign_in_popup">браузер не открыл окно входа: разрешите этой странице всплывающие окна</string>
+    <string name="sync_service_yandex">Яндекс Диск</string>
+    <string name="sync_service_dropbox">Dropbox</string>
+    <string name="sync_service_google">Google Диск</string>
+    <string name="sync_service_onedrive">OneDrive</string>
+    <string name="sync_service_icloud">iCloud</string>
+    <string name="sync_hint_yandex">Папка программы на Яндекс Диске, Приложения/NetworkHelm: больше ничего на диске программа не видит. Вход — в браузере.</string>
+    <string name="sync_hint_dropbox">Папка программы в Dropbox, Apps/NetworkHelm: больше ничего в Dropbox программа не видит. Вход — в браузере.</string>
+    <string name="sync_hint_google">Скрытая папка программы на Google Диске: место на диске она занимает, но среди файлов не видна, и больше ничего там программа не видит. Вход — в браузере.</string>
+    <string name="sync_hint_onedrive">Папка программы в OneDrive, Приложения/NetworkHelm: больше ничего в OneDrive программа не видит. Вход — в браузере, личной учётной записью Microsoft.</string>
+    <string name="sync_hint_icloud">Закрытая база NetworkHelm в iCloud: больше ничего в учётной записи программа не видит. Вход — в браузере, с Apple ID.</string>
+    <string name="sync_sign_in">Войти через браузер</string>
+    <string name="sync_signed_in">Вход выполнен</string>
+    <string name="sync_sign_in_waiting">Завершите вход в открывшемся браузере.</string>
+    <string name="sync_sign_in_page">NetworkHelm получил ответ</string>
+    <string name="sync_sign_in_page_text">Вернитесь в программу: она закончит вход сама. Эту вкладку можно закрыть.</string>
+    <string name="sync_sign_in_page_refused">Вход не состоялся</string>
+    <string name="sync_sign_in_page_refused_text">Облако не дало доступ. Вернитесь в NetworkHelm: окно синхронизации покажет причину.</string>
+    <string name="sync_sign_in_back">Вернуться в NetworkHelm</string>
+    <string name="sync_sign_in_elsewhere">С этого устройства войти в %1$s пока нельзя: подключитесь к хранилищу на настольном компьютере или перенесите хранилище на другой сервис.</string>
+</resources>

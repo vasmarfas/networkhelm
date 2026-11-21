@@ -21,12 +21,16 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.key
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.currentStateAsState
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.app.LocalAppSettings
 import com.vasmarfas.networkhelm.app.LocalSettings
@@ -42,10 +46,14 @@ import com.vasmarfas.networkhelm.ui.kit.HintHost
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.TabStrip
 import com.vasmarfas.networkhelm.ui.main.LocalChangelog
+import com.vasmarfas.networkhelm.ui.main.LocalDockerRegistries
+import com.vasmarfas.networkhelm.ui.main.LocalDockerTemplates
 import com.vasmarfas.networkhelm.ui.main.MainScreen
 import com.vasmarfas.networkhelm.ui.main.RouterSearchDialog
 import com.vasmarfas.networkhelm.ui.settings.BrowserAccessDialog
 import com.vasmarfas.networkhelm.ui.settings.SettingsDialog
+import com.vasmarfas.networkhelm.ui.sync.LocalSync
+import com.vasmarfas.networkhelm.ui.sync.SyncDialog
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.TouchMetrics
@@ -66,7 +74,7 @@ fun ShellTheme(shell: Shell, relocalize: Boolean = true, content: @Composable ()
     val settings = shell.settings.current
     val theme = shell.settings.drawnTheme().let { it.copy(metrics = it.metrics.copy(row = it.metrics.row + settings.rowSpacing.dp)) }
     key(settings.language.takeIf { relocalize }) {
-        CompositionLocalProvider(LocalSettings provides settings, LocalAppSettings provides shell.settings, LocalSnippets provides shell.snippets, LocalChangelog provides shell.services.changelog) {
+        CompositionLocalProvider(LocalSettings provides settings, LocalAppSettings provides shell.settings, LocalSnippets provides shell.snippets, LocalChangelog provides shell.services.changelog, LocalDockerTemplates provides shell.dockerTemplates, LocalDockerRegistries provides shell.dockerRegistries, LocalSync provides shell.syncAccess) {
             NetworkHelmTheme(theme, theme.isDark(settings.dark, isSystemInDarkTheme()), settings.scale, content)
         }
     }
@@ -77,6 +85,10 @@ fun App(shell: Shell, tabsInTitle: Boolean = false) {
     LaunchedEffect(shell) { shell.settings.load() }
     LaunchedEffect(shell) { shell.saved.load() }
     LaunchedEffect(shell) { shell.snippets.load() }
+    LaunchedEffect(shell) { shell.dockerTemplates.load() }
+    LaunchedEffect(shell) { shell.synchronisation.run() }
+    val front = LocalLifecycleOwner.current.lifecycle.currentStateAsState().value.isAtLeast(Lifecycle.State.RESUMED)
+    LaunchedEffect(shell, front) { shell.synchronisation.front(front) }
     LaunchedEffect(shell) { shell.tables.keep() }
     LaunchedEffect(shell) { shell.services.browserAccess?.resume() }
     val read = shell.settings.loaded
@@ -162,10 +174,15 @@ private fun Routers(shell: Shell, tabsInTitle: Boolean) {
             SettingsDialog(shell.settings, shell.services.browserAccess, onBrowserAccess = {
                 shell.settingsShown = false
                 shell.accessShown = true
-            }, themeEditor = shell.themeEditor, updates = shell.services.releases != null, tables = shell.tables) { shell.settingsShown = false }
+            }, onSync = if (shell.services.syncLock == null) null else ({
+                shell.settingsShown = false
+                shell.syncShown = true
+            }), syncOn = shell.synchronisation.setup.collectAsState().value != null, themeEditor = shell.themeEditor, updates = shell.services.releases != null, tables = shell.tables) { shell.settingsShown = false }
         }
         if (shell.toolsShown) ToolsDialog { shell.toolsShown = false }
         if (shell.accessShown) shell.services.browserAccess?.let { BrowserAccessDialog(it) { shell.accessShown = false } }
         if (shell.searchShown) RouterSearchDialog(shell.search, shell.routers, shell::open) { shell.searchShown = false }
+        if (shell.syncShown) SyncDialog(shell.synchronisation, onClose = { shell.syncShown = false })
+        shell.syncQuestions.question?.let { TrustDialog(it) }
     }
 }

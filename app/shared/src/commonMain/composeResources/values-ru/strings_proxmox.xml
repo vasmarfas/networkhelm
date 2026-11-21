@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxmox_error_no_node">кластер не называет узел этого хоста</string>
+    <string name="proxmox_error_choose_guest">выберите ВМ или контейнер</string>
+    <string name="proxmox_error_no_guest">в кластере нет ВМ или контейнера %1$s</string>
+    <string name="proxmox_error_snapshot_name">имя снимка — буква, за ней буквы, цифры, - и _, всего от 2 до 40 знаков: %1$s</string>
+    <string name="proxmox_error_choose_storage">выберите хранилище</string>
+</resources>

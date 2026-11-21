@@ -15,10 +15,10 @@ class ErrorTextTest {
 
     private val part = Regex("""%\d+[$]s""")
 
-    private fun strings(folder: String): Map<String, String> {
-        val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(File("src/commonMain/composeResources/$folder/strings.xml")).getElementsByTagName("string")
-        return (0 until nodes.length).map { nodes.item(it) as Element }.associate { it.getAttribute("name") to it.textContent }
-    }
+    private fun strings(folder: String): Map<String, String> = File("src/commonMain/composeResources/$folder").listFiles { file -> file.name.startsWith("strings") && file.extension == "xml" }.orEmpty().flatMap { file ->
+        val nodes = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(file).getElementsByTagName("string")
+        (0 until nodes.length).map { nodes.item(it) as Element }.map { it.getAttribute("name") to it.textContent }
+    }.toMap()
 
     private fun placeholders(text: String) = part.findAll(text).map { it.value }.toList()
 
@@ -28,18 +28,20 @@ class ErrorTextTest {
     fun everyTemplateIsItsEnglishStringAndRussianKeepsItsParts() {
         val english = strings("values")
         val russian = strings("values-ru")
-        for ((template, key) in errorTemplates) {
+        val templates = allErrorTemplates()
+        for ((template, key) in templates) {
             assertEquals(template, english[key.key], key.key)
             assertEquals(List(placeholders(template).size) { "%${it + 1}\$s" }, placeholders(template), key.key)
             assertEquals(placeholders(template).toSet(), placeholders(assertNotNull(russian[key.key], key.key)).toSet(), key.key)
         }
-        assertEquals(errorTemplates.size, errorTemplates.map { it.first }.toSet().size)
+        assertEquals(templates.size, templates.map { it.first }.toSet().size)
     }
 
     @Test
     fun aMessageOfTheAppFindsItsNarrowestTemplateAndATextOfTheRouterNone() {
         assertEquals("error_keenetic_move_one" to emptyList<String>(), found("Keenetic moves one rule at a time"))
         assertEquals("error_host_no_address" to listOf("192.0.2.5/24"), found("the host has no address 192.0.2.5/24"))
+        assertEquals("sync_error_sign_in_refused" to listOf("oauth.yandex.ru", "access_denied: the user said no"), found("oauth.yandex.ru refused the sign-in: access_denied: the user said no"))
         assertEquals("error_openwrt_acl" to listOf("Permission denied: /etc/config/rpcd"), found("the ACL was not laid on the router: Permission denied: /etc/config/rpcd"))
         assertEquals("error_no_rule" to listOf("ufw", "7"), found("ufw has no rule 7"))
         assertEquals("error_path_missing" to listOf("ip/dhcp/pool", "lan"), found("ip/dhcp/pool has no lan"))

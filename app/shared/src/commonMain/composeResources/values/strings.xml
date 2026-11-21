@@ -27,6 +27,8 @@
     <string name="kind_linux">Linux / SSH host</string>
     <string name="kind_other">Other device: SNMP, UPnP</string>
     <string name="connect_group">Group</string>
+    <string name="connect_in_groups">In groups</string>
+    <string name="connect_no_group">No group</string>
     <string name="connect_comment">Comment</string>
     <string name="connect">Connect</string>
     <string name="connect_stop">Stop</string>
@@ -1199,6 +1201,7 @@
     <string name="error_native_no_query">no query at [%1$s]</string>
     <string name="error_native_no_lines">the object model has no lines where the console has some</string>
     <string name="error_native_channel_dropped">the channel of the window dropped</string>
+    <string name="error_ssh_no_free_channel">no channel of the connection got free in 30 seconds: the windows that stream hold them all</string>
     <string name="error_native_drops">the router drops the channel every time [%1$s] is read</string>
     <string name="error_session_closed">the session is closed</string>
     <string name="error_native_none">this connection has no native channel</string>
@@ -1238,9 +1241,9 @@
     <string name="error_no_rule">%1$s has no rule %2$s</string>
     <string name="error_rule_parts">a rule needs its matches and its action, as -p tcp --dport 22 -j ACCEPT</string>
     <string name="error_no_chain">%1$s has no chain %2$s</string>
-    <string name="error_rules_lost_detail">the host did not keep the rules it had: %1$s</string>
-    <string name="error_rules_lost">the host did not keep the rules it had</string>
-    <string name="error_rules_rollback">the host stopped answering after the change: the rules it had come back in a minute</string>
+    <string name="error_rules_lost_detail">the host did not keep what it had before the change: %1$s</string>
+    <string name="error_rules_lost">the host did not keep what it had before the change</string>
+    <string name="error_rules_rollback">the host stopped answering after the change: what it had comes back in a minute</string>
     <string name="error_value_not_taken">%1$s: %2$s is not a value it takes</string>
     <string name="error_value_needed">%1$s: a value is needed</string>
     <string name="error_command_no_json">%1$s gave no JSON</string>
@@ -1557,5 +1560,5 @@
     <string name="error_keenetic_ping_check_mode">%1$s is no mode of Ping Check</string>
     <string name="error_keenetic_wisp_security">%1$s is no security the app sets on a Wi-Fi connection</string>
     <string name="error_keenetic_wisp_key">the Wi-Fi network needs its key</string>
-    <string name="error_linux_new_login_refused">after the change the host let no new SSH session in: the rules it had are back</string>
+    <string name="error_linux_new_login_refused">after the change the host let no new SSH session in: what it had is back</string>
 </resources>

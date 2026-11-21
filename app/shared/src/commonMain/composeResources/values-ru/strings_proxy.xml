@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_error_no_config">на хосте нет файла настроек %1$s</string>
+    <string name="proxy_error_no_ncsa">на хосте нет basic_ncsa_auth из пакета Squid</string>
+    <string name="proxy_error_squid_no_users">у Squid нет своих пользователей: ни одна строка auth_param не называет basic_ncsa_auth</string>
+    <string name="proxy_error_no_hasher">на хосте нет ни openssl, ни cryptpw, чтобы получить хэш пароля: поставьте пакет openssl</string>
+    <string name="proxy_error_user_exists">у %1$s уже есть пользователь %2$s</string>
+    <string name="proxy_error_no_user">у %1$s нет пользователя %2$s</string>
+    <string name="proxy_error_tiny_password">пароль BasicAuth у tinyproxy состоит только из латинских букв, цифр, точек, дефисов и подчёркиваний</string>
+    <string name="proxy_error_upstream_password">пароль вышестоящего прокси не может содержать пробелы, кавычки, двоеточие и @</string>
+    <string name="proxy_error_no_target">на хосте нет %1$s, прокси ему не задать</string>
+    <string name="proxy_error_login_in_address">логин прокси вписывается в поля user и password, а не в адрес</string>
+    <string name="proxy_error_no_json">%1$s — не объект JSON</string>
+    <string name="proxy_error_dante_privileged">методу username нужен user.privileged root: Dante читает /etc/shadow от имени этого пользователя</string>
+    <string name="proxy_error_no_inbound">у %1$s нет входа %2$s</string>
+    <string name="proxy_error_no_users_added">программа не добавляет пользователей во вход вида %1$s</string>
+    <string name="proxy_error_no_link">программа не делает ссылку для входа вида %1$s</string>
+    <string name="proxy_error_no_key_made">хост не выдал ключ: %1$s</string>
+    <string name="proxy_error_no_package">в репозиториях хоста нет пакета %1$s</string>
+    <string name="proxy_error_no_build">в выпуске %1$s нет сборки для %2$s</string>
+    <string name="proxy_error_inbound_exists">у %1$s уже есть вход %2$s</string>
+    <string name="proxy_error_inbound_port">у %1$s уже есть вход на порту %2$s</string>
+    <string name="proxy_error_port_taken">порт %1$s на хосте уже занят</string>
+    <string name="proxy_error_example_inbound">у входа из примера sing-box на порту %1$s опубликованный пароль: удалите вход или задайте ему свой пароль</string>
+    <string name="proxy_error_link_scheme">ссылка не начинается ни с vless://, ни с vmess://, trojan://, ss:// или hy2://</string>
+    <string name="proxy_error_link_unreadable">в ссылке нет сервера, порта или секрета</string>
+    <string name="proxy_error_client_transport">клиент не поддерживает транспорт %1$s</string>
+    <string name="proxy_error_xray_client_link">клиент Xray не принимает ссылки вида %1$s</string>
+    <string name="proxy_error_no_client">у %1$s нет клиента %2$s</string>
+    <string name="proxy_error_not_on_path">в PATH входа нет %1$s</string>
+    <string name="proxy_error_reality_key">закрытый ключ Reality — не 32 байта в base64url</string>
+    <string name="proxy_error_no_file">на хосте нет файла %1$s</string>
+    <string name="proxy_error_acme_domain">для ACME в server-name нужен домен этого хоста, а не %1$s</string>
+    <string name="proxy_error_xray_pin">клиент Xray проверяет каждый сертификат, а в ссылке нет pcs, чтобы закрепить этот</string>
+    <string name="proxy_error_sing_box_mlkem">sing-box %1$s не кладёт X25519MLKEM768 в Client Hello у Reality, и серверы Xray такого клиента не пускают: сделайте его во вкладке Clients у Xray, а сам Xray ставит Install Now в обзоре прокси</string>
+    <string name="proxy_error_outbound_exists">у %1$s уже есть выход %2$s</string>
+    <string name="proxy_error_no_outbound">у %1$s нет выхода %2$s</string>
+    <string name="proxy_error_outbound_named">выход %1$s ещё указан в конфиге: через него идёт правило, цепочка или DNS</string>
+    <string name="proxy_error_rule_empty">правилу нужен домен, geosite, geoip, адрес или вход</string>
+    <string name="proxy_error_sing_box_mlkem_outbound">sing-box %1$s не кладёт X25519MLKEM768 в Client Hello у Reality, и серверы Xray такого клиента не пускают: сделайте этот выход в Xray</string>
+    <string name="proxy_error_squid_parent_password">пароль вышестоящего прокси не может содержать пробелы, кавычки и #</string>
+    <string name="proxy_config_save">Проверить и сохранить</string>
+    <string name="proxy_config_reread">Перечитать</string>
+    <string name="proxy_config_hint">Программа проверяет файл, прежде чем заменить им старый; работающая служба перезапускается с ним.</string>
+    <string name="proxy_config_done">Файл прошёл проверку и стоит на месте.</string>
+</resources>

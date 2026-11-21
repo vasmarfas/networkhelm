@@ -4,10 +4,18 @@ import com.vasmarfas.networkhelm.app.Access
 import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.app.SavedRouter
 import com.vasmarfas.networkhelm.app.Services
+import com.vasmarfas.networkhelm.model.DeviceInfo
+import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsProtocol
 import com.vasmarfas.networkhelm.session.SafeMode
+import com.vasmarfas.networkhelm.session.SshHostSession
+import com.vasmarfas.networkhelm.ssh.ExecResult
+import com.vasmarfas.networkhelm.ssh.SftpClient
+import com.vasmarfas.networkhelm.ssh.ShellChannel
+import com.vasmarfas.networkhelm.ssh.SshSession
+import com.vasmarfas.networkhelm.transport.ByteStream
 import com.vasmarfas.networkhelm.transport.MemoryTrustStore
 import com.vasmarfas.networkhelm.ui.theme.BundledThemes
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -25,6 +33,22 @@ import kotlin.test.assertTrue
 class ShellTest {
 
     private val shell = Shell(Services(MemoryStorage(), MemoryTrustStore(), neighbors = null), TestScope(), canDetach = true)
+
+    // the session of a tab is wrapped in the journal, so the terminals of a Linux host take the password of sudo from the tab
+    @Test
+    fun aLinuxHostKeepsThePasswordOfSudoForTheTerminalsOfItsTab() {
+        val ssh = object : SshSession {
+            override suspend fun exec(command: String): ExecResult = error("no exec")
+            override suspend fun process(command: String): ByteStream = error("no process")
+            override suspend fun shell(term: String, columns: Int, rows: Int): ShellChannel = error("no shell")
+            override suspend fun sftp(): SftpClient = error("no sftp")
+            override suspend fun forward(host: String, port: Int): ByteStream = error("no forward")
+            override fun close() = Unit
+        }
+        val device = DeviceInfo(Platform.Ssh, "rd-test-host", "Linux 6.6.86", "x86_64", "", emptySet(), emptySet())
+        shell.add(SshHostSession(ssh, device, linux = true, password = "rd-test-sudo"), "192.0.2.50")
+        assertEquals("rd-test-sudo", shell.routers.last().sudo)
+    }
 
     @Test
     fun aRouterPreparedOverThePlainApiOpensAgainOverApiSsl() = runBlocking {

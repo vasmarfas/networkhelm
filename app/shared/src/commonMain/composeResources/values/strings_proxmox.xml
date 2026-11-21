@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxmox_error_no_node">the cluster names no node of this host</string>
+    <string name="proxmox_error_choose_guest">choose the guest</string>
+    <string name="proxmox_error_no_guest">the cluster has no guest %1$s</string>
+    <string name="proxmox_error_snapshot_name">the name of a snapshot is a letter and then letters, digits, - and _, 2 to 40 of them: %1$s</string>
+    <string name="proxmox_error_choose_storage">choose the storage</string>
+</resources>

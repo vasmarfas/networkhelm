@@ -10,6 +10,8 @@ import com.vasmarfas.networkhelm.miknative.nativeSide
 import com.vasmarfas.networkhelm.routeros.schema.FileSchemaCache
 import com.vasmarfas.networkhelm.session.connectWithSsh
 import com.vasmarfas.networkhelm.transport.FileTrustStore
+import com.vasmarfas.networkhelm.ui.sync.bookmarkedFolder
+import com.vasmarfas.networkhelm.ui.sync.syncLock
 import eu.anifantakis.lib.ksafe.KSafe
 import java.io.File
 
@@ -37,6 +39,8 @@ fun desktopServices(): Services {
         // only a Mac App Store build runs in the sandbox, and the store updates it itself
         releases = if (System.getenv("APP_SANDBOX_CONTAINER_ID") == null) ::fetchReleases else null,
         changelog = ::fetchChangelog,
+        syncLock = syncLock(directory),
+        syncFolder = ::bookmarkedFolder,
     )
 }
 

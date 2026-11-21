@@ -17,16 +17,24 @@ import com.vasmarfas.networkhelm.app.Snippets
 import com.vasmarfas.networkhelm.app.parseAddress
 import com.vasmarfas.networkhelm.journal.EditJournal
 import com.vasmarfas.networkhelm.journal.JournalingSession
+import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.routeros.RouterOsLogin
 import com.vasmarfas.networkhelm.routeros.RouterOsProtocol
 import com.vasmarfas.networkhelm.search.Finding
 import com.vasmarfas.networkhelm.session.DeviceSession
+import com.vasmarfas.networkhelm.session.SshHostSession
 import com.vasmarfas.networkhelm.transport.TrustPolicy
 import com.vasmarfas.networkhelm.ui.connect.TrustQuestions
+import com.vasmarfas.networkhelm.ui.main.DockerRegistries
+import com.vasmarfas.networkhelm.ui.main.DockerTemplates
+import com.vasmarfas.networkhelm.ui.main.RegistryLogins
 import com.vasmarfas.networkhelm.ui.main.RouterSearch
 import com.vasmarfas.networkhelm.ui.main.RouterTab
 import com.vasmarfas.networkhelm.ui.main.WindowSpec
+import com.vasmarfas.networkhelm.ui.sync.RouterFiles
+import com.vasmarfas.networkhelm.ui.sync.SyncAccess
+import com.vasmarfas.networkhelm.ui.sync.Synchronisation
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.ThemeFile
 import com.vasmarfas.networkhelm.ui.workspace.WindowState
@@ -49,14 +57,23 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
     var selected by mutableIntStateOf(0)
     val tables = TableLayouts(services.storage)
     val questions = TrustQuestions()
+
+    // the certificate of a service of synchronisation is asked about above every window, the window of synchronisation among them
+    val syncQuestions = TrustQuestions()
     val settings = AppSettings(services.storage)
     var about by mutableStateOf(false)
     var settingsShown by mutableStateOf(false)
     val themeEditor = mutableStateOf<ThemeFile?>(null)
     var toolsShown by mutableStateOf(false)
     var accessShown by mutableStateOf(false)
+    var syncShown by mutableStateOf(false)
     val search = RouterSearch(scope)
     val snippets = Snippets(services.storage)
+    internal val dockerTemplates = DockerTemplates(services.storage)
+    internal val dockerRegistries = DockerRegistries(services.secrets)
+    private val routerFiles = RouterFiles(services.storage)
+    internal val synchronisation = Synchronisation(services, saved, snippets, settings, dockerTemplates, routerFiles, syncQuestions::ask)
+    internal val syncAccess = SyncAccess(synchronisation) { syncShown = true }
     var searchShown by mutableStateOf(false)
     var release by mutableStateOf<Release?>(null)
         private set
@@ -73,7 +90,8 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
 
     fun add(session: DeviceSession, address: String, login: RouterOsLogin? = null) {
         val journal = EditJournal()
-        routers += RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, login) { settings.current.tablesAsTabs }
+        val host = if (session.device.platform == Platform.Ssh) RegistryLogins(session, dockerRegistries) else session
+        routers += RouterTab(JournalingSession(host, journal, address), address, packs, services.storage, tables, journal, login, routerFiles, (session as? SshHostSession)?.password) { settings.current.tablesAsTabs }
         selected = routers.size - 1
     }
 
@@ -88,7 +106,7 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
         val place = routers.indexOf(tab)
         disconnect(tab)
         val journal = EditJournal()
-        routers.add(place.coerceIn(0, routers.size), RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, secured) { settings.current.tablesAsTabs })
+        routers.add(place.coerceIn(0, routers.size), RouterTab(JournalingSession(session, journal, address), address, packs, services.storage, tables, journal, secured, routerFiles) { settings.current.tablesAsTabs })
         selected = place.coerceIn(0, routers.size - 1)
         saved.routers.value.firstOrNull { it.address == tab.address && it.user == login.user && it.protocol == Access.Api }?.let { entry ->
             saved.remove(entry)
@@ -141,12 +159,13 @@ class Shell(val services: Services, val scope: CoroutineScope, val canDetach: Bo
     }
 
     val canGoBack: Boolean
-        get() = about || settingsShown || toolsShown || accessShown || searchShown || routers.getOrNull(selected)?.workspace?.windows?.isNotEmpty() == true
+        get() = about || settingsShown || toolsShown || accessShown || syncShown || searchShown || routers.getOrNull(selected)?.workspace?.windows?.isNotEmpty() == true
 
     fun back() {
         when {
             searchShown -> searchShown = false
             accessShown -> accessShown = false
+            syncShown -> syncShown = false
             toolsShown -> toolsShown = false
             themeEditor.value != null -> themeEditor.value = null
             settingsShown -> settingsShown = false

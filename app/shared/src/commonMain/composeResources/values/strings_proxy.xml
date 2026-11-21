@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="proxy_error_no_config">the host has no config file %1$s</string>
+    <string name="proxy_error_no_ncsa">the host has no basic_ncsa_auth of Squid</string>
+    <string name="proxy_error_squid_no_users">Squid takes no users of its own: no auth_param of it names basic_ncsa_auth</string>
+    <string name="proxy_error_no_hasher">the host has neither openssl nor cryptpw to hash the password: the package openssl gives one</string>
+    <string name="proxy_error_user_exists">%1$s has the user %2$s already</string>
+    <string name="proxy_error_no_user">%1$s has no user %2$s</string>
+    <string name="proxy_error_tiny_password">a password of BasicAuth of tinyproxy takes letters, digits, dots, dashes and underscores alone</string>
+    <string name="proxy_error_upstream_password">the password of the upstream may hold no space, quote, colon or @</string>
+    <string name="proxy_error_no_target">the host has no %1$s to take the proxy</string>
+    <string name="proxy_error_login_in_address">the login of the proxy goes into the fields user and password, not into its address</string>
+    <string name="proxy_error_no_json">%1$s is no JSON object</string>
+    <string name="proxy_error_dante_privileged">the method username needs user.privileged root: Dante reads /etc/shadow as that user</string>
+    <string name="proxy_error_no_inbound">%1$s has no inbound %2$s</string>
+    <string name="proxy_error_no_users_added">the app adds no users to an inbound of %1$s</string>
+    <string name="proxy_error_no_link">the app makes no link for an inbound of %1$s</string>
+    <string name="proxy_error_no_key_made">the host made no key: %1$s</string>
+    <string name="proxy_error_no_package">the repositories of the host have no package of %1$s</string>
+    <string name="proxy_error_no_build">the release of %1$s has no build for %2$s</string>
+    <string name="proxy_error_inbound_exists">%1$s has an inbound %2$s already</string>
+    <string name="proxy_error_inbound_port">%1$s has an inbound on port %2$s already</string>
+    <string name="proxy_error_port_taken">port %1$s is taken on the host</string>
+    <string name="proxy_error_example_inbound">the example inbound of sing-box on port %1$s has a published password: remove it or give it a password of its own</string>
+    <string name="proxy_error_link_scheme">the link is none of vless://, vmess://, trojan://, ss:// and hy2://</string>
+    <string name="proxy_error_link_unreadable">the link names no server, port or secret</string>
+    <string name="proxy_error_client_transport">the client takes no transport %1$s</string>
+    <string name="proxy_error_xray_client_link">the client of Xray takes no link of %1$s</string>
+    <string name="proxy_error_no_client">%1$s has no client %2$s</string>
+    <string name="proxy_error_not_on_path">the login finds no %1$s on its PATH</string>
+    <string name="proxy_error_reality_key">the private key of Reality is no 32 bytes of base64url</string>
+    <string name="proxy_error_no_file">the host has no file %1$s</string>
+    <string name="proxy_error_acme_domain">ACME needs a domain of this host in server-name, not %1$s</string>
+    <string name="proxy_error_xray_pin">the client of Xray checks every certificate, and the link gives no pcs to pin this one</string>
+    <string name="proxy_error_sing_box_mlkem">sing-box %1$s leaves X25519MLKEM768 out of its Client Hello of Reality, and servers of Xray refuse such a client: make it on the Clients tab of Xray, which Install Now of Proxy Overview installs</string>
+    <string name="proxy_error_outbound_exists">%1$s has an outbound %2$s already</string>
+    <string name="proxy_error_no_outbound">%1$s has no outbound %2$s</string>
+    <string name="proxy_error_outbound_named">the outbound %1$s is still named in the config: a rule, a chain or DNS goes through it</string>
+    <string name="proxy_error_rule_empty">a rule needs a domain, a geosite, a geoip, an ip or an inbound</string>
+    <string name="proxy_error_sing_box_mlkem_outbound">sing-box %1$s leaves X25519MLKEM768 out of its Client Hello of Reality, and servers of Xray refuse such a client: make this outbound in Xray</string>
+    <string name="proxy_error_squid_parent_password">the password of the parent proxy may hold no space, quote or #</string>
+    <string name="proxy_config_save">Check and Save</string>
+    <string name="proxy_config_reread">Read Again</string>
+    <string name="proxy_config_hint">The program checks the file before it takes the place of the old one; a running service starts again with it.</string>
+    <string name="proxy_config_done">The file passed the check and is in place.</string>
+</resources>

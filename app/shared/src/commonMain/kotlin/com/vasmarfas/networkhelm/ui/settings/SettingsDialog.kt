@@ -135,6 +135,9 @@ import networkhelm.app.shared.generated.resources.settings_terminal
 import networkhelm.app.shared.generated.resources.settings_theme
 import networkhelm.app.shared.generated.resources.settings_title
 import networkhelm.app.shared.generated.resources.settings_unreadable
+import networkhelm.app.shared.generated.resources.sync_settings
+import networkhelm.app.shared.generated.resources.sync_settings_off
+import networkhelm.app.shared.generated.resources.sync_settings_on
 import kotlin.math.abs
 import kotlin.math.roundToInt
 
@@ -149,6 +152,8 @@ fun SettingsDialog(
     settings: AppSettings,
     access: BrowserAccess? = null,
     onBrowserAccess: () -> Unit = {},
+    onSync: (() -> Unit)? = null,
+    syncOn: Boolean = false,
     themeEditor: MutableState<ThemeFile?> = remember { mutableStateOf(null) },
     updates: Boolean = true,
     tables: TableLayouts? = null,
@@ -316,6 +321,14 @@ fun SettingsDialog(
                 if (updates) {
                     Toggle(current.checkUpdates, stringResource(Res.string.settings_check_updates), stringResource(Res.string.settings_check_updates_hint), "check-updates") { on ->
                         act { settings.change { it.copy(checkUpdates = on) } }
+                    }
+                }
+                if (onSync != null) {
+                    Labeled("") {
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Button(stringResource(Res.string.sync_settings), onSync, Modifier.testTag("sync-settings"))
+                            Text(stringResource(if (syncOn) Res.string.sync_settings_on else Res.string.sync_settings_off), color = if (syncOn) palette.accent else palette.muted, style = Theme.type.small)
+                        }
                     }
                 }
                 if (access != null) {

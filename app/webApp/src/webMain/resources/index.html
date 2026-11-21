@@ -26,6 +26,31 @@
             return WebAssembly.instantiate(await response.arrayBuffer(), imports, options);
         };
     </script>
-    <script type="application/javascript" src="webApp.js"></script>
+    <script type="application/javascript">
+        // sign-ins to the clouds come back here, and the page passes their answers on without starting the app: the window of a sign-in
+        // of the page hands the address to the page that opened it; the state of a sign-in of the app on iOS names the scheme of the app;
+        // the app of a desktop or Android signing in to CloudKit gets the web token on its loopback address, whose port the page keeps
+        // for ten minutes
+        (() => {
+            const query = new URLSearchParams(location.search);
+            const answered = /[?&](state|ckWebAuthToken|ckSession)=/.test(location.search);
+            const relay = (localStorage.getItem('networkhelm-relay') || '').split(' ');
+            if (answered && localStorage.getItem('networkhelm-sign-in') === 'waiting') {
+                localStorage.setItem('networkhelm-sign-in', location.href);
+                window.close();
+                document.body.textContent = navigator.language.startsWith('ru') ? 'NetworkHelm: вход выполнен, окно можно закрыть.' : 'NetworkHelm: you are signed in, this window can be closed.';
+            } else if (/^networkhelm\./.test(query.get('state') || '')) {
+                location.replace('networkhelm://signin' + location.search);
+            } else if (/^\d+$/.test(query.get('relay') || '') && /^https:\/\/idmsa\.apple\.com\//.test(query.get('to') || '')) {
+                localStorage.setItem('networkhelm-relay', query.get('relay') + ' ' + Date.now());
+                location.replace(query.get('to'));
+            } else if (answered && relay.length === 2 && Date.now() - Number(relay[1]) < 600000) {
+                localStorage.removeItem('networkhelm-relay');
+                location.replace('http://127.0.0.1:' + relay[0] + '/' + location.search);
+            } else {
+                document.body.appendChild(Object.assign(document.createElement('script'), { type: 'application/javascript', src: 'webApp.js' }));
+            }
+        })();
+    </script>
 </body>
 </html>

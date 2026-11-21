@@ -109,7 +109,6 @@ import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.routeros.schema.label
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.SafeMode
-import com.vasmarfas.networkhelm.session.SshHostSession
 import com.vasmarfas.networkhelm.transport.tcpListening
 import com.vasmarfas.networkhelm.ui.files.FileWindow
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
@@ -128,6 +127,7 @@ import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
 import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.log.LocalLogWindows
 import com.vasmarfas.networkhelm.ui.log.LogEntryView
+import com.vasmarfas.networkhelm.ui.sync.SyncMark
 import com.vasmarfas.networkhelm.ui.table.marked
 import com.vasmarfas.networkhelm.ui.terminal.LocalTerminal
 import com.vasmarfas.networkhelm.ui.terminal.TelnetView
@@ -231,6 +231,7 @@ fun MainScreen(
     val palette = Theme.palette
     LaunchedEffect(tab) { tab.openMenu() }
     LaunchedEffect(tab) { tab.keepLayout() }
+    LaunchedEffect(tab) { tab.session.structure.collect { tab.loadMenu() } }
     LaunchedEffect(tab) { tab.session.ssh?.reach() }
     LaunchedEffect(tab, tab.updating) {
         tab.checkRouterUpdate()
@@ -319,6 +320,7 @@ fun MainScreen(
                 )
             }
             safeMode?.let { held -> Stranded(held) { problem = it } }
+            DockerGroupNotice(tab)
             if (LocalCompact.current) {
                 Phone(tab, onSecure, Modifier.weight(1f).fillMaxWidth())
             } else {
@@ -329,7 +331,7 @@ fun MainScreen(
                         tab.specs[window.id]?.takeIf { it.selector || it.tabs.size > 1 }?.let { spec ->
                             if (spec.selector) Box(Modifier.fillMaxHeight(), contentAlignment = Alignment.CenterStart) { ModeSelect(spec) }
                             else TabStrip(spec.tabs.map { it.title }, spec.selected, { spec.selected = it }, Modifier.fillMaxHeight(), titleText = colour)
-                        }
+                        } ?: ContainersTitleTabs(tab, window, colour)
                     }
                     Workspace(
                         tab.workspace,
@@ -406,20 +408,25 @@ private fun WindowContent(tab: RouterTab, window: WindowState, onSecure: (suspen
         }
     }
     if (window.id == tab.topologyWindow) TopologyView(tab)
+    if (window.id == tab.vpnPanelWindow) LinuxVpnPanelView(tab)
     tab.comparisons[window.id]?.let { CompareView(tab, it) }
     if (window.id == tab.prepareWindow) PrepareView(tab.session, onSecure)
     if (window.id == tab.dhcpSetupWindow) DhcpSetupView(tab.session)
     if (window.id in tab.terminals) {
         val ssh = tab.session.ssh
         val terminal = LocalTerminal.current
-        val sudo = if (tab.session.device.platform == Platform.Ssh) (tab.session as? SshHostSession)?.password.orEmpty() else null
-        if (ssh != null && terminal != null) TerminalView(ssh, tab.consoles, window.id, sudo = sudo, terminal = terminal)
+        val sudo = if (tab.session.device.platform == Platform.Ssh) tab.sudo.orEmpty() else null
+        if (ssh != null && terminal != null) TerminalView(ssh, tab.consoles, window.id, startup = tab.terminalStarts[window.id], sudo = sudo, terminal = terminal)
     }
     if (window.id in tab.telnets) {
         val ssh = tab.session.ssh
         val terminal = LocalTerminal.current
         if (ssh != null && terminal != null) TelnetView(ssh, tab.consoles, window.id, terminal, tab.telnetCalls[window.id])
     }
+    tab.containers[window.id]?.let { LinuxDockerContainerView(tab, window.id, it.container, it.tab, tab.sudo.orEmpty()) }
+    tab.dockers[window.id]?.let { LinuxDockerView(tab, it) }
+    tab.proxies[window.id]?.let { LinuxProxyView(tab, it) }
+    tab.vpns[window.id]?.let { LinuxVpnView(tab, it) }
 }
 
 @Composable
@@ -620,6 +627,7 @@ private fun Toolbar(
         val tools = stringResource(Res.string.tools_title)
         val reload = stringResource(Res.string.main_reload_structure)
         val reloads = tab.session.device.platform == Platform.RouterOs
+        SyncMark()
         if (compact) {
             val more = buildList<Pair<String, () -> Unit>> {
                 add(journal to { tab.openJournal(journal) })

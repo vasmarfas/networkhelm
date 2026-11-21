@@ -101,7 +101,7 @@ fun FieldEditor(argument: Argument, value: String, onChange: (String) -> Unit, m
             if (type.closed && choices.size in 2..4 && choices.sumOf { named(it).length } <= 32) Segments(shown, choices, { named(it) }, onChange, modifier)
             else Select(shown, choices, { argument.labels[it] ?: it }, onChange, modifier, apart = { it in argument.apart })
         }
-        type is ValueType.Many -> Lines(type, value, onChange, modifier, argument.choices)
+        type is ValueType.Many -> Lines(type, value, onChange, modifier, argument.choices, hidden = hide && type.element == ValueType.Secret)
         type is ValueType.TimeWindow -> TimeWindowField(type, value, onChange, modifier)
         type is ValueType.Rate -> RateField(type, value, onChange, modifier)
         type is ValueType.ConnectionLimit -> ConnectionLimitField(type, value, onChange, modifier)
@@ -294,7 +294,7 @@ private fun Flags(choices: List<String>, value: String, onChange: (String) -> Un
 }
 
 @Composable
-private fun Lines(type: ValueType.Many, value: String, onChange: (String) -> Unit, modifier: Modifier, choices: List<String>) {
+private fun Lines(type: ValueType.Many, value: String, onChange: (String) -> Unit, modifier: Modifier, choices: List<String>, hidden: Boolean) {
     val separator = type.separator
     val lines = value.split(separator)
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -303,13 +303,15 @@ private fun Lines(type: ValueType.Many, value: String, onChange: (String) -> Uni
                 fun set(text: String) = onChange(lines.toMutableList().also { it[index] = text }.joinToString(separator))
                 val negated = type.negatable && line.startsWith("!")
                 val text = if (type.negatable) line.removePrefix("!") else line
+                // a lambda and not a reference to a local function: Compose remembers such a reference without the lines it captured
+                val write = { typed: String -> set((if (negated) "!" else "") + typed) }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (type.negatable) {
                         NegationToggle(negated) { set((if (it) "!" else "") + text) }
                         Spacer(Modifier.width(4.dp))
                     }
                     Box(Modifier.weight(1f)) {
-                        Line(type.element, text, { set((if (negated) "!" else "") + it) }, Modifier.fillMaxWidth(), choices)
+                        if (hidden) SecretField(synced(text, write), Modifier.fillMaxWidth()) else Line(type.element, text, write, Modifier.fillMaxWidth(), choices)
                     }
                     IconButton(Lucide.ChevronDown, stringResource(Res.string.form_add_line), {
                         onChange(lines.toMutableList().also { it.add(index + 1, "") }.joinToString(separator))

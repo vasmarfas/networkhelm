@@ -12,6 +12,8 @@ import com.vasmarfas.networkhelm.session.connectOpenWrtWithSsh
 import com.vasmarfas.networkhelm.session.connectWithSsh
 import com.vasmarfas.networkhelm.transport.TrustKind
 import com.vasmarfas.networkhelm.transport.TrustStore
+import com.vasmarfas.networkhelm.transport.Trusted
+import com.vasmarfas.networkhelm.ui.sync.bookmarkedFolder
 import eu.anifantakis.lib.ksafe.KSafe
 import platform.Foundation.NSUserDefaults
 
@@ -32,6 +34,7 @@ fun iosServices(): Services {
             null
         },
         typedMac = broadcasts,
+        syncFolder = ::bookmarkedFolder,
         connect = { login, trust, scope -> connectWithSsh(login, trust, scope, native = login.nativeSide(scope)) },
         connectTcp8291 = ::connectNativeHost,
         readWinBoxBook = WinBoxAddressBook::read,
@@ -53,6 +56,13 @@ private class DefaultsTrustStore : TrustStore {
     override suspend fun get(host: String, port: Int, kind: TrustKind) = defaults.stringForKey(key(host, port, kind))
 
     override suspend fun put(host: String, port: Int, kind: TrustKind, fingerprint: String) = defaults.setObject(fingerprint, key(host, port, kind))
+
+    override suspend fun all(): List<Trusted> = defaults.dictionaryRepresentation().mapNotNull { (key, value) ->
+        val parts = (key as? String)?.split('/') ?: return@mapNotNull null
+        val kind = TrustKind.entries.firstOrNull { it.name == parts.getOrNull(1) }
+        val port = parts.getOrNull(3)?.toIntOrNull()
+        if (parts.size == 4 && parts[0] == "trust" && kind != null && port != null && value is String) Trusted(parts[2], port, kind, value) else null
+    }
 
     private fun key(host: String, port: Int, kind: TrustKind) = "trust/$kind/$host/$port"
 }

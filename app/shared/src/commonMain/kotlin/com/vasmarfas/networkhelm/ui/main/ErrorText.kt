@@ -4,6 +4,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.openwrt.RequestOutcomeUnknownException
+import com.vasmarfas.networkhelm.ui.sync.syncCloudErrorTemplates
+import com.vasmarfas.networkhelm.ui.sync.syncErrorTemplates
 import org.jetbrains.compose.resources.StringResource
 import org.jetbrains.compose.resources.getString
 import org.jetbrains.compose.resources.stringResource
@@ -509,6 +511,7 @@ import networkhelm.app.shared.generated.resources.error_snmp_unknown_oid
 import networkhelm.app.shared.generated.resources.error_snmp_unknown_user
 import networkhelm.app.shared.generated.resources.error_snmp_value_type
 import networkhelm.app.shared.generated.resources.error_snmp_window_limits
+import networkhelm.app.shared.generated.resources.error_ssh_no_free_channel
 import networkhelm.app.shared.generated.resources.error_ssh_platform
 import networkhelm.app.shared.generated.resources.error_table_number
 import networkhelm.app.shared.generated.resources.error_table_unknown
@@ -740,6 +743,7 @@ internal val errorTemplates: List<Pair<String, StringResource>> = listOf(
     "no query at [%1\$s]" to Res.string.error_native_no_query,
     "the object model has no lines where the console has some" to Res.string.error_native_no_lines,
     "the channel of the window dropped" to Res.string.error_native_channel_dropped,
+    "no channel of the connection got free in 30 seconds: the windows that stream hold them all" to Res.string.error_ssh_no_free_channel,
     "the router drops the channel every time [%1\$s] is read" to Res.string.error_native_drops,
     "the session is closed" to Res.string.error_session_closed,
     "this connection has no native channel" to Res.string.error_native_none,
@@ -779,9 +783,9 @@ internal val errorTemplates: List<Pair<String, StringResource>> = listOf(
     "%1\$s has no rule %2\$s" to Res.string.error_no_rule,
     "a rule needs its matches and its action, as -p tcp --dport 22 -j ACCEPT" to Res.string.error_rule_parts,
     "%1\$s has no chain %2\$s" to Res.string.error_no_chain,
-    "the host did not keep the rules it had: %1\$s" to Res.string.error_rules_lost_detail,
-    "the host did not keep the rules it had" to Res.string.error_rules_lost,
-    "the host stopped answering after the change: the rules it had come back in a minute" to Res.string.error_rules_rollback,
+    "the host did not keep what it had before the change: %1\$s" to Res.string.error_rules_lost_detail,
+    "the host did not keep what it had before the change" to Res.string.error_rules_lost,
+    "the host stopped answering after the change: what it had comes back in a minute" to Res.string.error_rules_rollback,
     "%1\$s: %2\$s is not a value it takes" to Res.string.error_value_not_taken,
     "%1\$s: a value is needed" to Res.string.error_value_needed,
     "%1\$s gave no JSON" to Res.string.error_command_no_json,
@@ -1098,13 +1102,16 @@ internal val errorTemplates: List<Pair<String, StringResource>> = listOf(
     "%1\$s is no mode of Ping Check" to Res.string.error_keenetic_ping_check_mode,
     "%1\$s is no security the app sets on a Wi-Fi connection" to Res.string.error_keenetic_wisp_security,
     "the Wi-Fi network needs its key" to Res.string.error_keenetic_wisp_key,
-    "after the change the host let no new SSH session in: the rules it had are back" to Res.string.error_linux_new_login_refused,
+    "after the change the host let no new SSH session in: what it had is back" to Res.string.error_linux_new_login_refused,
 )
 
 private val part = Regex("""%\d+[$]s""")
 
+// the windows of synchronisation, VPN and containers keep their messages in their own files
+internal fun allErrorTemplates() = errorTemplates + syncErrorTemplates + vpnErrorTemplates + dockerErrorTemplates + proxyErrorTemplates + syncCloudErrorTemplates + proxmoxErrorTemplates + vpnServersErrorTemplates
+
 // the template with the most fixed text goes first, so a general one does not take the message of a narrower one
-private val patterns by lazy { errorTemplates.sortedByDescending { it.first.replace(part, "").length }.map { (template, key) -> pattern(template) to key } }
+private val patterns by lazy { allErrorTemplates().sortedByDescending { it.first.replace(part, "").length }.map { (template, key) -> pattern(template) to key } }
 
 // a template that opens with a part takes one word there, so a text of a router that only ends the way a template does stays as it is
 private fun pattern(template: String): Regex {

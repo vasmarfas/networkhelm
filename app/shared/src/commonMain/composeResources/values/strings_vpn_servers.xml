@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vpn_servers_error_ike_profile">text: a profile of IKEv2 or the certificate of its CA in PEM is needed</string>
+    <string name="vpn_servers_error_ike_same_id">the server %1$s already answers as %2$s: clients would get its certificate; give the new server another name or address for clients, or change %3$s</string>
+    <string name="vpn_servers_error_l2tp_server">the host is a server of L2TP and can be no client of another</string>
+    <string name="vpn_servers_error_l2tp_exists">the host has an L2TP connection %1$s already</string>
+    <string name="vpn_servers_error_l2tp_no_connection">the host has no L2TP connection %1$s</string>
+    <string name="vpn_servers_error_pptp_insecure">PPTP gives the logins and traffic of its users to anyone who records them, as MS-CHAPv2 is broken in hours: tick Insecure, Create It</string>
+    <string name="vpn_servers_error_pptp_change">PPTP gives the logins and traffic of its users to anyone who records them: tick Insecure, Change It</string>
+    <string name="vpn_servers_error_pptp_exists">the host has a PPTP connection %1$s already</string>
+    <string name="vpn_servers_error_pptp_no_connection">the host has no PPTP connection %1$s</string>
+    <string name="vpn_servers_error_pptp_no_client">the host has no pptp: its package is pptp-linux on Debian and Ubuntu and pptp elsewhere</string>
+</resources>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="vpn_servers_error_ike_profile">text: нужен профиль IKEv2 или сертификат его CA в PEM</string>
+    <string name="vpn_servers_error_ike_same_id">сервер %1$s уже отвечает как %2$s: клиенты получат его сертификат; дайте новому серверу другое имя или адрес для клиентов или измените %3$s</string>
+    <string name="vpn_servers_error_l2tp_server">хост — сервер L2TP и не может быть клиентом другого</string>
+    <string name="vpn_servers_error_l2tp_exists">на хосте уже есть подключение L2TP %1$s</string>
+    <string name="vpn_servers_error_l2tp_no_connection">на хосте нет подключения L2TP %1$s</string>
+    <string name="vpn_servers_error_pptp_insecure">PPTP отдаёт логины и трафик пользователей любому, кто их запишет, — MS-CHAPv2 вскрывается за часы: отметьте Insecure, Create It</string>
+    <string name="vpn_servers_error_pptp_change">PPTP отдаёт логины и трафик пользователей любому, кто их запишет: отметьте Insecure, Change It</string>
+    <string name="vpn_servers_error_pptp_exists">на хосте уже есть подключение PPTP %1$s</string>
+    <string name="vpn_servers_error_pptp_no_connection">на хосте нет подключения PPTP %1$s</string>
+    <string name="vpn_servers_error_pptp_no_client">на хосте нет pptp: его пакет — pptp-linux в Debian и Ubuntu и pptp в других системах</string>
+</resources>

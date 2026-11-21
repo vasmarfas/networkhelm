@@ -375,19 +375,21 @@ fun ItemForm(
     }.associate { it.name to it.default.orEmpty() }
 
     val platform = session.device.platform
+    fun line(path: MenuPath, kind: EditKind, ids: List<String>, values: Map<String, String?>) =
+        session.hostCommand(path, kind, ids, values) ?: command(platform, path, kind, ids, values)
     fun commands(): String = buildList {
         val changes = form.changes()
         val target = spec.id
         when {
             changes.isEmpty() -> Unit
-            current.kind == NodeKind.Settings -> add(command(platform, spec.path, EditKind.Set, emptyList(), changes))
-            target != null -> add(command(platform, spec.path, EditKind.Set, listOf(target), changes))
-            else -> add(command(platform, spec.path, EditKind.Add, emptyList(), defaults() + changes.filterValues { it != null }))
+            current.kind == NodeKind.Settings -> add(line(spec.path, EditKind.Set, emptyList(), changes))
+            target != null -> add(line(spec.path, EditKind.Set, listOf(target), changes))
+            else -> add(line(spec.path, EditKind.Add, emptyList(), defaults() + changes.filterValues { it != null }))
         }
         for (source in related.values) {
             val other = source.form.changes()
             val id = source.id ?: continue
-            if (other.isNotEmpty()) add(command(platform, source.path, EditKind.Set, listOf(id), other))
+            if (other.isNotEmpty()) add(line(source.path, EditKind.Set, listOf(id), other))
         }
     }.joinToString("\n")
 
@@ -412,7 +414,11 @@ fun ItemForm(
                 changes.isEmpty() && !(creating && target == null) -> Unit
                 current.kind == NodeKind.Settings -> session.set(spec.path, null, changes)
                 target != null -> session.set(spec.path, target, changes)
-                else -> spec.id = session.add(spec.path, defaults() + changes.mapNotNull { (key, value) -> value?.let { key to it } }.toMap())
+                else -> {
+                    val made = session.add(spec.path, defaults() + changes.mapNotNull { (key, value) -> value?.let { key to it } }.toMap())
+                    spec.id = made
+                    spec.shown?.actions?.firstOrNull { it.added }?.let { action -> action.output?.let { output = action.title to session.output(spec.path, action, listOf(made), it) } }
+                }
             }
             form.applied(changes)
             for (source in related.values) {
@@ -466,7 +472,7 @@ fun ItemForm(
         ScriptSupport(if (session.device.platform == Platform.RouterOs && session.capabilities.menuContents) { text -> highlight(session, text) } else null)
     }
     val labelColumn = remember(spec) { LabelColumn() }
-    val accept by rememberUpdatedState<() -> Unit> { if (!busy && !misfit()) scope.launch { if (apply()) onClose() } }
+    val accept by rememberUpdatedState<() -> Unit> { if (!busy && !misfit()) scope.launch { if (apply() && output == null) onClose() } }
     val submit = remember(spec) { { accept() } }
     val firstFocus = remember(spec) { FirstFocus() }
     CompositionLocalProvider(LocalScripts provides scripts, LocalLabelColumn provides labelColumn, LocalSubmit provides submit) {
@@ -495,7 +501,7 @@ fun ItemForm(
                     val links = present(session, spec.shown?.links.orEmpty()).filter { it.depends.hold(form, current) }
                     fun open(link: PackLink) {
                         val element = form.value("name") ?: id
-                        onOpenWindow(MenuEntry(link.title, link.path, window = link.window, arguments = link.argument?.let { argument -> element?.let { mapOf(argument to it) } }.orEmpty()))
+                        onOpenWindow(MenuEntry(link.title, link.path, window = link.window, arguments = link.argument?.let { argument -> element?.let { mapOf(argument to it) } }.orEmpty(), item = link.item))
                     }
                     fun besideOf(field: String): (@Composable () -> Unit)? {
                         val own = actions.filter { it.beside == field }
@@ -639,7 +645,7 @@ fun ItemForm(
                             if (plain) Button(title, onClick, wide.then(marked)) else ToolbarButton(title, icon, onClick, marked, tint = tint)
                         }
                         if (classic) {
-                            if (saves) Button(stringResource(Res.string.form_ok), { scope.launch { if (apply()) onClose() } }, wide, enabled = !busy && !unconfirmed() && !misfit(), primary = true)
+                            if (saves) Button(stringResource(Res.string.form_ok), { scope.launch { if (apply() && output == null) onClose() } }, wide, enabled = !busy && !unconfirmed() && !misfit(), primary = true)
                             Button(stringResource(if (saves) Res.string.list_cancel else Res.string.form_close), onClose, wide)
                             if (saves) {
                                 Button(stringResource(Res.string.form_apply), { scope.launch { apply() } }, wide, enabled = !busy && (changed() || creating) && !unconfirmed() && !misfit())
@@ -669,7 +675,7 @@ fun ItemForm(
                         }
                         if (panelLinks.isNotEmpty()) {
                             if (!compact && !plain) Text(stringResource(Res.string.form_configuration), Modifier.padding(top = 10.dp, bottom = 2.dp), style = Theme.type.strong)
-                            for (link in panelLinks) command(link.title, Lucide.Settings, tag = "link-${link.title}") { open(link) }
+                            for (link in panelLinks) command(link.title, Theme.icons["link/${link.title}"]?.vector ?: Lucide.Settings, tag = "link-${link.title}") { open(link) }
                         }
                     }
                 }
@@ -683,7 +689,7 @@ fun ItemForm(
                     Button(stringResource(if (saves) Res.string.list_cancel else Res.string.form_close), onClose, each)
                     if (saves) {
                         Button(stringResource(Res.string.form_apply), { scope.launch { apply() } }, each, enabled = !busy && (changed() || creating) && !unconfirmed() && !misfit())
-                        Button(stringResource(Res.string.form_ok), { scope.launch { if (apply()) onClose() } }, each, enabled = !busy && !unconfirmed() && !misfit(), primary = true)
+                        Button(stringResource(Res.string.form_ok), { scope.launch { if (apply() && output == null) onClose() } }, each, enabled = !busy && !unconfirmed() && !misfit(), primary = true)
                     }
                 }
                 val flagged = spec.shown.letters().map { it.first }.filter { form.router[it] == "true" }
@@ -1034,7 +1040,7 @@ private val switches = setOf(ValueType.YesNo, ValueType.Flag, ValueType.Switch)
 
 private fun typed(value: String) = value.toLongOrNull()?.let(::limit) ?: value
 
-private val protocolNumber = Regex("""0x\p{XDigit}+|\d+""")
+private val protocolNumber = Regex("""0x[0-9A-Fa-f]+|\d+""")
 
 @Composable
 internal fun waitsFor(only: List<PackCondition>, field: String, value: (String) -> String?, labels: Map<String, String>): String? {

@@ -122,6 +122,11 @@ kotlin {
             implementation(project(":miknative"))
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.termlib)
+            implementation(libs.androidx.activity.compose)
+            implementation(libs.androidx.camera.camera2)
+            implementation(libs.androidx.camera.lifecycle)
+            implementation(libs.androidx.camera.compose)
+            implementation(libs.zxing.core)
         }
         iosMain.dependencies {
             implementation(project(":miknative"))
