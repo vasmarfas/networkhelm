@@ -20,7 +20,6 @@ import platform.CoreFoundation.CFDataGetLength
 import platform.CoreFoundation.CFErrorCopyDescription
 import platform.CoreFoundation.CFRelease
 import platform.Foundation.CFBridgingRelease
-import platform.Network.NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT
 import platform.Network.nw_connection_cancel
 import platform.Network.nw_connection_create
 import platform.Network.nw_connection_receive
@@ -33,6 +32,7 @@ import platform.Network.nw_connection_state_failed
 import platform.Network.nw_connection_state_ready
 import platform.Network.nw_connection_state_waiting
 import platform.Network.nw_connection_t
+import platform.Network.nw_content_context_create
 import platform.Network.nw_endpoint_create_host
 import platform.Network.nw_error_copy_cf_error
 import platform.Network.nw_error_t
@@ -88,6 +88,9 @@ actual suspend fun openTls(host: String, port: Int, pinnedSha256: String?, timeo
 private class NetworkTlsStream(private val connection: nw_connection_t, override val certificateSha256: String) : TlsStream {
     private var ended = false
 
+    // since iOS 27 the NW_CONNECTION_*_CONTEXT constants are blocks, and Kotlin/Native aborts on reading a block as an object
+    private val context = nw_content_context_create("write")
+
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
         if (ended) return -1
         return suspendCancellableCoroutine { continuation ->
@@ -113,7 +116,7 @@ private class NetworkTlsStream(private val connection: nw_connection_t, override
         // without a destructor dispatch_data_create copies the bytes, so they need not stay pinned
         val data = bytes.usePinned { dispatch_data_create(it.addressOf(0), bytes.size.convert(), null, null) }
         suspendCancellableCoroutine { continuation ->
-            nw_connection_send(connection, data, NW_CONNECTION_DEFAULT_MESSAGE_CONTEXT, false) { error ->
+            nw_connection_send(connection, data, context, false) { error ->
                 if (error == null) continuation.resume(Unit) else continuation.resumeWithException(IOException(describe(error)))
             }
         }
