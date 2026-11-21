@@ -1,5 +1,7 @@
 package com.vasmarfas.networkhelm.demo
 
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Item
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
@@ -48,11 +50,13 @@ internal fun counting(bytes: String = "bytes", packets: String = "packets"): Liv
     mapOf(bytes to "${salt * 1_000L + tick * 1_480L * speed}", packets to "${salt * 1_000L / 700 + tick * speed}")
 }
 
-internal fun monitorTraffic(arguments: Map<String, String>): Flow<Item> = flow {
+internal fun refusal(reason: String): Flow<Item> = flow { throw DeviceException(ErrorCategory.General, "this is a demo router: $reason") }
+
+internal fun monitorTraffic(arguments: Map<String, String>, uplink: String = "ether1"): Flow<Item> = flow {
     val names = arguments["interface"].orEmpty().split(',').filter { it.isNotEmpty() }
     var tick = 0
     while (true) {
-        for (name in names) emit(Item("", mapOf("name" to name) + interfaceRates(name, name == "ether1", true, tick)))
+        for (name in names) emit(Item("", mapOf("name" to name) + interfaceRates(name, name == uplink, true, tick)))
         tick++
         delay(1000)
     }

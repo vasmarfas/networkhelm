@@ -13,18 +13,36 @@ internal fun vyosDemo(): DemoSession = demoSession(
         row(".name=eth0", "description=WAN", "address=dhcp", "hw-id=00:00:5e:00:53:61", "mtu=1500", "speed=auto", "duplex=auto")
         row(".name=eth1", "description=LAN", "address=172.31.10.1/24", "hw-id=00:00:5e:00:53:62", "mtu=1500", "speed=auto", "duplex=auto", "vif=20")
         row(".name=eth2", "description=lab", "address=172.31.20.1/24", "hw-id=00:00:5e:00:53:63", "mtu=1500", "speed=auto", "duplex=auto")
+        row(".name=eth3", "description=storage A", "hw-id=00:00:5e:00:53:64", "mtu=9000", "speed=auto", "duplex=auto")
+        row(".name=eth4", "description=storage B", "hw-id=00:00:5e:00:53:6a", "mtu=9000", "speed=auto", "duplex=auto")
     }
     list("interfaces/bridge") {
         row(".name=br0", "description=hosts", "address=10.0.0.1/24", "member interface=eth2")
     }
+    list("interfaces/bonding", fields = listOf(choice("mode", "802.3ad", "active-backup", "broadcast", "round-robin", "transmit-load-balance", "adaptive-load-balance", "xor-hash"))) {
+        row(".name=bond0", "description=storage", "address=172.31.30.1/24", "mode=802.3ad", "hash-policy=layer3+4", "member interface=eth3,eth4", "mtu=9000")
+    }
     list("interfaces/wireguard") {
         row(".name=wg01", "description=site-to-site", "address=10.77.0.1/30", "port=51820", "peer=branch")
+    }
+    list("interfaces/pppoe") {
+        row(".name=pppoe0", "description=backup ISP", "source-interface=eth0", "authentication username=demo-user", "authentication password=demo-pass", "mtu=1492", "disable=")
+    }
+    list("interfaces/dummy") {
+        row(".name=dum0", "description=router id", "address=10.255.255.1/32")
+    }
+    list("interfaces/loopback") {
+        row(".name=lo", "description=")
     }
     list("status/interfaces", writable = false) {
         row("interface=eth0", "ip-address=203.0.113.100/24", "mac=00:00:5e:00:53:61", "vrf=default", "mtu=1500", "s-l=u/u", "rx-bytes=912340112", "tx-bytes=88120344", "rx-errors=0", "tx-errors=0", "description=WAN")
         row("interface=eth1", "ip-address=172.31.10.1/24", "mac=00:00:5e:00:53:62", "vrf=default", "mtu=1500", "s-l=u/u", "rx-bytes=88120344", "tx-bytes=912340112", "rx-errors=0", "tx-errors=0", "description=LAN")
         row("interface=eth2", "ip-address=172.31.20.1/24", "mac=00:00:5e:00:53:63", "vrf=default", "mtu=1500", "s-l=u/u", "rx-bytes=4120344", "tx-bytes=912344", "rx-errors=0", "tx-errors=0", "description=lab")
         row("interface=wg01", "ip-address=10.77.0.1/30", "mac=", "vrf=default", "mtu=1420", "s-l=u/u", "rx-bytes=18340", "tx-bytes=22110", "rx-errors=0", "tx-errors=0", "description=site-to-site")
+        row("interface=bond0", "ip-address=172.31.30.1/24", "mac=00:00:5e:00:53:64", "vrf=default", "mtu=9000", "s-l=u/u", "rx-bytes=51203990112", "tx-bytes=48117302440", "rx-errors=0", "tx-errors=0", "description=storage")
+        row("interface=dum0", "ip-address=10.255.255.1/32", "mac=00:00:5e:00:53:6b", "vrf=default", "mtu=1500", "s-l=u/u", "rx-bytes=0", "tx-bytes=0", "rx-errors=0", "tx-errors=0", "description=router id")
+        row("interface=lo", "ip-address=127.0.0.1/8", "mac=00:00:00:00:00:00", "vrf=default", "mtu=65536", "s-l=u/u", "rx-bytes=120334", "tx-bytes=120334", "rx-errors=0", "tx-errors=0", "description=")
+        row("interface=pppoe0", "ip-address=", "mac=", "vrf=default", "mtu=1492", "s-l=A/D", "rx-bytes=0", "tx-bytes=0", "rx-errors=0", "tx-errors=0", "description=backup ISP")
     }
     list("firewall/ipv4/forward/filter/rule", ordered = true, fields = listOf(choice("action", "accept", "drop", "reject", "jump", "return"), choice("protocol", "tcp", "udp", "icmp", "all"))) {
         row(".name=10", "action=accept", "state=established,related", "description=Allow established")
@@ -45,6 +63,10 @@ internal fun vyosDemo(): DemoSession = demoSession(
     list("firewall/group/address-group") {
         row(".name=admins", "address=172.31.10.101", "description=Admin workstations")
     }
+    list("firewall/group/network-group") {
+        row(".name=internal", "network=172.31.10.0/24,172.31.20.0/24,172.31.30.0/24", "description=Internal networks")
+        row(".name=documentation", "network=192.0.2.0/24,198.51.100.0/24,203.0.113.0/24", "description=Never routed")
+    }
     list("firewall/group/port-group") {
         row(".name=web", "port=80,443", "description=Web")
     }
@@ -57,6 +79,11 @@ internal fun vyosDemo(): DemoSession = demoSession(
     list("protocols/static/route") {
         row(".name=0.0.0.0/0", "next-hop=203.0.113.1", "description=ISP")
         row(".name=10.30.0.0/16", "next-hop=10.77.0.2", "description=branch over the tunnel")
+    }
+    list("protocols/static/route6") {
+        row(".name=::/0", "next-hop=2001:db8:ffff::1", "description=ISP")
+        row(".name=2001:db8:30::/48", "interface=wg01", "description=branch over the tunnel")
+        row(".name=2001:db8:dead::/48", "blackhole=", "description=never leaves the router")
     }
     list("status/routes", writable = false) {
         row("dst-address=0.0.0.0/0", "gateway=203.0.113.1", "interface=eth0", "protocol=static", "distance=1", "metric=0", "uptime=3d04h", "vrf=default")

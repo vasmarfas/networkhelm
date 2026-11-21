@@ -215,4 +215,5 @@ internal fun keeneticDemo(): DemoSession = demoSession(
     settings("rc/wireguard-server", "interface=Bridge0", "subnet=172.16.6.1/24", "nat=true", "enable=true")
     settings("rc/ntp", "server=1.ntp.keenetic.ru", "master=false")
     settings("rc/mws", "acl=false", "auto-ap-shutdown=false")
+    keeneticServicesDemo()
 }

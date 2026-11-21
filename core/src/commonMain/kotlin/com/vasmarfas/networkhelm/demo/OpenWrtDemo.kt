@@ -42,12 +42,34 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     list("network/route") {
         row("interface=lan", "target=10.20.0.0", "netmask=255.255.0.0", "gateway=192.168.1.254", "metric=0", "table=main")
     }
+    list("network/route6") {
+        row("interface=lan", "target=2001:db8:20::/48", "gateway=fd12:3456:789a::fe", "metric=0", "table=main")
+    }
+    list("network/rule") {
+        row("in=lan", "src=192.168.1.113/32", "lookup=100", "priority=1000")
+        row("dest=10.200.0.0/24", "lookup=main", "priority=900")
+    }
+    list("network/rule6") {
+        row("in=lan", "src=fd12:3456:789a::113/128", "lookup=100", "priority=1000")
+    }
+    list("network/bridge-vlan", fields = listOf(many("ports"))) {
+        row("device=br-lan", "vlan=1", "ports=lan1:u*\nlan2:u*\nlan3:u*")
+        row("device=br-lan", "vlan=30", "ports=lan3:t\nlan4:u*")
+    }
     list("status/routes", writable = false) {
         row("dst-address=0.0.0.0/0", "gateway=203.0.113.1", "interface=wan", "table=main", "distance=0", "type=unicast", "protocol=dhcp")
         row("dst-address=192.168.1.0/24", "interface=lan", "pref-src=192.168.1.1", "table=main", "distance=0", "type=unicast", "protocol=kernel")
         row("dst-address=192.168.30.0/24", "interface=guest", "pref-src=192.168.30.1", "table=main", "distance=0", "type=unicast", "protocol=kernel")
         row("dst-address=203.0.113.0/24", "interface=wan", "pref-src=203.0.113.64", "table=main", "distance=0", "type=unicast", "protocol=kernel")
         row("dst-address=10.20.0.0/16", "gateway=192.168.1.254", "interface=lan", "table=main", "distance=0", "type=unicast", "protocol=boot")
+    }
+    list("status/routes6", writable = false) {
+        row("dst-address=::/0", "gateway=fe80::200:5eff:fe00:53fe", "interface=wan", "table=main", "distance=512", "type=unicast", "protocol=ra")
+        row("dst-address=2001:db8:10::/64", "interface=br-lan", "table=main", "distance=1024", "type=unicast", "protocol=static")
+        row("dst-address=fd12:3456:789a::/64", "interface=br-lan", "table=main", "distance=1024", "type=unicast", "protocol=static")
+        row("dst-address=2001:db8:20::/48", "gateway=fd12:3456:789a::fe", "interface=br-lan", "table=main", "distance=1024", "type=unicast", "protocol=static")
+        row("dst-address=2001:db8:10::/56", "interface=lo", "table=main", "distance=2147483647", "type=unreachable", "protocol=static")
+        row("dst-address=fe80::/64", "interface=br-lan", "table=main", "distance=256", "type=unicast", "protocol=kernel")
     }
     list("status/addresses", writable = false) {
         row("address=192.168.1.1/24", "interface=lan", "device=br-lan")
@@ -73,6 +95,12 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("address=192.168.1.101", "mac-address=00:00:5E:00:53:65", "interface=br-lan", "flags=STALE")
         row("address=192.168.1.113", "mac-address=00:00:5E:00:53:71", "interface=br-lan", "flags=REACHABLE")
         row("address=203.0.113.1", "mac-address=00:00:5E:00:53:FE", "interface=wan", "flags=REACHABLE")
+    }
+    list("status/neighbors6", writable = false) {
+        row("address=fe80::200:5eff:fe00:53fe", "mac-address=00:00:5e:00:53:fe", "interface=wan", "status=REACHABLE", "router=true")
+        row("address=2001:db8:10::20", "mac-address=00:00:5e:00:53:20", "interface=br-lan", "status=REACHABLE")
+        row("address=fe80::200:5eff:fe00:5365", "mac-address=00:00:5e:00:53:65", "interface=br-lan", "status=STALE")
+        row("address=fd12:3456:789a::fe", "mac-address=00:00:5e:00:53:fd", "interface=br-lan", "status=REACHABLE", "router=true")
     }
 
     list("wireless/wifi-iface", fields = switches) {
@@ -106,6 +134,14 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("name=nas", "mac=00:00:5E:00:53:20", "ip=192.168.1.20", "leasetime=infinite")
         row("name=printer", "mac=00:00:5E:00:53:30", "ip=192.168.1.30", "leasetime=infinite")
     }
+    list("dhcp/domain") {
+        row("name=nas.lan", "ip=192.168.1.20")
+        row("name=media.lan", "ip=192.168.1.20")
+        row("name=printer.lan", "ip=192.168.1.30")
+    }
+    list("dhcp/odhcpd") {
+        row(".name=odhcpd", "maindhcp=0", "leasefile=/tmp/odhcpd.leases", "leasetrigger=/usr/sbin/odhcpd-update", "loglevel=4", "piofolder=/tmp/odhcpd-piofolder")
+    }
     list("status/dhcp-leases", writable = false) {
         row("address=192.168.1.101", "mac-address=00:00:5E:00:53:65", "host-name=macbook-pro", "expires=11h21m")
         row("address=192.168.1.102", "mac-address=00:00:5E:00:53:66", "host-name=iphone-anna", "expires=8h02m")
@@ -135,10 +171,32 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     list("firewall/redirect", ordered = true, fields = switches) {
         row(".name=nas_web", "name=NAS web", "src=wan", "src_dport=8080", "dest=lan", "dest_ip=192.168.1.20", "dest_port=80", "proto=tcp", "target=DNAT", "enabled=1")
     }
+    list("firewall/nat", ordered = true, fields = switches) {
+        row(".name=vpn_masq", "name=Masquerade-VPN-clients", "src=wan", "src_ip=10.200.0.0/24", "proto=all", "target=MASQUERADE", "family=ipv4", "enabled=1")
+        row(".name=office_snat", "name=SNAT-to-office", "src=lan", "src_ip=192.168.1.0/24", "dest_ip=10.20.0.0/16", "snat_ip=192.168.1.1", "proto=all", "target=SNAT", "family=ipv4", "enabled=0")
+    }
+    list("firewall/ipset", fields = switches + many("entry")) {
+        row(".name=blocklist", "name=blocklist", "family=ipv4", "match=src_net", "entry=198.51.100.23\n203.0.113.99\n192.0.2.128/25", "enabled=1")
+        row(".name=vpn_hosts", "name=vpn_hosts", "family=ipv4", "match=dest_ip", "entry=10.20.0.10\n10.20.0.11", "enabled=1")
+    }
     list("status/connections", writable = false) {
         row("protocol=tcp", "src-address=192.168.1.101", "src-port=51944", "dst-address=140.82.121.5", "dst-port=443", "tcp-state=ESTABLISHED", "timeout=431999", "bytes=21904", "reply-bytes=411220")
         row("protocol=udp", "src-address=192.168.1.113", "src-port=49228", "dst-address=203.0.113.77", "dst-port=3478", "timeout=29", "bytes=1893211", "reply-bytes=29011888")
         row("protocol=tcp", "src-address=192.168.1.102", "src-port=60112", "dst-address=1.1.1.1", "dst-port=853", "tcp-state=ESTABLISHED", "timeout=431870", "bytes=4811", "reply-bytes=9220")
+    }
+    list("status/firewall", writable = false) {
+        row("family=inet", "table=fw4", "chain=input", "rule=iif \"lo\" accept", "comment=!fw4: Accept traffic from loopback")
+        row("family=inet", "table=fw4", "chain=input", "rule=ct state established,related accept", "comment=!fw4: Allow inbound established and related flows")
+        row("family=inet", "table=fw4", "chain=input", "rule=tcp flags syn / fin,syn,rst,ack jump syn_flood", "packets=1204", "bytes=72240", "comment=!fw4: Rate limit TCP syn packets")
+        row("family=inet", "table=fw4", "chain=input", "rule=iifname \"br-lan\" jump input_lan", "comment=!fw4: Handle lan IPv4/IPv6 input traffic")
+        row("family=inet", "table=fw4", "chain=input", "rule=iifname \"wan\" jump input_wan", "comment=!fw4: Handle wan IPv4/IPv6 input traffic")
+        row("family=inet", "table=fw4", "chain=input", "rule=policy accept")
+        row("family=inet", "table=fw4", "chain=input_wan", "rule=meta nfproto ipv4 udp dport 68 counter accept", "packets=96", "bytes=31488", "comment=!fw4: Allow-DHCP-Renew")
+        row("family=inet", "table=fw4", "chain=input_wan", "rule=meta nfproto ipv4 icmp type echo-request counter accept", "packets=4410", "bytes=370440", "comment=!fw4: Allow-Ping")
+        row("family=inet", "table=fw4", "chain=input_wan", "rule=jump reject_from_wan")
+        row("family=inet", "table=fw4", "chain=forward", "rule=ct state established,related accept", "comment=!fw4: Allow forwarded established and related flows")
+        row("family=inet", "table=fw4", "chain=dstnat_wan", "rule=meta nfproto ipv4 tcp dport 8080 counter dnat ip to 192.168.1.20:80", "packets=31", "bytes=1860", "comment=!fw4: NAS web")
+        row("family=inet", "table=fw4", "chain=srcnat_wan", "rule=meta nfproto ipv4 masquerade", "comment=!fw4: Masquerade IPv4 wan traffic")
     }
 
     settings("system/system", "hostname=demo-ap", "timezone=MSK-3", "zonename=Europe/Moscow", "ttylogin=0", "log_size=64", "urandom_seed=0", "conloglevel=8", "cronloglevel=7")
@@ -213,6 +271,7 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     command("tool/traceroute", text("address"), text("count"), run = ::traceroute)
     command("tool/nslookup", text("name"), run = ::nslookup)
     command("tool/traffic", run = { traffic() })
+    openWrtServicesDemo()
 }
 
 private fun nslookup(arguments: Map<String, String>): Flow<Item> = flow {

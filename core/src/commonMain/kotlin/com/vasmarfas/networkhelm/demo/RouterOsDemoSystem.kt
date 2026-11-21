@@ -1,11 +1,6 @@
 package com.vasmarfas.networkhelm.demo
 
-import com.vasmarfas.networkhelm.model.DeviceException
-import com.vasmarfas.networkhelm.model.ErrorCategory
-import com.vasmarfas.networkhelm.model.Item
-import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.emptyFlow
-import kotlinx.coroutines.flow.flow
 
 private val systemExport = listOf(
     "# 2026-10-12 21:14:08 by RouterOS 7.24.1",
@@ -59,8 +54,6 @@ private val systemModeFeatures = listOf(
 
 private val systemResetFlags = listOf("keep-users", "caps-mode", "no-defaults", "skip-backup", "keep-apps", "shutdown", "force-v6-to-v7-configuration-upgrade")
     .map { choice(it, "yes", "no") }.toTypedArray()
-
-private fun systemRefusal(reason: String): Flow<Item> = flow { throw DeviceException(ErrorCategory.General, "this is a demo router: $reason") }
 
 internal fun DemoBuilder.systemDemo() {
     systemUpdateDemo()
@@ -178,14 +171,14 @@ private fun DemoBuilder.systemScriptsDemo() {
 }
 
 private fun DemoBuilder.systemCommandsDemo() {
-    command("system/device-mode/update", choice("mode", "enterprise", "home", "advanced"), *systemModeFeatures, run = { systemRefusal("it changes no device mode") })
-    command("system/sup-output", run = { systemRefusal("it makes no files") })
-    command("system/reboot", run = { systemRefusal("it restarts nothing and keeps nothing") })
-    command("system/shutdown", run = { systemRefusal("it restarts nothing and keeps nothing") })
-    command("system/reset-configuration", *systemResetFlags, run = { systemRefusal("it restarts nothing and keeps nothing") })
-    command("password", run = { systemRefusal("passwords stay as they are") })
-    command("system/backup/save", text("name"), text("password"), choice("encryption", "aes-sha256", "rc4"), choice("dont-encrypt", "yes", "no"), run = { systemRefusal("it saves no backup") })
-    command("system/backup/load", text("name"), text("password"), run = { systemRefusal("it restores nothing") })
+    command("system/device-mode/update", choice("mode", "enterprise", "home", "advanced"), *systemModeFeatures, run = { refusal("it changes no device mode") })
+    command("system/sup-output", run = { refusal("it makes no files") })
+    command("system/reboot", run = { refusal("it restarts nothing and keeps nothing") })
+    command("system/shutdown", run = { refusal("it restarts nothing and keeps nothing") })
+    command("system/reset-configuration", *systemResetFlags, run = { refusal("it restarts nothing and keeps nothing") })
+    command("password", run = { refusal("passwords stay as they are") })
+    command("system/backup/save", text("name"), text("password"), choice("encryption", "aes-sha256", "rc4"), choice("dont-encrypt", "yes", "no"), run = { refusal("it saves no backup") })
+    command("system/backup/load", text("name"), text("password"), run = { refusal("it restores nothing") })
 }
 
 private fun DemoBuilder.systemLoggingDemo() {
@@ -243,9 +236,9 @@ private fun DemoBuilder.systemCertificateDemo() {
         "builtin-trust-store=default", "crl-download=false", "crl-store=ram", "crl-use=false",
         fields = listOf(choice("builtin-trust-store", "default", "all", "untrusted"), choice("crl-store", "ram", "system")),
     )
-    command("certificate/sign", run = { systemRefusal("it signs nothing") })
-    command("certificate/import", run = { systemRefusal("it imports nothing") })
-    command("certificate/export-certificate", choice("type", "pem", "pkcs12", "pkcs1", "pkcs8"), run = { systemRefusal("it exports nothing") })
+    command("certificate/sign", run = { refusal("it signs nothing") })
+    command("certificate/import", run = { refusal("it imports nothing") })
+    command("certificate/export-certificate", choice("type", "pem", "pkcs12", "pkcs1", "pkcs8"), run = { refusal("it exports nothing") })
 }
 
 private fun DemoBuilder.systemHardwareDemo() {

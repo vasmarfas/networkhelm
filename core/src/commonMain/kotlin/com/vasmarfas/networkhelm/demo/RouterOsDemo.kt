@@ -216,4 +216,5 @@ internal fun routerOsDemo(): DemoSession = demoSession(
     toolsDemo()
     controllerDemo()
     packagesDemo()
+    linksDemo()
 }
