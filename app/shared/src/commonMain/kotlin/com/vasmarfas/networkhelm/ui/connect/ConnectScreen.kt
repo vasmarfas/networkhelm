@@ -47,6 +47,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composables.icons.lucide.Download
 import com.composables.icons.lucide.FolderOpen
+import com.composables.icons.lucide.Group
 import com.composables.icons.lucide.Info
 import com.composables.icons.lucide.Key
 import com.composables.icons.lucide.Lucide
@@ -100,8 +101,10 @@ import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.scrim
 import com.vasmarfas.networkhelm.ui.main.deviceMessage
 import com.vasmarfas.networkhelm.ui.main.deviceText
+import com.vasmarfas.networkhelm.ui.sync.SyncMark
 import com.vasmarfas.networkhelm.ui.table.DataTable
 import com.vasmarfas.networkhelm.ui.table.TableColumn
+import com.vasmarfas.networkhelm.ui.table.TableLayout
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.table.rememberKeptTable
 import com.vasmarfas.networkhelm.ui.theme.Theme
@@ -138,6 +141,7 @@ import networkhelm.app.shared.generated.resources.connect_group
 import networkhelm.app.shared.generated.resources.connect_import
 import networkhelm.app.shared.generated.resources.connect_import_hint
 import networkhelm.app.shared.generated.resources.connect_imported
+import networkhelm.app.shared.generated.resources.connect_in_groups
 import networkhelm.app.shared.generated.resources.connect_interface
 import networkhelm.app.shared.generated.resources.connect_keenetic_token
 import networkhelm.app.shared.generated.resources.connect_keenetic_tunnel
@@ -145,6 +149,7 @@ import networkhelm.app.shared.generated.resources.connect_lists_below
 import networkhelm.app.shared.generated.resources.connect_lists_beside
 import networkhelm.app.shared.generated.resources.connect_neighbors
 import networkhelm.app.shared.generated.resources.connect_neighbors_unavailable
+import networkhelm.app.shared.generated.resources.connect_no_group
 import networkhelm.app.shared.generated.resources.connect_platform
 import networkhelm.app.shared.generated.resources.connect_platform_found
 import networkhelm.app.shared.generated.resources.connect_port
@@ -286,6 +291,8 @@ import networkhelm.app.shared.generated.resources.trust_previous
 import networkhelm.app.shared.generated.resources.trust_reject
 
 private val FORM_WIDTH = 480.dp
+
+private const val SAVED_TABLE = "connect/saved"
 
 // beside the form the lists keep room for the address, the comment and the user of a router
 private val SIDE_BY_SIDE = 960.dp
@@ -536,7 +543,7 @@ private fun Form(
             Labeled(stringResource(Res.string.connect_own_mac)) { TextField(state.ownMac, field.testTag("own-mac"), placeholder = "aa:bb:cc:dd:ee:ff", mono = true) }
             Labeled("") { Text(stringResource(Res.string.connect_own_mac_hint), color = palette.muted, style = Theme.type.small) }
         }
-        if (state.shut.isNotEmpty()) Labeled("") { Text(stringResource(if (state.standalone) Res.string.connect_browser_shut else Res.string.connect_probe_shut), color = palette.muted, style = Theme.type.small) }
+        if (state.kind.protocols.any { it.defaultPort in state.shut }) Labeled("") { Text(stringResource(if (state.standalone) Res.string.connect_browser_shut else Res.string.connect_probe_shut), color = palette.muted, style = Theme.type.small) }
         val community = state.protocol == Access.Snmp
         if (!community && state.protocol != Access.Vyos) Labeled(stringResource(Res.string.connect_user)) { TextField(state.user, field.testTag("user")) }
         Labeled(stringResource(if (community) Res.string.connect_community else Res.string.connect_password)) {
@@ -665,6 +672,7 @@ private fun Header(onAbout: () -> Unit, onSettings: () -> Unit, onTools: () -> U
         val tools = stringResource(Res.string.tools_title)
         val about = stringResource(Res.string.main_about)
         val settings = stringResource(Res.string.settings_title)
+        SyncMark()
         if (icons || LocalCompact.current) {
             IconButton(Lucide.Wrench, tools, onTools, Modifier.testTag("tools"))
             IconButton(Lucide.Info, about, onAbout, Modifier.testTag("about"))
@@ -710,6 +718,17 @@ private fun Lists(
                     }
                 }
                 if (tab == 0) {
+                    val grouped = tables[SAVED_TABLE]?.categories == true
+                    val group = { on: Boolean -> tables[SAVED_TABLE] = (tables[SAVED_TABLE] ?: TableLayout()).copy(categories = on) }
+                    val inGroups = stringResource(Res.string.connect_in_groups)
+                    if (narrow) {
+                        IconButton(Lucide.Group, inGroups, { group(!grouped) }, Modifier.testTag("saved-groups"), active = grouped)
+                    } else {
+                        Row(Modifier.padding(end = 8.dp), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            Checkbox(grouped, group, Modifier.testTag("saved-groups"))
+                            Text(inGroups, Modifier.clickable { group(!grouped) }.hand(), color = palette.muted, singleLine = true)
+                        }
+                    }
                     val import = stringResource(Res.string.connect_import)
                     val export = stringResource(Res.string.connect_export)
                     if (narrow) {
@@ -761,19 +780,22 @@ private fun SavedTable(saved: SavedRouters, tables: TableLayouts, state: Connect
     val ui = rememberCoroutineScope()
     val compact = LocalCompact.current
     val removable = selected?.takeIf { it in routers }
+    val layout = tables[SAVED_TABLE]
+    val grouped = layout?.categories == true
     Column(Modifier.fillMaxSize()) {
         if (compact) removable?.let { RemoveRow(it, onRemove) }
         DataTable(
             rows = routers,
             columns = listOf(
                 TableColumn("address", stringResource(Res.string.connect_address), 200.dp) { it.address },
+                TableColumn("group", stringResource(Res.string.connect_group), 140.dp) { it.group },
                 TableColumn("comment", stringResource(Res.string.connect_comment), 200.dp) { it.comment },
                 TableColumn("user", stringResource(Res.string.connect_user), 120.dp) { it.user },
                 TableColumn("platform", stringResource(Res.string.connect_platform), 150.dp) { kinds.getValue(it.protocol.kind) },
                 TableColumn("protocol", stringResource(Res.string.connect_protocol), 200.dp) { protocols.getValue(it.protocol) },
             ),
             key = { it.address to it.user },
-            state = rememberKeptTable(tables, "connect/saved"),
+            state = rememberKeptTable(tables, SAVED_TABLE),
             onSelection = { keys ->
                 selected = routers.firstOrNull { (it.address to it.user) in keys }
                 selected?.let(state::fill)
@@ -785,8 +807,14 @@ private fun SavedTable(saved: SavedRouters, tables: TableLayouts, state: Connect
                     if (state.problem == null) onConnect()
                 }
             },
-            caption = { router -> router.group.takeIf { it.isNotEmpty() && routers.firstOrNull { other -> other.group == it } == router } },
             detail = compact,
+            category = if (grouped) { router -> router.group } else null,
+            folded = layout?.folded.orEmpty().toSet(),
+            onFold = { group ->
+                val kept = tables[SAVED_TABLE] ?: TableLayout()
+                tables[SAVED_TABLE] = kept.copy(folded = if (group in kept.folded) kept.folded - group else kept.folded + group)
+            },
+            uncategorized = stringResource(Res.string.connect_no_group),
             modifier = Modifier.weight(1f).fillMaxWidth(),
         )
         if (!compact) removable?.let { RemoveRow(it, onRemove) }

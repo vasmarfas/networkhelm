@@ -34,6 +34,8 @@ data class TableLayout(
     val comments: CommentMode? = null,
     val log: LogLayout? = null,
     val expanded: List<String> = emptyList(),
+    // the categories folded by their headers, by name
+    val folded: List<String> = emptyList(),
 )
 
 @Serializable
@@ -98,8 +100,9 @@ fun <K> rememberKeptTable(tables: TableLayouts, name: String): TableState<K> {
         saved.widths.forEach { (column, width) -> state.widths[column] = width.dp }
     }
     LaunchedEffect(name) {
-        snapshotFlow { TableLayout(widths = state.widths.mapValues { it.value.value }, sort = state.sort.map { SavedSort(it.column, it.ascending) }) }
-            .drop(1).collect { tables[name] = it }
+        // the widths and the sort of the table, the rest of its layout as the window that keeps it left it
+        snapshotFlow { state.widths.mapValues { it.value.value } to state.sort.map { SavedSort(it.column, it.ascending) } }
+            .drop(1).collect { (widths, sort) -> tables[name] = (tables[name] ?: TableLayout()).copy(widths = widths, sort = sort) }
     }
     return state
 }

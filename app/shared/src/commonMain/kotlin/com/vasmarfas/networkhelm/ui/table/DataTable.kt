@@ -94,6 +94,8 @@ import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
+import com.composables.icons.lucide.ChevronDown
+import com.composables.icons.lucide.ChevronRight
 import com.composables.icons.lucide.Flag
 import com.composables.icons.lucide.GripVertical
 import com.composables.icons.lucide.Lucide
@@ -164,6 +166,10 @@ fun <T, K : Any> DataTable(
     follow: Boolean = false,
     detail: Boolean = false,
     category: ((T) -> String)? = null,
+    // with onFold the categories fold by their headers, which count their rows, and the rows of none come last under uncategorized
+    folded: Set<String> = emptySet(),
+    onFold: ((String) -> Unit)? = null,
+    uncategorized: String = "—",
     onMove: ((List<K>, K?) -> Unit)? = null,
     onMoveColumn: ((String, Int) -> Unit)? = null,
     onKey: (KeyEvent) -> Boolean = { false },
@@ -182,14 +188,37 @@ fun <T, K : Any> DataTable(
     val currentColumns by rememberUpdatedState(columns)
     val currentCategory by rememberUpdatedState(category)
     val sort = state.sort
-    val ordered by produceState(rows, rows, sort, columns.map { it.key }, category != null) {
+    val foldable = onFold != null && category != null
+    val ordered by produceState(rows, rows, sort, columns.map { it.key }, category != null, foldable) {
         value = withContext(Dispatchers.Default) {
             val group = currentCategory
             val sorted = sorted(rows, currentColumns, sort)
-            if (group == null) sorted else sorted.sortedWith(compareBy(naturalOrder) { group(it) })
+            when {
+                group == null -> sorted
+                foldable -> sorted.sortedWith(compareBy<T> { group(it).isEmpty() }.then(compareBy(naturalOrder) { group(it) }))
+                else -> sorted.sortedWith(compareBy(naturalOrder) { group(it) })
+            }
         }
     }
-    val shown = if (sort.isEmpty() && category == null) rows else ordered
+    val all = if (sort.isEmpty() && category == null) rows else ordered
+    val shown = if (foldable) all.filter { category(it) !in folded } else all
+    val groups = remember(all, foldable) { if (foldable) all.map(category).distinct() else emptyList() }
+    val counts = remember(all, foldable) { if (foldable) all.groupingBy(category).eachCount() else emptyMap() }
+    // the headers drawn above a row: of the folded categories since the row before, then of its own; the last row has those after it
+    fun headersAbove(index: Int): List<String> {
+        val group = category ?: return emptyList()
+        val own = group(shown[index])
+        if (index > 0 && group(shown[index - 1]) == own) return emptyList()
+        if (!foldable) return listOf(own)
+        val from = if (index == 0) 0 else groups.indexOf(group(shown[index - 1])) + 1
+        val to = groups.indexOf(own) + 1
+        // for a frame the rows may keep their order from before the categories
+        return if (from < to) groups.subList(from, to) else listOf(own)
+    }
+    fun headersBelow(index: Int): List<String> {
+        if (!foldable || index != shown.lastIndex) return emptyList()
+        return groups.subList(groups.indexOf(category(shown[index])) + 1, groups.size)
+    }
     val order = remember(shown) { shown.map(key) }
     val measurer = rememberTextMeasurer()
     val body = Theme.type.body
@@ -268,6 +297,9 @@ fun <T, K : Any> DataTable(
     }
     val currentRows by rememberUpdatedState(shown)
     val currentOrder by rememberUpdatedState(order)
+    val currentAbove by rememberUpdatedState({ index: Int -> headersAbove(index) })
+    val currentBelow by rememberUpdatedState({ index: Int -> headersBelow(index) })
+    val currentFold by rememberUpdatedState(onFold)
     val move by rememberUpdatedState(onMove)
     val open by rememberUpdatedState(onOpen)
     val openColumn by rememberUpdatedState(onOpenColumn)
@@ -355,6 +387,10 @@ fun <T, K : Any> DataTable(
                             }
                         }
                     }
+                    // every category folded: the headers stand alone, and no row carries them
+                    if (foldable && shown.isEmpty()) {
+                        for (header in groups) CategoryHeader(header.ifEmpty { uncategorized }, counts[header], true, Modifier.clickable { onFold(header) }.hand())
+                    }
                     LazyColumn(
                         // empty drag picture: the default one draws the list through a recording that leaves the rows out
                         Modifier.fillMaxSize().arrow().then(if (dragOut != null && onMove == null) Modifier.dragAndDropSource({}) { _: Offset -> dragOut() } else Modifier).pointerInput(Unit) {
@@ -385,7 +421,23 @@ fun <T, K : Any> DataTable(
                                 val item = list.layoutInfo.visibleItemsInfo.firstOrNull { y >= it.offset && y < it.offset + it.size } ?: return@awaitEachGesture
                                 val index = item.index
                                 val id = currentOrder.getOrNull(index) ?: return@awaitEachGesture
-                                val cells = y >= item.offset + item.size - rowPx
+                                // a header of a category above the row, or after the last one, folds that category
+                                val inside = y - item.offset
+                                val above = currentAbove(index)
+                                val below = currentBelow(index)
+                                val end = item.size - below.size * rowPx
+                                val header = when {
+                                    currentFold == null -> null
+                                    inside < above.size * rowPx -> above.getOrNull((inside / rowPx).toInt())
+                                    inside >= end -> below.getOrNull(((inside - end) / rowPx).toInt())
+                                    else -> null
+                                }
+                                if (header != null) {
+                                    down.consume()
+                                    if (waitForUpOrCancellation(PointerEventPass.Initial)?.also { it.consume() } != null) currentFold?.invoke(header)
+                                    return@awaitEachGesture
+                                }
+                                val cells = y >= item.offset + end - rowPx
                                 if (touch) {
                                     var scrolled = false
                                     val up = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
@@ -451,7 +503,6 @@ fun <T, K : Any> DataTable(
                                     RowTone.Normal -> palette.text
                                     RowTone.Faded -> palette.faint
                                 }
-                                val group = category?.invoke(row)
                                 Column(
                                     Modifier.drawWithContent {
                                         drawContent()
@@ -462,9 +513,7 @@ fun <T, K : Any> DataTable(
                                         if (at == index + 1 && index == shown.lastIndex) drawRect(palette.accent, Offset(0f, size.height - line), Size(size.width, line))
                                     },
                                 ) {
-                                    if (group != null && (index == 0 || category(shown[index - 1]) != group)) {
-                                        Text(group.ifEmpty { "—" }, Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 6.dp, vertical = 3.dp), style = Theme.type.strong)
-                                    }
+                                    for (header in headersAbove(index)) CategoryHeader(header.ifEmpty { uncategorized }, counts[header].takeIf { foldable }, header in folded)
                                     val background = if (selected) palette.selection else palette.surface
                                     caption(row)?.let {
                                         Text(
@@ -508,6 +557,7 @@ fun <T, K : Any> DataTable(
                                             }
                                         }
                                     }
+                                    for (header in headersBelow(index)) CategoryHeader(header.ifEmpty { uncategorized }, counts[header], true)
                                 }
                             }
                         }
@@ -657,6 +707,21 @@ private fun <T> Header(column: TableColumn<T>, width: Dp, state: TableState<*>, 
                     }
                 },
         )
+    }
+}
+
+// the header of a category; where the categories fold, it is one row high, as the press on it is told by its place, and counts the rows
+@Composable
+private fun CategoryHeader(name: String, count: Int?, folded: Boolean, modifier: Modifier = Modifier) {
+    val palette = Theme.palette
+    if (count == null) {
+        Text(name, modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 6.dp, vertical = 3.dp), style = Theme.type.strong)
+        return
+    }
+    Row(modifier.fillMaxWidth().height(Theme.metrics.row).background(palette.raised).padding(horizontal = 6.dp).testTag("category"), verticalAlignment = Alignment.CenterVertically) {
+        UnstyledIcon(if (folded) Lucide.ChevronRight else Lucide.ChevronDown, null, Modifier.size(12.dp), tint = palette.muted)
+        Text(name, Modifier.padding(start = 4.dp), style = Theme.type.strong, singleLine = true)
+        Text("$count", Modifier.padding(start = 8.dp), color = palette.muted, singleLine = true)
     }
 }
 
