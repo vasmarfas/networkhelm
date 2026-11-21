@@ -10,7 +10,7 @@ import kotlin.io.encoding.Base64
 import kotlin.test.Test
 import kotlin.test.assertContentEquals
 import kotlin.test.assertEquals
-import kotlin.test.assertFails
+import kotlin.test.assertFailsWith
 import kotlin.test.assertIs
 import kotlin.test.assertNull
 
@@ -19,32 +19,32 @@ class BookTest {
         SealedBook(BOOK_FORMAT, rounds, salt, iv, data)
 
     @Test
-    fun zeroRoundsAreRejectedAsAFormatErrorBeforeTheKeyIsDerived() {
-        assertEquals("BookFormatException", assertFails { unseal(book(rounds = 0), "password") }::class.simpleName)
+    fun zeroRoundsAreRejectedAsAFormatErrorBeforeTheKeyIsDerived() = runTest {
+        assertFailsWith<BookFormatException> { unseal(book(rounds = 0), "password") }
     }
 
     @Test
-    fun excessiveRoundsAreRejectedBeforeTheKeyIsDerived() {
-        assertIs<BookFormatException>(assertFails { unseal(book(rounds = Int.MAX_VALUE), "password") })
+    fun excessiveRoundsAreRejectedBeforeTheKeyIsDerived() = runTest {
+        assertFailsWith<BookFormatException> { unseal(book(rounds = Int.MAX_VALUE), "password") }
     }
 
     @Test
-    fun malformedBase64IsAFormatError() {
+    fun malformedBase64IsAFormatError() = runTest {
         for (field in listOf(book(salt = "?"), book(iv = "?"), book(data = "?"))) {
-            assertEquals("BookFormatException", assertFails { unseal(field, "password") }::class.simpleName)
+            assertFailsWith<BookFormatException> { unseal(field, "password") }
         }
     }
 
     @Test
-    fun shortSaltIvAndCiphertextAreFormatErrors() {
+    fun shortSaltIvAndCiphertextAreFormatErrors() = runTest {
         val short = Base64.encode(ByteArray(1))
         for (field in listOf(book(salt = short), book(iv = short), book(data = short))) {
-            assertEquals("BookFormatException", assertFails { unseal(field, "password") }::class.simpleName)
+            assertFailsWith<BookFormatException> { unseal(field, "password") }
         }
     }
 
     @Test
-    fun aWrongPasswordRemainsDistinctFromAnInvalidFile() {
+    fun aWrongPasswordRemainsDistinctFromAnInvalidFile() = runTest {
         val plain = "address book".encodeToByteArray()
         val sealed = seal(plain, "password")
         assertNull(unseal(sealed, "wrong"))
