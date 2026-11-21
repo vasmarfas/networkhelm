@@ -102,7 +102,7 @@ Gradle provisions the JDK through the toolchain resolver: JDK 21 for the build a
 | Desktop | `./gradlew :app:desktopApp:run`, with Compose Hot Reload `./gradlew :app:desktopApp:hotRun --auto` |
 | Android | `./gradlew :app:androidApp:assembleDebug` |
 | Browser (Wasm) | `./gradlew :server:run`, then `https://localhost:8443`: the gateway serves the web app and reaches the routers for it |
-| Browser without a gateway | `./gradlew :app:webApp:pagesBundle`: the page for a static host such as GitHub Pages, with demo routers and the devices the browser lets it reach |
+| Browser without a gateway | `./gradlew :app:webApp:pagesBundle`: the page for a static host such as GitHub Pages, with demo routers, a demo Linux host and the devices the browser lets it reach |
 | iOS | `tools/ios/build-ssh.sh` once, then open `app/iosApp` in Xcode |
 
 One Kotlin Multiplatform and Compose Multiplatform codebase builds for all of these systems.

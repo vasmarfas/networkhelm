@@ -30,6 +30,7 @@ import com.vasmarfas.networkhelm.app.snmpPrivacyKey
 import com.vasmarfas.networkhelm.app.sshKeyKey
 import com.vasmarfas.networkhelm.app.sshPassphraseKey
 import com.vasmarfas.networkhelm.app.unseal
+import com.vasmarfas.networkhelm.demo.demoHosts
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.offline.openConfig
@@ -452,7 +453,8 @@ class ConnectState(
             problem = Problem.Tcp8291Unsupported
             return
         }
-        if (services.standalone && access.defaultPort in BROWSER_SHUT) {
+        // a demo host lives in the page itself, SSH of the demo Linux host as well
+        if (services.standalone && access.defaultPort in BROWSER_SHUT && target?.host?.lowercase() !in demoHosts.values) {
             problem = Problem.Unsupported("a page in a browser can send HTTP requests only")
             return
         }
@@ -781,7 +783,7 @@ class ConnectState(
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            // a platform without the cipher of a book, as iOS and Android before 8.0, says so with an exception of its own
+            // a platform without the cipher of a book, as Android before 8.0 or a page without HTTPS, says so with an exception of its own
             problem = Problem.BookFile(e.message.orEmpty())
             return
         }

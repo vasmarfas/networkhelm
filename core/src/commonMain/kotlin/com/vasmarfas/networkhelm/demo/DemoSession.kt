@@ -86,10 +86,11 @@ class DemoSession internal constructor(
     override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
         val menu = menu(path)
         val live = menu.live
-        if (live != null && menu.kind == NodeKind.Settings) {
+        if (live != null) {
             var tick = 0
             while (true) {
-                lists.value[path].orEmpty().firstOrNull()?.let { emit(ListEvent.Snapshot(listOf(Item(it.id, it.values + live(it, tick))))) }
+                val rows = lists.value[path].orEmpty().let { all -> if (menu.kind == NodeKind.Settings) all.take(1) else all.filter { filter?.matches(it) != false } }
+                emit(ListEvent.Snapshot(rows.map { Item(it.id, it.values + live(it, tick)) }))
                 tick++
                 delay(1000)
             }
@@ -192,9 +193,9 @@ class DemoSession internal constructor(
         if (held.value) edits.update { it + 1 }
     }
 
-    // the buttons of a RouterOS pack are shown; a command the demo does not define does nothing
+    // the buttons of a RouterOS or Linux pack are shown; a command the demo does not define does nothing
     private fun actions(path: MenuPath): List<String> =
-        if (device.platform == Platform.RouterOs) shown[path]?.first?.actions.orEmpty().map { it.command } else emptyList()
+        if (device.platform == Platform.RouterOs || device.platform == Platform.Ssh) shown[path]?.first?.actions.orEmpty().map { it.command } else emptyList()
 
     private fun own(menu: DemoMenu): List<String> = when (menu.kind) {
         NodeKind.List -> listOf("print") + if (menu.writable) listOf("add", "set", "remove") + listOfNotNull("move".takeIf { menu.ordered }) else emptyList()

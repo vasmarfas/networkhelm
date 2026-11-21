@@ -8,7 +8,7 @@ The page knows which form it is by `<meta name="networkhelm-mode" content="stand
 
 ## Demo routers
 
-On the first visit the list of the connection window holds six routers, one for each platform:
+On the first visit the list of the connection window holds six routers, one for each platform, and a Linux host:
 
 | Host | Platform | Protocol |
 | --- | --- | --- |
@@ -18,10 +18,13 @@ On the first visit the list of the connection window holds six routers, one for 
 | `pfsense.demo` | pfSense 2.8 | API |
 | `vyos.demo` | VyOS 1.4 | HTTP API |
 | `keenetic.demo` | Keenetic 5.1 | RCI |
+| `linux.demo` | Debian 12 with Proxmox VE 8.2 | SSH |
 
 They exist in the memory of the page, any password opens them, and a new connection starts from the data given in `core/.../demo/`: what one connection changed, the next does not find. Lists take add, set, remove and move; Safe Mode of the RouterOS demo takes the changes back; ping, traceroute and the traffic of an interface answer with rows. The addresses are those of documentation (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) and the MAC addresses 00:00:5E:00:53:xx, the range RFC 7042 sets aside for it. The rows of each platform carry the columns of its packs, so the windows look as they do on a real device; menus the demo has no data for are not shown.
 
 The RouterOS demo has rows or settings for every entry of the menu of RouterOS 7.24 on a hAP ax^3 with all optional packages (container, dude, iot, cmr, openflow, netinstall), except the legacy Wireless and CAPsMAN menus, and for every tab of their windows. The buttons that run a command on the router (Reset Counters, Release, Make Static) are shown and do nothing here.
+
+The Linux host opens over SSH although a page cannot speak it: the demo lives in the page itself. It has every window of a Linux host: the dashboard, interfaces, addresses, routes, sockets, services, processes, storage, packages, ufw and nftables, the logs, the VPN servers and clients with the panel of connections, whose sessions count their bytes up, the proxies, Docker and Podman with containers, images, volumes, networks, stacks and pods, and Proxmox VE with its guests, snapshots, backups and tasks. The wizards answer with the files a real host would give; what needs a live SSH channel (the terminal of a container, the console of a guest, file transfers) is not there.
 
 ## Real devices
 

@@ -10,6 +10,7 @@ val demoHosts: Map<Platform, String> = mapOf(
     Platform.Pfsense to "pfsense.demo",
     Platform.Vyos to "vyos.demo",
     Platform.Keenetic to "keenetic.demo",
+    Platform.Ssh to "linux.demo",
 )
 
 fun demoRouter(host: String): DeviceSession? = when (host.lowercase()) {
@@ -19,5 +20,6 @@ fun demoRouter(host: String): DeviceSession? = when (host.lowercase()) {
     demoHosts.getValue(Platform.Pfsense) -> pfsenseDemo()
     demoHosts.getValue(Platform.Vyos) -> vyosDemo()
     demoHosts.getValue(Platform.Keenetic) -> keeneticDemo()
+    demoHosts.getValue(Platform.Ssh) -> linuxDemo()
     else -> null
 }

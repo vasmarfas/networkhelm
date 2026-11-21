@@ -102,7 +102,7 @@ JDK Gradle скачивает сам через toolchain: JDK 21 для сбо�
 | Компьютер | `./gradlew :app:desktopApp:run`, с Compose Hot Reload `./gradlew :app:desktopApp:hotRun --auto` |
 | Android | `./gradlew :app:androidApp:assembleDebug` |
 | Браузер (Wasm) | `./gradlew :server:run`, затем `https://localhost:8443`: шлюз отдаёт веб-приложение и ходит за него к роутерам |
-| Браузер без шлюза | `./gradlew :app:webApp:pagesBundle`: страница для статического хоста вроде GitHub Pages, с демо-роутерами и устройствами, до которых браузер её пускает |
+| Браузер без шлюза | `./gradlew :app:webApp:pagesBundle`: страница для статического хоста вроде GitHub Pages, с демо-роутерами, демо Linux-хостом и устройствами, до которых браузер её пускает |
 | iOS | один раз `tools/ios/build-ssh.sh`, затем открыть `app/iosApp` в Xcode |
 
 Один код на Kotlin Multiplatform и Compose Multiplatform собирается под все эти системы.

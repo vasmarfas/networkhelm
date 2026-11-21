@@ -28,8 +28,16 @@ import kotlin.test.assertTrue
 
 class DemoRoutersTest {
 
-    // no pack lists these: the topology view reads the first two itself, and the unified view of OpenWrt the devices
-    private val readDirectly = setOf("cmr/layout/node", "cmr/layout/link", "status/devices")
+    // no pack lists these: the topology view reads the first two itself, the unified view of OpenWrt the devices, and the windows of a
+    // Linux host the panel of VPN and what the tabs and dialogs of containers, proxies and new servers run
+    private val readDirectly = setOf("cmr/layout/node", "cmr/layout/link", "status/devices", "vpn/service", "vpn/history", "vpn/collector") +
+        listOf("log", "stats", "top", "changes", "inspect", "ls", "download", "unused").map { "container/$it" } +
+        listOf("history", "inspect", "pull", "push", "save", "load", "login", "unused").map { "container/image/$it" } +
+        listOf("network/containers", "network/inspect", "network/unused", "volume/unused", "volume/browse", "stack/create", "stack/services", "stack/log", "stack/config")
+            .map { "container/$it" } +
+        listOf("sing-box", "xray").map { "proxy/$it/config" } +
+        listOf("wireguard", "amneziawg", "openvpn", "ipsec", "l2tp", "ocserv", "pptp").map { "vpn/$it/server/create" } +
+        listOf("wireguard", "amneziawg", "openvpn", "ipsec", "l2tp", "openconnect", "pptp").map { "vpn/$it/import/import" }
 
     private fun router(host: String): DeviceSession = assertNotNull(demoRouter(host))
 
@@ -57,7 +65,7 @@ class DemoRoutersTest {
     @Test
     fun everyPlatformHasItsRouterAndNothingElseDoes() {
         for ((platform, host) in demoHosts) assertEquals(platform, router(host).device.platform)
-        assertEquals(6, demoHosts.size)
+        assertEquals(7, demoHosts.size)
         assertNull(demoRouter("router.example.com"))
     }
 

@@ -238,7 +238,7 @@ A browser cannot open connections to routers on its own, so a gateway stands bet
 
 More about the gateway (all options, Docker, a container on a RouterOS router, a systemd service) is in [server/README.md](server/README.md).
 
-**The demo page.** https://vasmarfas.github.io/networkhelm/ shows the interface on made-up routers. It has no gateway, and a page in a browser can only send HTTP, so it cannot reach most real routers. RouterOS does not help: its REST API sends no CORS headers and answers the preflight request with 503 (the REST API page of MikroTik says so), so a page cannot call it even over HTTPS with a trusted certificate. Chrome's Direct Sockets, which would give a page real TCP, are exposed only to isolated contexts such as installed Isolated Web Apps, not to ordinary pages. How that page is built and what it can do is in [app/webApp/README.md](app/webApp/README.md).
+**The demo page.** https://networkhelm.vasmarfas.com/ shows the interface on made-up routers and a made-up Linux host. It has no gateway, and a page in a browser can only send HTTP, so it cannot reach most real routers. RouterOS does not help: its REST API sends no CORS headers and answers the preflight request with 503 (the REST API page of MikroTik says so), so a page cannot call it even over HTTPS with a trusted certificate. Chrome's Direct Sockets, which would give a page real TCP, are exposed only to isolated contexts such as installed Isolated Web Apps, not to ordinary pages. How that page is built and what it can do is in [app/webApp/README.md](app/webApp/README.md).
 
 ## Network tools
 

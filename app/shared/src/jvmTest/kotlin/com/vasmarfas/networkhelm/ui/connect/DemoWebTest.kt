@@ -78,4 +78,8 @@ class DemoWebTest {
 
     @Test
     fun keeneticOpens() = opens("keenetic.demo", "Keenetic Demo", "Home network", "keenetic")
+
+    // SSH is shut to a page, but the demo Linux host lives in the page itself
+    @Test
+    fun linuxOpens() = opens("linux.demo", "demo-server", "enp1s0", "linux")
 }
