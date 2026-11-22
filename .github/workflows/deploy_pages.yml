@@ -69,6 +69,8 @@ jobs:
       - name: Build the page
         env:
           APP_VERSION_NAME: ${{ steps.version.outputs.name }}
+          # the minifier of the JavaScript bundle of 1.4.0 ran out of the default heap of node on the runner
+          NODE_OPTIONS: --max-old-space-size=8192
         run: ./gradlew :app:webApp:pagesBundle
 
       # the privacy policy and the terms of the repository, for the links the consent screens and the stores ask for
