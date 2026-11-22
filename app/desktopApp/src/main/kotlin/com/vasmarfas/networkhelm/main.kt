@@ -1,9 +1,7 @@
 package com.vasmarfas.networkhelm
 
-import androidx.compose.foundation.DarkDefaultContextMenuRepresentation
-import androidx.compose.foundation.LightDefaultContextMenuRepresentation
-import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.isSystemInDarkTheme
+import androidx.compose.foundation.layout.requiredHeightIn
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -12,6 +10,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 import com.vasmarfas.networkhelm.app.ClearTypeLayer
@@ -24,6 +23,7 @@ import com.vasmarfas.networkhelm.app.rememberFrameState
 import com.vasmarfas.networkhelm.app.reportStartupFailure
 import com.vasmarfas.networkhelm.ui.about.appIcon
 import com.vasmarfas.networkhelm.ui.kit.HintHost
+import com.vasmarfas.networkhelm.ui.kit.TextMenus
 import com.vasmarfas.networkhelm.ui.main.PathWindow
 import com.vasmarfas.networkhelm.ui.settings.BrowserAccessMark
 import com.vasmarfas.networkhelm.ui.terminal.BossTerminal
@@ -64,7 +64,7 @@ private fun startApplication() = application {
                 ) {
                     ClearTypeLayer()
                     WorkspaceBackground()
-                    TitleBar(Modifier.newFullscreenControls()) {
+                    TitleBar(Modifier.requiredHeightIn(min = 32.dp).newFullscreenControls()) {
                         ShellTheme(shell) { TitleBarContent(shell, Modifier.align(Alignment.Start), Modifier.clientRegion("routers")) }
                         shell.services.browserAccess?.let { access ->
                             ShellTheme(shell) { BrowserAccessMark(access, Modifier.align(Alignment.End).clientRegion("access")) { shell.accessShown = true } }
@@ -84,7 +84,7 @@ private fun startApplication() = application {
                             icon = appIcon(),
                         ) {
                             ClearTypeLayer()
-                            TitleBar(Modifier.newFullscreenControls()) {
+                            TitleBar(Modifier.requiredHeightIn(min = 32.dp).newFullscreenControls()) {
                                 ShellTheme(shell) { TitleBarName(name, Modifier.align(Alignment.CenterHorizontally)) }
                             }
                             ShellTheme(shell) {
@@ -110,6 +110,5 @@ private fun startApplication() = application {
 @Composable
 private fun MenuLook(shell: Shell, content: @Composable () -> Unit) {
     val dark = shell.settings.theme.isDark(shell.settings.current.dark, isSystemInDarkTheme())
-    val look = if (dark) DarkDefaultContextMenuRepresentation else LightDefaultContextMenuRepresentation
-    CompositionLocalProvider(LocalContextMenuRepresentation provides look, content = content)
+    TextMenus(dark, content)
 }

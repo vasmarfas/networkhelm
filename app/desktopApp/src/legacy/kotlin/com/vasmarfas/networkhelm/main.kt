@@ -1,8 +1,5 @@
 package com.vasmarfas.networkhelm
 
-import androidx.compose.foundation.DarkDefaultContextMenuRepresentation
-import androidx.compose.foundation.LightDefaultContextMenuRepresentation
-import androidx.compose.foundation.LocalContextMenuRepresentation
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -22,6 +19,7 @@ import com.vasmarfas.networkhelm.app.rememberFrameState
 import com.vasmarfas.networkhelm.app.reportStartupFailure
 import com.vasmarfas.networkhelm.ui.about.appIcon
 import com.vasmarfas.networkhelm.ui.kit.HintHost
+import com.vasmarfas.networkhelm.ui.kit.TextMenus
 import com.vasmarfas.networkhelm.ui.main.PathWindow
 import com.vasmarfas.networkhelm.ui.terminal.BossTerminal
 import com.vasmarfas.networkhelm.ui.terminal.LocalTerminal
@@ -95,6 +93,5 @@ private fun startApplication() = application {
 @Composable
 private fun MenuLook(shell: Shell, content: @Composable () -> Unit) {
     val dark = shell.settings.theme.isDark(shell.settings.current.dark, isSystemInDarkTheme())
-    val look = if (dark) DarkDefaultContextMenuRepresentation else LightDefaultContextMenuRepresentation
-    CompositionLocalProvider(LocalContextMenuRepresentation provides look, content = content)
+    TextMenus(dark, content)
 }

@@ -1,6 +1,7 @@
 package com.vasmarfas.networkhelm.ui.main
 
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
@@ -46,6 +47,7 @@ import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.ui.kit.Copier
 import com.vasmarfas.networkhelm.ui.kit.HintHost
+import com.vasmarfas.networkhelm.ui.kit.TextMenus
 import com.vasmarfas.networkhelm.ui.kit.copyClipboard
 import com.vasmarfas.networkhelm.ui.kit.readText
 import com.vasmarfas.networkhelm.ui.kit.rememberCopier
@@ -224,17 +226,40 @@ class CopyTest {
         val clip = FakeClipboard()
         setContent {
             CompositionLocalProvider(LocalClipboard provides clip) {
-                NetworkHelmTheme(dark = true) { HintHost { Text("no such item xyz", Modifier.padding(20.dp).testTag("said")) } }
+                NetworkHelmTheme(dark = true) {
+                    TextMenus(dark = true) {
+                        HintHost { Text("no such item xyz", Modifier.padding(20.dp).testTag("said")) }
+                    }
+                }
             }
         }
         val copy = hasText("Copy") or hasText("Копировать")
         onNodeWithTag("said").performMouseInput { doubleClick(Offset(width - 4f, height / 2f)) }
         onNodeWithTag("said").performMouseInput { rightClick(Offset(width - 4f, height / 2f)) }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(copy).fetchSemanticsNodes().isNotEmpty() }
+        onNode(copy).performMouseInput { moveTo(center) }
         picture("copy-text-menu")
         onNode(copy).performClick()
         waitUntil(timeoutMillis = 5_000) { clip.entry != null }
         assertEquals("xyz", runBlocking { clip.readText() })
+    }
+
+    @Test
+    fun theMenuOfNestedSelectionStaysInItsOwnLayout() = runDesktopComposeUiTest(500, 200) {
+        setContent {
+            NetworkHelmTheme(dark = true) {
+                TextMenus(dark = true) {
+                    HintHost { SelectionContainer { Text("no such item xyz", Modifier.padding(20.dp).testTag("said")) } }
+                }
+            }
+        }
+        val copy = hasText("Copy") or hasText("Копировать")
+        onNodeWithTag("said").performMouseInput { doubleClick(Offset(width - 4f, height / 2f)) }
+        onNodeWithTag("said").performMouseInput { rightClick(Offset(width - 4f, height / 2f)) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(copy).fetchSemanticsNodes().isNotEmpty() }
+        onNode(copy).performMouseInput { moveTo(center) }
+        waitForIdle()
+        onNodeWithTag("said").assertExists()
     }
 
     @Test
