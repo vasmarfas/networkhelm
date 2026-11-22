@@ -1,2 +1,3 @@
 *
 !build/libs/networkhelm-gateway.jar
+!packaging/docker-entrypoint.sh

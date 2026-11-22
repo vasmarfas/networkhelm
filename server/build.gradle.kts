@@ -85,7 +85,10 @@ val gatewayImage = tasks.register<Sync>("gatewayImage") {
     into(layout.buildDirectory.dir("gateway/image/NetworkHelmGateway"))
     from(layout.buildDirectory.dir("gateway/runtime")) { into("runtime") }
     from(layout.buildDirectory.file("libs/networkhelm-gateway.jar"))
-    from("packaging") { exclude(if (windows) listOf("*.sh", "*.service") else listOf("*.bat")) }
+    from("packaging") {
+        exclude("docker-entrypoint.sh")
+        exclude(if (windows) listOf("*.sh", "*.service") else listOf("*.bat"))
+    }
 }
 
 fun AbstractArchiveTask.packGateway() {

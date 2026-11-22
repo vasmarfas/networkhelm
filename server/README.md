@@ -54,6 +54,8 @@ The first start makes a self-signed certificate for ten years, for `localhost` a
 | `--host`, `--port` | the address and port to listen on, `0.0.0.0` and `8443` by default; `--host 127.0.0.1` behind a reverse proxy |
 | `--public` | answer any address, not only the local networks; the code is then always asked |
 | `--code` | ask for the code of an authenticator app |
+| `NETWORKHELM_GATEWAY_HOST`, `NETWORKHELM_GATEWAY_PORT` | listener address and port through the environment. Command-line arguments take priority |
+| `NETWORKHELM_GATEWAY_PUBLIC`, `NETWORKHELM_GATEWAY_CODE` | the access flags through the environment: `true` or `false`, both `false` by default. Public access always requires a code |
 | `NETWORKHELM_GATEWAY_HOME` | the folder of the gateway, `~/.networkhelm-gateway` by default |
 | `NETWORKHELM_GATEWAY_PASSWORD` | the password of the first start |
 | `NETWORKHELM_GATEWAY_WEB` | a folder with a build of `:app:webApp` to serve instead of the one inside the jar |
@@ -97,6 +99,10 @@ Every release comes with a ready image for amd64 and arm64 (the `latest` tag fol
 docker run -d --name networkhelm-gateway -p 8443:8443 -v networkhelm-gateway:/data -e NETWORKHELM_GATEWAY_PASSWORD=<password> ghcr.io/vasmarfas/networkhelm-gateway:latest
 docker logs networkhelm-gateway
 ```
+
+With a bind mount, use `-v ./data:/data` or `volumes: ["./data:/data"]` in Compose. The entrypoint assigns the data directory and its files to `10001:10001`, restricts directory access to its owner and starts Java as that user. It handles a new directory and data from an older image. It does not need mode `777`. With an explicit container `user:` or rootless bind-mount restrictions, give that UID ownership of the directory first. The listener and access flags can be set with the environment variables in the table above.
+
+Since 1.4.0 the gateway stores encrypted synchronisation files for other devices. In the app on a device, open synchronisation settings, choose the gateway and enter its HTTPS address and account. The gateway's own page has no synchronisation button: its browsers share the data in `/data/documents`. Those documents and the encrypted files of device synchronisation are separate stores.
 
 To build it yourself:
 

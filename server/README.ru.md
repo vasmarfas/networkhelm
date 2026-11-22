@@ -51,9 +51,11 @@ docker run --rm -it -v networkhelm-gateway:/data networkhelm-gateway --reset-pas
 
 | Параметр | Что значит |
 | --- | --- |
-| `--host`, `--port` | адрес и порт, по умолчанию `0.0.0.0` и `8443`; `--host 127.0.0.1` — за обратным прокси |
+| `--host`, `--port` | адрес и порт, по умолчанию `0.0.0.0` и `8443`. `--host 127.0.0.1` для обратного прокси |
+| `NETWORKHELM_GATEWAY_HOST`, `NETWORKHELM_GATEWAY_PORT` | адрес и порт через окружение. Аргументы командной строки имеют приоритет |
 | `--public` | отвечать любым адресам, а не только локальным сетям; код тогда спрашивается всегда |
 | `--code` | спрашивать код приложения-аутентификатора |
+| `NETWORKHELM_GATEWAY_PUBLIC`, `NETWORKHELM_GATEWAY_CODE` | те же флаги через окружение: `true` или `false`. По умолчанию `false`. Публичный доступ всегда требует код |
 | `NETWORKHELM_GATEWAY_HOME` | папка шлюза, по умолчанию `~/.networkhelm-gateway` |
 | `NETWORKHELM_GATEWAY_PASSWORD` | пароль первого запуска |
 | `NETWORKHELM_GATEWAY_WEB` | папка со сборкой `:app:webApp`, которую отдавать вместо встроенной в jar |
@@ -97,6 +99,29 @@ Jar весит около 31 МБ, нужна Java 17 или новее; веб-
 docker run -d --name networkhelm-gateway -p 8443:8443 -v networkhelm-gateway:/data -e NETWORKHELM_GATEWAY_PASSWORD=<пароль> ghcr.io/vasmarfas/networkhelm-gateway:latest
 docker logs networkhelm-gateway
 ```
+
+Для Compose с папкой рядом с файлом конфигурации:
+
+```yaml
+services:
+  networkhelm-gateway:
+    image: ghcr.io/vasmarfas/networkhelm-gateway:latest
+    ports:
+      - "8443:8443"
+    volumes:
+      - ./data:/data
+    environment:
+      NETWORKHELM_GATEWAY_PASSWORD: "${NETWORKHELM_GATEWAY_PASSWORD}"
+      NETWORKHELM_GATEWAY_HOST: "0.0.0.0"
+      NETWORKHELM_GATEWAY_PORT: "8443"
+      NETWORKHELM_GATEWAY_PUBLIC: "false"
+      NETWORKHELM_GATEWAY_CODE: "false"
+    restart: unless-stopped
+```
+
+При запуске контейнер назначает каталог данных и его файлы пользователю `10001:10001`, закрывает доступ к каталогу для остальных и запускает Java от этого пользователя. Это работает с новым bind mount `./data` и с данными предыдущего образа. Права `777` не нужны. Если задан `user:` или используется rootless Docker с ограничениями bind mount, права на каталог нужно выдать выбранному UID заранее.
+
+Шлюз с 1.4.0 хранит зашифрованные файлы синхронизации устройств. В приложении на устройстве откройте настройки синхронизации, выберите шлюз и укажите его HTTPS-адрес и учётную запись. В самой странице шлюза кнопки синхронизации нет: все её браузеры уже используют общие данные в `/data/documents`. Эти данные и зашифрованное хранилище синхронизации устройств разделены.
 
 Чтобы собрать его самому:
 

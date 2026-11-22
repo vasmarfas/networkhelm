@@ -74,11 +74,11 @@ import kotlin.time.Duration.Companion.seconds
 fun main(args: Array<String>) {
     val home = File(System.getenv("NETWORKHELM_GATEWAY_HOME")?.takeIf { it.isNotBlank() } ?: (System.getProperty("user.home") + "/.networkhelm-gateway"))
     administer(home, args, System.getenv(), ::ask, ::println)?.let { exitProcess(it) }
-    fun option(name: String) = args.indexOf(name).takeIf { it >= 0 }?.let { args.getOrNull(it + 1) }
-    val host = option("--host") ?: "0.0.0.0"
-    val port = option("--port")?.toIntOrNull() ?: 8443
+    val options = GatewayOptions(args, System.getenv())
+    val host = options.host
+    val port = options.port
     val password = System.getenv("NETWORKHELM_GATEWAY_PASSWORD")?.takeIf { it.isNotBlank() }
-    val gateway = Gateway.open(home, public = "--public" in args, code = "--code" in args, password = password, announce = ::println)
+    val gateway = Gateway.open(home, public = options.public, code = options.code, password = password, announce = ::println)
     val keyStore = gateway.keyStore()
     println("NetworkHelm gateway on https://$host:$port, certificate SHA-256 ${Gateway.fingerprint(keyStore)}")
     if (!gateway.public) println("Answers the local networks only; --public opens it to any address")
