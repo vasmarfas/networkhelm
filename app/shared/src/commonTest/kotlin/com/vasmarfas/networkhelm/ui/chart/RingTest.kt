@@ -94,6 +94,13 @@ class RingTest {
     }
 
     @Test
+    fun anAxisOfSmallRatesWritesEveryStepApart() {
+        assertEquals(listOf("1 bps", "2 bps", "3 bps", "4 bps", "5 bps"), (1..5).map { bits(axisTop(0.7) * it / 5) })
+        assertEquals(listOf("1 bps", "2 bps", "3 bps", "4 bps", "5 bps"), (1..5).map { bits(axisTop(2.0) * it / 5) })
+        assertEquals(listOf(5.0, 5000.0, 2.5e8), listOf(0.0, 4600.0, 2.3e8).map(::axisTop))
+    }
+
+    @Test
     fun limitsAndPairsReadAsTheyAreTyped() {
         assertEquals(listOf("0", "999", "1500k", "10M", "2G"), listOf(0L, 999L, 1_500_000L, 10_000_000L, 2_000_000_000L).map(::limit))
         assertEquals("10M / 20M", halves("10000000/20000000") { it.toLongOrNull()?.let(::limit) })

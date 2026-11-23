@@ -74,24 +74,27 @@ fun Chart(
     val measurer = rememberTextMeasurer()
     val style = Theme.type.small.copy(color = palette.muted)
     Canvas(modifier) {
-        val top = ceiling ?: roundTop(series.maxOfOrNull { it.ring.max() } ?: 0.0)
+        val top = ceiling ?: axisTop(series.maxOfOrNull { it.ring.max() } ?: 0.0)
+        val known = ceiling != null || series.any { it.ring.size > 0 }
+        val labels = if (axis && known) (1..STEPS).map { measurer.measure(format(top * it / STEPS), style) } else emptyList()
+        // the labels get a column of their own on the right, so the newest values are not drawn under them
+        val right = size.width - (labels.maxOfOrNull { it.size.width }?.let { it + 8.dp.toPx() } ?: 0f)
         if (axis) {
             for (step in 0..STEPS) {
                 val y = (size.height - 1) * (1 - step.toFloat() / STEPS)
                 drawLine(palette.line, Offset(0f, y), Offset(size.width, y))
-                if (step == 0) continue
-                val text = measurer.measure(format(top * step / STEPS), style)
+                val text = labels.getOrNull(step - 1) ?: continue
                 drawText(text, topLeft = Offset(size.width - text.size.width - 4.dp.toPx(), y + 1.dp.toPx()))
             }
         }
         for (line in series) {
             val ring = line.ring
-            if (ring.size == 1) drawCircle(line.color, 2.dp.toPx(), Offset(size.width - 2.dp.toPx(), size.height * (1 - (ring[0] / top).toFloat())))
+            if (ring.size == 1) drawCircle(line.color, 2.dp.toPx(), Offset(right - 2.dp.toPx(), size.height * (1 - (ring[0] / top).toFloat())))
             if (ring.size < 2) continue
-            val step = size.width / (ring.capacity - 1)
+            val step = right / (ring.capacity - 1)
             val path = Path()
             for (index in 0 until ring.size) {
-                val x = size.width - (ring.size - 1 - index) * step
+                val x = right - (ring.size - 1 - index) * step
                 val y = size.height * (1 - (ring[index] / top).toFloat())
                 if (index == 0) path.moveTo(x, y) else path.lineTo(x, y)
             }
@@ -107,6 +110,9 @@ internal fun roundTop(value: Double): Double {
     val power = 10.0.pow(floor(log10(value)))
     return listOf(1.0, 2.0, 2.5, 5.0, 10.0).first { it * power >= value } * power
 }
+
+// a top below five whole units would write the same label on two steps
+internal fun axisTop(max: Double): Double = maxOf(roundTop(max), STEPS.toDouble())
 
 @Composable
 fun Legend(series: List<Series>, format: (Double) -> String) {
