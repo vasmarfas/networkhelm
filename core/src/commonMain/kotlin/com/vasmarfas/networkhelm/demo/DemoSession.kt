@@ -19,6 +19,8 @@ import com.vasmarfas.networkhelm.packs.Pack
 import com.vasmarfas.networkhelm.packs.PackPath
 import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.packs.packName
+import com.vasmarfas.networkhelm.routeros.RouterOsVersion
+import com.vasmarfas.networkhelm.routeros.knownArguments
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.SafeMode
 import com.vasmarfas.networkhelm.ssh.SshSession
@@ -49,6 +51,9 @@ private val packsOfPlatform: Map<String, List<Pack>> by lazy { bundledPacks().va
 
 private val yesNo = setOf("true", "false", "yes", "no")
 
+// what a device only reports: no session of the app takes these back, nor the version of a program on a Linux host
+private val reported = setOf("state", "status", "running", "uptime")
+
 class DemoSession internal constructor(
     override val device: DeviceInfo,
     override val capabilities: Capabilities,
@@ -65,8 +70,12 @@ class DemoSession internal constructor(
     override val ssh: SshSession? = null
 
     private val shown: Map<MenuPath, Pair<PackPath, Pack>> by lazy {
+        // the pack of another release, as the SNTP Client of RouterOS 6 beside the NTP Client of 7, does not speak for this one
+        val release = RouterOsVersion.parse(device.version)
         val found = LinkedHashMap<MenuPath, Pair<PackPath, Pack>>()
-        for (pack in packsOfPlatform[device.platform.packName].orEmpty()) for ((path, info) in pack.paths) found.getOrPut(MenuPath.parse(path)) { info to pack }
+        for (pack in packsOfPlatform[device.platform.packName].orEmpty().filter { release?.within(it.since, it.until) != false }) {
+            for ((path, info) in pack.paths) found.getOrPut(MenuPath.parse(path)) { info to pack }
+        }
         found
     }
 
@@ -206,10 +215,18 @@ class DemoSession internal constructor(
     private fun arguments(path: MenuPath, menu: DemoMenu): List<Argument> {
         val (info, pack) = shown[path] ?: (null to null)
         val form = info?.form?.let { pack?.forms?.get(it) }?.tabs?.flatMap { it.fields }.orEmpty()
-        val names = (menu.fields.map { it.name } + info?.columns.orEmpty() + form + menu.rows.flatMap { it.values.keys })
+        // the columns of a command are what it answers, not what it is asked
+        val columns = if (menu.kind == NodeKind.Command) emptyList() else info?.columns.orEmpty()
+        val names = (menu.fields.map { it.name } + columns + form + menu.rows.flatMap { it.values.keys })
             .filter { it != "-" && it != ".id" }.distinct()
+        // the fields RouterOS describes in tik4net, as a session over the API gets them
+        val known = if (device.platform == Platform.RouterOs) knownArguments(path) else emptyMap()
+        // what a pack writes in units is a counter or a measure
+        val fixed = info?.run { readonly + bytes + bits + kibi + groups }.orEmpty().toSet() + reported + listOfNotNull("version".takeIf { device.platform == Platform.Ssh })
         return names.map { name ->
-            menu.fields.firstOrNull { it.name == name } ?: Argument(name, kindOf(name, menu.rows), readOnly = !menu.writable || name in info?.readonly.orEmpty())
+            menu.fields.firstOrNull { it.name == name }
+                ?: known[name]?.let { if (menu.writable && name !in fixed) it else it.copy(readOnly = true) }
+                ?: Argument(name, kindOf(name, menu.rows), readOnly = !menu.writable || name in fixed)
         }
     }
 

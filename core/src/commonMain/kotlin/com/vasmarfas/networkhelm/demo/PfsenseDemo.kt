@@ -86,9 +86,9 @@ internal fun pfsenseDemo(): DemoSession = demoSession(
     }
     settings(
         "system/resource",
-        "platform=pfSense", "cpu_model=Intel(R) Celeron(R) J4125 CPU @ 2.00GHz", "cpu_count=4", "cpu_usage=6", "cpu_load_avg=0.21, 0.17, 0.15", "mem_usage=18", "swap_usage=0", "disk_usage=7", "temp_c=47.0",
+        "platform=pfSense", "cpu_model=Intel(R) Celeron(R) J4125 CPU @ 2.00GHz", "cpu_count=4", "cpu-load=6", "cpu_load_avg=0.21, 0.17, 0.15", "memory-usage=18", "swap_usage=0", "disk_usage=7", "temp_c=47.0",
         "uptime=${duration(UPTIME)}", "serial=DEMO-PF-0001",
         writable = false,
-        live = { _, tick -> mapOf("cpu_usage" to "${wander(6, tick, 2)}", "uptime" to duration(UPTIME + tick)) },
+        live = { _, tick -> mapOf("cpu-load" to "${wander(6, tick, 2)}", "uptime" to duration(UPTIME + tick)) },
     )
 }

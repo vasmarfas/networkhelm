@@ -30,7 +30,7 @@ class DemoRoutersTest {
 
     // no pack lists these: the topology view reads the first two itself, the unified view of OpenWrt the devices, and the windows of a
     // Linux host the panel of VPN and what the tabs and dialogs of containers, proxies and new servers run
-    private val readDirectly = setOf("cmr/layout/node", "cmr/layout/link", "status/devices", "vpn/service", "vpn/history", "vpn/collector") +
+    private val readDirectly = setOf("cmr/layout/node", "cmr/layout/link", "status/devices", "vpn/service", "vpn/history", "vpn/collector", "system/resource") +
         listOf("log", "stats", "top", "changes", "inspect", "ls", "download", "unused").map { "container/$it" } +
         listOf("history", "inspect", "pull", "push", "save", "load", "login", "unused").map { "container/image/$it" } +
         listOf("network/containers", "network/inspect", "network/unused", "volume/unused", "volume/browse", "stack/create", "stack/services", "stack/log", "stack/config")
@@ -187,6 +187,44 @@ class DemoRoutersTest {
         assertEquals(ValueType.Flag, openWrt.argument("enabled")?.type)
         val routerOs = router("routeros.demo").describe(MenuPath.parse("ip/address"))
         assertEquals(ValueType.YesNo, routerOs.argument("disabled")?.type)
+    }
+
+    @Test
+    fun aSectionOfUciHasOnlyItsOwnSwitches() = runTest {
+        val openWrt = router("openwrt.demo")
+        val ntp = openWrt.describe(MenuPath.parse("system/timeserver"))
+        assertEquals(ValueType.Flag, ntp.argument("enable_server")?.type)
+        assertNull(ntp.argument("masq"))
+        assertNull(ntp.argument("disabled"))
+        assertNull(openWrt.describe(MenuPath.parse("upnpd/upnpd")).argument("use_https"))
+        assertEquals(ValueType.Text(), openWrt.describe(MenuPath.parse("dhcp/dnsmasq")).argument("local")?.type)
+    }
+
+    @Test
+    fun theDemoOfRouterOs7FollowsThePacksOfItsReleaseNotThoseOf6() = runTest {
+        val ntp = router("routeros.demo").describe(MenuPath.parse("system/ntp/client"))
+        assertEquals(true, ntp.argument("status")?.readOnly)
+        assertEquals(false, ntp.argument("mode")?.readOnly)
+    }
+
+    @Test
+    fun theDnsProxyOfTheKeeneticDemoIsAWindowOfSettings() = runTest {
+        assertEquals(NodeKind.Settings, router("keenetic.demo").describe(MenuPath.parse("rc/dns-proxy")).kind)
+    }
+
+    @Test
+    fun theStatusBarOfEveryDemoTellsTheMemoryAndTheUptime() = runTest {
+        for ((platform, host) in demoHosts) {
+            val resource = assertNotNull(router(host).get(MenuPath.parse(if (platform == Platform.OpenWrt) "status/resource" else "system/resource"), null), host)
+            assertNotNull(resource["uptime"], host)
+            assertTrue(resource["memory-usage"] != null || resource["free-memory"] != null, "$host: $resource")
+        }
+    }
+
+    @Test
+    fun aCommandIsAskedOnlyForItsParametersNotForTheColumnsOfItsAnswer() = runTest {
+        val ping = router("openwrt.demo").describe(MenuPath.parse("tool/ping"))
+        assertEquals(listOf("address", "count", "interval"), ping.arguments.map { it.name })
     }
 
     @Test

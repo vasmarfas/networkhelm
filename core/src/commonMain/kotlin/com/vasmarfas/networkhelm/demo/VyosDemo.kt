@@ -109,6 +109,7 @@ internal fun vyosDemo(): DemoSession = demoSession(
     settings("service/ntp", "server=0.pool.ntp.org", "allow-client address=172.31.10.0/24")
     settings("service/ssh", "port=22", "listen-address=172.31.10.1", "disable-password-authentication=")
     settings("system", "host-name=demo-vyos", "domain-name=lan", "time-zone=Europe/Moscow", "name-server=1.1.1.1")
+    settings("system/resource", "uptime=3d4h12m", "load=0.08, 0.05, 0.01", "total-memory=4116185088", "free-memory=3078590464", writable = false)
     list("system/login/user") {
         row(".name=vyos", "full-name=Demo admin")
         row(".name=viewer", "full-name=Read only")

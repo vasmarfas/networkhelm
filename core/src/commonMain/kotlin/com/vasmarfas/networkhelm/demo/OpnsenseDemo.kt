@@ -21,7 +21,7 @@ internal fun opnsenseDemo(): DemoSession = demoSession(
     list("interfaces/vlan") {
         row("vlanif=igc1_vlan20", "if=igc1", "tag=20", "pcp=0", "proto=802.1q", "descr=IoT")
     }
-    list("interfaces/bridge") {
+    list("interfaces/bridge", fields = flags("linklocal", "stp")) {
         row("deviceName=bridge0", "members=igc2,igc3", "description=Lab switch", "linklocal=0", "stp=0", "proto=rstp", "maxage=20", "fwdelay=15", "holdcnt=6", "maxaddr=2000", "timeout=1200")
     }
     list("firewall/filter", ordered = true, fields = listOf(actions, choice("direction", "in", "out"), choice("ipprotocol", "inet", "inet6", "inet46"), choice("protocol", "TCP", "UDP", "TCP/UDP", "ICMP", "any"))) {
@@ -56,7 +56,7 @@ internal fun opnsenseDemo(): DemoSession = demoSession(
         row("address=10.10.0.102", "hwaddr=00:00:5e:00:53:66", "hostname=iphone-anna", "starts=2026/10/31 10:40:11", "ends=2026/10/31 22:40:11", "state=active", "if=igc1")
         row("address=10.10.20.14", "hwaddr=00:00:5e:00:53:79", "hostname=esp32-sensor", "starts=2026/10/31 08:00:57", "ends=2026/10/31 20:00:57", "state=active", "if=igc1_vlan20")
     }
-    list("kea/subnet") {
+    list("kea/subnet", fields = flags("match-client-id", "option_data_autocollect")) {
         row(
             "subnet=10.10.0.0/24", "pools=10.10.0.100-10.10.0.199", "description=LAN", "valid_lifetime=4000", "next_server=", "match-client-id=1", "allocator=iterative",
             "option_data_autocollect=0", "option_data.routers=10.10.0.1", "option_data.domain_name_servers=10.10.0.1", "option_data.domain_search=lan",
@@ -69,11 +69,11 @@ internal fun opnsenseDemo(): DemoSession = demoSession(
         row("subnet=10.10.0.0/24", "ip_address=10.10.0.30", "hw_address=00:00:5e:00:53:30", "hostname=printer", "client_id=", "description=Printer")
     }
     list("services/kea-leases", writable = false) {
-        row("address=10.10.0.101", "hwaddr=00:00:5e:00:53:65", "client_id=", "valid_lifetime=4000", "expire=1793439812", "subnet_id=1", "hostname=macbook-pro", "state=0", "if=igc1", "if_descr=LAN", "is_reserved=")
-        row("address=10.10.0.102", "hwaddr=00:00:5e:00:53:66", "client_id=", "valid_lifetime=4000", "expire=1793440390", "subnet_id=1", "hostname=iphone-anna", "state=0", "if=igc1", "if_descr=LAN", "is_reserved=")
-        row("address=10.10.0.20", "hwaddr=00:00:5e:00:53:20", "client_id=", "valid_lifetime=4000", "expire=1793438901", "subnet_id=1", "hostname=nas", "state=0", "if=igc1", "if_descr=LAN", "is_reserved=1")
+        row("address=10.10.0.101", "hwaddr=00:00:5e:00:53:65", "client_id=", "valid_lifetime=4000", "expire=2026-10-31 09:43:32", "subnet_id=1", "hostname=macbook-pro", "state=0", "if=igc1", "if_descr=LAN", "is_reserved=")
+        row("address=10.10.0.102", "hwaddr=00:00:5e:00:53:66", "client_id=", "valid_lifetime=4000", "expire=2026-10-31 09:53:10", "subnet_id=1", "hostname=iphone-anna", "state=0", "if=igc1", "if_descr=LAN", "is_reserved=")
+        row("address=10.10.0.20", "hwaddr=00:00:5e:00:53:20", "client_id=", "valid_lifetime=4000", "expire=2026-10-31 09:28:21", "subnet_id=1", "hostname=nas", "state=0", "if=igc1", "if_descr=LAN", "is_reserved=1")
     }
-    list("dnsmasq/range") {
+    list("dnsmasq/range", fields = flags("nosync")) {
         row(
             "interface=opt1", "start_addr=10.10.20.100", "end_addr=10.10.20.199", "subnet_mask=", "prefix_len=", "constructor=", "mode=", "lease_time=86400", "domain_type=range",
             "domain=iot.lan", "set_tag=", "nosync=0", "description=IoT pool", "ra_mode=", "ra_priority=", "ra_mtu=", "ra_interval=", "ra_router_lifetime=",
@@ -83,21 +83,21 @@ internal fun opnsenseDemo(): DemoSession = demoSession(
             "domain=lan", "set_tag=", "nosync=0", "description=LAN IPv6", "ra_mode=slaac", "ra_priority=", "ra_mtu=", "ra_interval=", "ra_router_lifetime=",
         )
     }
-    list("dnsmasq/host") {
+    list("dnsmasq/host", fields = flags("ignore")) {
         row("host=esp32-sensor", "domain=iot.lan", "ip=10.10.20.14", "hwaddr=00:00:5e:00:53:79", "client_id=", "lease_time=", "ignore=0", "descr=Temperature sensor")
         row("host=camera", "domain=iot.lan", "ip=10.10.20.15", "hwaddr=00:00:5e:00:53:7c", "client_id=", "lease_time=", "ignore=1", "descr=Old camera, kept off")
     }
-    list("dnsmasq/option") {
+    list("dnsmasq/option", fields = flags("force")) {
         row("type=set", "option=6", "option6=", "interface=opt1", "value=10.10.0.1", "force=0", "description=DNS for IoT")
         row("type=set", "option=42", "option6=", "interface=opt1", "value=10.10.0.1", "force=0", "description=NTP for IoT")
     }
     list("services/dnsmasq-leases", writable = false) {
-        row("address=10.10.20.14", "hwaddr=00:00:5e:00:53:79", "hostname=esp32-sensor", "expire=1793480021", "client_id=01:00:00:5e:00:53:79", "if=igc1_vlan20", "if_descr=IoT", "is_reserved=1")
-        row("address=10.10.20.117", "hwaddr=00:00:5e:00:53:7d", "hostname=smart-plug", "expire=1793471204", "client_id=", "if=igc1_vlan20", "if_descr=IoT", "is_reserved=")
+        row("address=10.10.20.14", "hwaddr=00:00:5e:00:53:79", "hostname=esp32-sensor", "expire=2026-10-31 20:53:41", "client_id=01:00:00:5e:00:53:79", "if=igc1_vlan20", "if_descr=IoT", "is_reserved=1")
+        row("address=10.10.20.117", "hwaddr=00:00:5e:00:53:7d", "hostname=smart-plug", "expire=2026-10-31 18:26:44", "client_id=", "if=igc1_vlan20", "if_descr=IoT", "is_reserved=")
     }
     list("unbound/host-override") {
-        row("hostname=nas", "domain=lan", "rr=A", "server=10.10.0.20", "description=NAS", "enabled=1")
-        row("hostname=printer", "domain=lan", "rr=A", "server=10.10.0.30", "description=Printer", "enabled=1")
+        row("hostname=nas", "domain=lan", "rr=A", "server=10.10.0.20", "description=NAS", "disabled=false")
+        row("hostname=printer", "domain=lan", "rr=A", "server=10.10.0.30", "description=Printer", "disabled=false")
     }
     list("services/services", writable = false) {
         row("name=unbound", "description=Unbound DNS", "running=1", "locked=0")
@@ -137,6 +137,7 @@ internal fun opnsenseDemo(): DemoSession = demoSession(
         "memory_used=1184301056", "memory_total=8448638976", "disks=/: 3.1G/111G (3%)\n/var/log: 21M/3.9G (1%)\n/tmp: 2.0M/3.9G (0%)",
         writable = false,
     )
+    settings("system/resource", "uptime=12 days, 07:41:09", "load=0.21, 0.18, 0.15", "total-memory=8448638976", "free-memory=7264337920", writable = false)
     settings(
         "system/firmware",
         "product_name=OPNsense", "product_version=25.1.5", "product_latest=25.1.12", "product_series=25.1", "product_nickname=Ultimate Unicorn", "product_abi=25.1",

@@ -25,6 +25,7 @@ internal fun routerOsDemo(): DemoSession = demoSession(
         "free-memory=812941312", "total-memory=1073741824", "cpu=ARM64", "cpu-count=4", "cpu-frequency=1800", "cpu-load=4",
         "free-hdd-space=89849856", "total-hdd-space=134217728", "write-sect-since-reboot=2168", "write-sect-total=1842310",
         "architecture-name=arm64", "board-name=hAP ax^3", "platform=MikroTik",
+        writable = false,
         live = { _, tick ->
             mapOf(
                 "uptime" to duration(UPTIME + tick), "cpu-load" to "${wander(5, tick, 3)}", "free-memory" to "${wander(812_941_312, tick, 5)}",
@@ -190,23 +191,24 @@ internal fun routerOsDemo(): DemoSession = demoSession(
     command("tool/ping", text("address"), text("count"), text("interval"), text("size"), text("ttl"), text("src-address"), run = ::ping)
     command("tool/traceroute", text("address"), text("count"), text("timeout"), text("size"), text("max-hops"), run = ::traceroute)
     command("interface/monitor-traffic", text("interface"), run = ::monitorTraffic)
+    // the router prints its log from the oldest line, and the window follows the end of it
     list("log", writable = false) {
-        row("time=09:41:55", "topics=system,info,account", "message=user admin logged in from 192.168.88.101 via winbox")
-        row("time=09:15:02", "topics=script,warning", "message=wan is down")
-        row("time=09:15:00", "topics=dhcp,info", "message=dhcp-client on ether1 lost IP 203.0.113.50")
+        row("time=oct/27 22:01:43", "topics=system,info", "message=router rebooted")
+        row("time=oct/28 02:13:57", "topics=netwatch,warning", "message=netwatch cloudflare is down")
+        row("time=oct/28 02:14:09", "topics=netwatch,info", "message=netwatch cloudflare is up")
+        row("time=oct/29 18:02:10", "topics=system,info,account", "message=user viewer logged in from 192.168.88.50 via ssh")
+        row("time=oct/30 10:12:44", "topics=firewall,info", "message=198.51.100.7 added to blocked for 1d")
+        row("time=oct/30 23:00:00", "topics=script,info", "message=guest-off: wifi1 disabled")
+        row("time=06:02:27", "topics=firewall,info", "message=input: in:ether1 out:(unknown 0), src-mac 00:00:5e:00:53:fe, proto TCP (SYN), 198.51.100.7:55871->203.0.113.50:22, len 60")
+        row("time=07:30:00", "topics=system,info", "message=scheduler backup-weekly finished")
+        row("time=08:12:44", "topics=dhcp,info", "message=defconf assigned 192.168.88.103 to 00:00:5E:00:53:67")
+        row("time=08:59:18", "topics=wireguard,debug", "message=wg-home: peer phone-anna handshake completed")
         row("time=09:14:41", "topics=interface,info", "message=ether1 link down")
+        row("time=09:14:42", "topics=dhcp,info", "message=dhcp-client on ether1 lost IP 203.0.113.50")
+        row("time=09:14:45", "topics=script,warning", "message=wan is down")
         row("time=09:14:53", "topics=interface,info", "message=ether1 link up (speed 1G, full duplex)")
         row("time=09:15:03", "topics=dhcp,info", "message=dhcp-client on ether1 got IP address 203.0.113.50")
-        row("time=08:59:18", "topics=wireguard,debug", "message=wg-home: peer phone-anna handshake completed")
-        row("time=08:12:44", "topics=dhcp,info", "message=defconf assigned 192.168.88.103 to 00:00:5E:00:53:67")
-        row("time=07:30:00", "topics=system,info", "message=scheduler backup-weekly finished")
-        row("time=06:02:27", "topics=firewall,info", "message=input: in:ether1 out:(unknown 0), src-mac 00:00:5e:00:53:fe, proto TCP (SYN), 198.51.100.7:55871->203.0.113.50:22, len 60")
-        row("time=oct/30 23:00:00", "topics=script,info", "message=guest-off: wifi1 disabled")
-        row("time=oct/30 10:12:44", "topics=firewall,info", "message=198.51.100.7 added to blocked for 1d")
-        row("time=oct/29 18:02:10", "topics=system,info,account", "message=user viewer logged in from 192.168.88.50 via ssh")
-        row("time=oct/28 02:14:09", "topics=netwatch,info", "message=netwatch cloudflare is up")
-        row("time=oct/28 02:13:57", "topics=netwatch,warning", "message=netwatch cloudflare is down")
-        row("time=oct/27 22:01:43", "topics=system,info", "message=router rebooted")
+        row("time=09:41:55", "topics=system,info,account", "message=user admin logged in from 192.168.88.101 via winbox")
     }
     interfacesDemo()
     ipDemo()

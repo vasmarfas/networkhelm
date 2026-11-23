@@ -4,10 +4,6 @@ import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.ValueType
 import kotlinx.coroutines.flow.emptyFlow
 
-private val servicesSwitches = flags(
-    "enabled", "enable", "default", "enable_natpmp", "enable_upnp", "secure_mode", "log_output", "strict_enforcement", "ipv6_enabled", "use_https", "use_ipv6", "upd_privateip",
-)
-
 internal fun DemoBuilder.openWrtServicesDemo() {
     settings(
         "status/mobile",
@@ -60,7 +56,7 @@ internal fun DemoBuilder.openWrtServicesDemo() {
     command("mixomo/backups/create", run = { refusal("it makes no files") })
     command("mixomo/backups/restore", run = { refusal("it restores nothing") })
 
-    list("ddns/service", ordered = true, fields = servicesSwitches + Argument("password", ValueType.Secret)) {
+    list("ddns/service", ordered = true, fields = flags("enabled", "use_ipv6", "use_https") + Argument("password", ValueType.Secret)) {
         row(
             ".name=myddns_ipv4", "enabled=1", "service_name=cloudflare.com-v4", "lookup_host=demo-ap.example.com", "domain=demo-ap.example.com", "username=Bearer",
             "password=demo-api-token", "use_ipv6=0", "ip_source=network", "ip_network=wan", "interface=wan", "use_https=1", "check_interval=10", "check_unit=minutes",
@@ -71,23 +67,23 @@ internal fun DemoBuilder.openWrtServicesDemo() {
             "password=demo-api-token", "use_ipv6=1", "ip_source=network", "ip_network=wan6", "interface=wan6", "use_https=1", "check_interval=10", "check_unit=minutes",
         )
     }
-    settings("ddns/ddns", "ddns_dateformat=%F %R", "ddns_rundir=/var/run/ddns", "ddns_logdir=/var/log/ddns", "ddns_loglines=250", "upd_privateip=0", fields = servicesSwitches)
+    settings("ddns/ddns", "ddns_dateformat=%F %R", "ddns_rundir=/var/run/ddns", "ddns_logdir=/var/log/ddns", "ddns_loglines=250", "upd_privateip=0", fields = flags("upd_privateip"))
 
     settings(
         "pbr/pbr",
         "enabled=1", "verbosity=2", "strict_enforcement=1", "resolver_set=dnsmasq.nftset", "ipv6_enabled=0", "boot_timeout=30", "rule_create_option=add",
         "procd_reload_delay=1", "supported_interface=", "ignored_interface=vpnserver",
-        fields = servicesSwitches,
+        fields = flags("enabled", "strict_enforcement", "ipv6_enabled"),
     )
-    list("pbr/policy", ordered = true, fields = servicesSwitches) {
+    list("pbr/policy", ordered = true, fields = flags("enabled")) {
         row(".name=nas_wan", "name=NAS via WAN", "enabled=1", "interface=wan", "src_addr=192.168.1.20", "chain=prerouting")
         row(".name=work_vpn", "name=Work laptop via VPN", "enabled=1", "interface=wg0", "src_addr=192.168.1.113", "dest_addr=10.30.0.0/16", "chain=prerouting")
         row(".name=streaming", "name=Streaming via WAN", "enabled=0", "interface=wan", "dest_addr=media.example.com", "dest_port=443", "proto=tcp", "chain=prerouting")
     }
-    list("pbr/dns_policy", ordered = true, fields = servicesSwitches) {
+    list("pbr/dns_policy", ordered = true, fields = flags("enabled")) {
         row(".name=guest_dns", "name=Guests to filtered DNS", "enabled=0", "src_addr=192.168.30.0/24", "dest_dns=192.0.2.53", "dest_dns_port=53")
     }
-    list("pbr/include", ordered = true, fields = servicesSwitches) {
+    list("pbr/include", ordered = true, fields = flags("enabled")) {
         row(".name=aws", "path=/usr/share/pbr/pbr.user.aws", "enabled=0")
         row(".name=netflix", "path=/usr/share/pbr/pbr.user.netflix", "enabled=0")
     }
@@ -96,7 +92,7 @@ internal fun DemoBuilder.openWrtServicesDemo() {
         "upnpd/upnpd",
         "enabled=1", "enable_natpmp=1", "enable_upnp=1", "secure_mode=1", "log_output=0", "download=1024", "upload=512", "internal_iface=lan", "port=5000",
         "upnp_lease_file=/var/run/miniupnpd.leases",
-        fields = servicesSwitches,
+        fields = flags("enabled", "enable_natpmp", "enable_upnp", "secure_mode", "log_output"),
     )
     list("upnpd/perm_rule", ordered = true) {
         row(".name=cfg03ec4a", "action=allow", "ext_ports=1024-65535", "int_addr=0.0.0.0/0", "int_ports=1024-65535", "comment=Allow high ports")
@@ -107,7 +103,7 @@ internal fun DemoBuilder.openWrtServicesDemo() {
         row("client=macbook-pro", "address=192.168.1.101", "port=51413", "external-port=51413", "protocol=TCP", "description=Transmission at 51413")
     }
 
-    list("luci_statistics/statistics", fields = servicesSwitches) {
+    list("luci_statistics/statistics", fields = flags("enable")) {
         row(
             ".name=collectd", "BaseDir=/var/run/collectd", "Include=/etc/collectd/conf.d", "PIDFile=/var/run/collectd.pid", "PluginDir=/usr/lib/collectd",
             "TypesDB=/usr/share/collectd/types.db", "Interval=30", "ReadThreads=2",
@@ -121,7 +117,7 @@ internal fun DemoBuilder.openWrtServicesDemo() {
         row(".name=collectd_ping", "enable=0", "Hosts=192.0.2.1", "Interval=30")
     }
 
-    list("system/led", fields = servicesSwitches) {
+    list("system/led", fields = flags("default")) {
         row(".name=led_wan", "name=WAN", "sysfs=green:wan", "trigger=netdev", "dev=wan", "mode=link tx rx")
         row(".name=led_wlan", "name=WLAN", "sysfs=blue:wlan", "trigger=phy1tpt")
         row(".name=led_status", "name=Status", "sysfs=green:status", "trigger=default-on", "default=1")

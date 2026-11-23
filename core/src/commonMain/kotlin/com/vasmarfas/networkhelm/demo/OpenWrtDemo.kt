@@ -17,8 +17,6 @@ private const val UPTIME = 12 * 86_400L + 7 * 3_600L + 41 * 60L + 9L
 
 private val policies = setOf("read", "write")
 
-private val switches = flags("enabled", "disabled", "masq", "mtu_fix", "ignore", "authoritative", "local", "stp", "vlan_filtering", "rebind_protection")
-
 private val verdicts = listOf("input", "output", "forward").map { choice(it, "ACCEPT", "REJECT", "DROP") }
 
 // the session gives a list of UCI as its lines
@@ -28,14 +26,14 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     DeviceInfo(Platform.OpenWrt, "demo-ap", "24.10.2", "aarch64_cortex-a53", "Demo AP (mediatek,mt7981)", setOf("luci", "firewall4", "dnsmasq-full", "wireguard-tools"), policies, id = "demo-openwrt"),
     Capabilities(subscriptions = false, streamingCommands = true, cancel = true, safeMode = SafeModeKind.None, terminal = false, files = false, export = false, menuContents = false),
 ) {
-    list("network/interface", fields = switches) {
+    list("network/interface", fields = flags("disabled")) {
         row(".name=lan", "proto=static", "device=br-lan", "ipaddr=192.168.1.1", "netmask=255.255.255.0", "ip6assign=60", "ipv4-address=192.168.1.1/24", "uptime=12d7h41m")
         row(".name=wan", "proto=dhcp", "device=wan", "ipv4-address=203.0.113.64/24", "uptime=2d3h18m")
         row(".name=wan6", "proto=dhcpv6", "device=wan", "reqaddress=try", "reqprefix=auto", "uptime=2d3h18m")
         row(".name=guest", "proto=static", "device=br-guest", "ipaddr=192.168.30.1", "netmask=255.255.255.0", "ipv4-address=192.168.30.1/24", "uptime=12d7h41m")
         row(".name=wg0", "proto=wireguard", "listen_port=51820", "addresses=10.200.0.1/24", "mtu=1420", "ipv4-address=10.200.0.1/24", "uptime=12d7h40m")
     }
-    list("network/device", fields = switches + many("ports")) {
+    list("network/device", fields = flags("stp", "vlan_filtering") + many("ports")) {
         row("name=br-lan", "type=bridge", "ports=lan1\nlan2\nlan3\nlan4", "macaddr=00:00:5E:00:53:10", "mtu=1500", "stp=0", "vlan_filtering=0")
         row("name=br-guest", "type=bridge", "ports=", "macaddr=00:00:5E:00:53:11", "mtu=1500", "stp=0", "vlan_filtering=0")
     }
@@ -103,12 +101,12 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("address=fd12:3456:789a::fe", "mac-address=00:00:5e:00:53:fd", "interface=br-lan", "status=REACHABLE", "router=true")
     }
 
-    list("wireless/wifi-iface", fields = switches) {
+    list("wireless/wifi-iface", fields = flags("disabled", "isolate")) {
         row(".name=default_radio0", "device=radio0", "mode=ap", "ssid=DemoNet", "network=lan", "encryption=sae-mixed", "disabled=0")
         row(".name=default_radio1", "device=radio1", "mode=ap", "ssid=DemoNet-5G", "network=lan", "encryption=sae-mixed", "disabled=0")
         row(".name=guest_radio0", "device=radio0", "mode=ap", "ssid=DemoGuest", "network=guest", "encryption=psk2", "isolate=1", "disabled=1")
     }
-    list("wireless/wifi-device", fields = switches) {
+    list("wireless/wifi-device", fields = flags("disabled")) {
         row(".name=radio0", "type=mac80211", "band=2g", "channel=6", "htmode=HE20", "country=RU", "disabled=0")
         row(".name=radio1", "type=mac80211", "band=5g", "channel=36", "htmode=HE80", "country=RU", "disabled=0")
     }
@@ -122,10 +120,10 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("interface=wg0", "name=laptop", "endpoint=192.0.2.88:40412", "allowed-address=10.200.0.3/32", "last-handshake=3h41m", "rx=88430211", "tx=12099871")
     }
 
-    list("dhcp/dnsmasq", fields = switches) {
+    list("dhcp/dnsmasq", fields = flags("domainneeded", "boguspriv", "filterwin2k", "localise_queries", "rebind_protection", "rebind_localhost", "expandhosts", "authoritative", "readethers")) {
         row(".name=cfg01411c", "domainneeded=1", "boguspriv=1", "filterwin2k=0", "localise_queries=1", "rebind_protection=1", "rebind_localhost=1", "local=/lan/", "domain=lan", "expandhosts=1", "authoritative=1", "readethers=1", "leasefile=/tmp/dhcp.leases", "resolvfile=/tmp/resolv.conf.d/resolv.conf.auto")
     }
-    list("dhcp/dhcp", fields = switches) {
+    list("dhcp/dhcp", fields = flags("ignore")) {
         row(".name=lan", "interface=lan", "start=100", "limit=150", "leasetime=12h", "dhcpv4=server", "dhcpv6=server", "ra=server")
         row(".name=guest", "interface=guest", "start=100", "limit=100", "leasetime=1h", "dhcpv4=server")
         row(".name=wan", "interface=wan", "ignore=1")
@@ -150,7 +148,7 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     }
 
     settings("firewall/defaults", "input=REJECT", "output=ACCEPT", "forward=REJECT", "synflood_protect=1", fields = verdicts + flags("synflood_protect"))
-    list("firewall/zone", fields = switches + verdicts + many("network")) {
+    list("firewall/zone", fields = flags("masq", "mtu_fix") + verdicts + many("network")) {
         row(".name=cfg02dc81", "name=lan", "network=lan", "input=ACCEPT", "output=ACCEPT", "forward=ACCEPT")
         row(".name=cfg03dc81", "name=wan", "network=wan\nwan6", "input=REJECT", "output=ACCEPT", "forward=REJECT", "masq=1", "mtu_fix=1")
         row(".name=guest", "name=guest", "network=guest", "input=REJECT", "output=ACCEPT", "forward=REJECT")
@@ -159,7 +157,7 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row(".name=cfg04ad58", "src=lan", "dest=wan")
         row(".name=guest_wan", "src=guest", "dest=wan")
     }
-    list("firewall/rule", ordered = true, fields = switches) {
+    list("firewall/rule", ordered = true, fields = flags("enabled")) {
         row(".name=cfg0592bd", "name=Allow-DHCP-Renew", "src=wan", "proto=udp", "dest_port=68", "target=ACCEPT", "family=ipv4", "enabled=1")
         row(".name=cfg06592b", "name=Allow-Ping", "src=wan", "proto=icmp", "target=ACCEPT", "family=ipv4", "enabled=1")
         row(".name=cfg07592b", "name=Allow-IGMP", "src=wan", "proto=igmp", "target=ACCEPT", "family=ipv4", "enabled=0")
@@ -168,14 +166,14 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row(".name=guest_dhcp", "name=Guest-DHCP", "src=guest", "proto=udp", "dest_port=67", "target=ACCEPT", "family=ipv4", "enabled=1")
         row(".name=ssh_lan", "name=Allow-SSH-from-VPN", "src=wan", "src_ip=198.51.100.0/24", "proto=tcp", "dest_port=22", "target=ACCEPT", "enabled=0")
     }
-    list("firewall/redirect", ordered = true, fields = switches) {
+    list("firewall/redirect", ordered = true, fields = flags("enabled")) {
         row(".name=nas_web", "name=NAS web", "src=wan", "src_dport=8080", "dest=lan", "dest_ip=192.168.1.20", "dest_port=80", "proto=tcp", "target=DNAT", "enabled=1")
     }
-    list("firewall/nat", ordered = true, fields = switches) {
+    list("firewall/nat", ordered = true, fields = flags("enabled")) {
         row(".name=vpn_masq", "name=Masquerade-VPN-clients", "src=wan", "src_ip=10.200.0.0/24", "proto=all", "target=MASQUERADE", "family=ipv4", "enabled=1")
         row(".name=office_snat", "name=SNAT-to-office", "src=lan", "src_ip=192.168.1.0/24", "dest_ip=10.20.0.0/16", "snat_ip=192.168.1.1", "proto=all", "target=SNAT", "family=ipv4", "enabled=0")
     }
-    list("firewall/ipset", fields = switches + many("entry")) {
+    list("firewall/ipset", fields = flags("enabled") + many("entry")) {
         row(".name=blocklist", "name=blocklist", "family=ipv4", "match=src_net", "entry=198.51.100.23\n203.0.113.99\n192.0.2.128/25", "enabled=1")
         row(".name=vpn_hosts", "name=vpn_hosts", "family=ipv4", "match=dest_ip", "entry=10.20.0.10\n10.20.0.11", "enabled=1")
     }
@@ -200,7 +198,7 @@ internal fun openWrtDemo(): DemoSession = demoSession(
     }
 
     settings("system/system", "hostname=demo-ap", "timezone=MSK-3", "zonename=Europe/Moscow", "ttylogin=0", "log_size=64", "urandom_seed=0", "conloglevel=8", "cronloglevel=7")
-    settings("system/timeserver", "enabled=1", "enable_server=0", "server=0.openwrt.pool.ntp.org\n1.openwrt.pool.ntp.org", fields = switches + many("server"))
+    settings("system/timeserver", "enabled=1", "enable_server=0", "server=0.openwrt.pool.ntp.org\n1.openwrt.pool.ntp.org", fields = flags("enabled", "enable_server") + many("server"))
     settings(
         "status/resource",
         "uptime=${duration(UPTIME)}", "date=2026-10-31", "time=12:00:00", "version=OpenWrt 24.10.2", "revision=r28739-d9340319c6", "board-name=Demo AP (mediatek,mt7981)",
@@ -245,13 +243,13 @@ internal fun openWrtDemo(): DemoSession = demoSession(
         row("name=sqm", "start=50", "enabled=false", "running=false")
         row("name=uhttpd", "start=50", "enabled=true", "running=true")
     }
-    list("dropbear/dropbear", fields = switches) {
+    list("dropbear/dropbear", fields = flags("PasswordAuth", "RootPasswordAuth")) {
         row(".name=cfg029dfe", "PasswordAuth=on", "RootPasswordAuth=on", "Port=22", "Interface=lan")
     }
-    list("uhttpd/uhttpd", fields = switches) {
+    list("uhttpd/uhttpd", fields = flags("redirect_https", "rfc1918_filter")) {
         row(".name=main", "listen_http=0.0.0.0:80", "listen_https=0.0.0.0:443", "redirect_https=0", "home=/www", "rfc1918_filter=1", "max_requests=3", "cert=/etc/uhttpd.crt", "key=/etc/uhttpd.key", "cgi_prefix=/cgi-bin", "lua_prefix=/cgi-bin/luci=/usr/lib/lua/luci/sgi/uhttpd.lua")
     }
-    list("sqm/queue", fields = switches) {
+    list("sqm/queue", fields = flags("enabled")) {
         row(".name=wan_sqm", "enabled=0", "interface=wan", "download=90000", "upload=18000", "qdisc=cake", "script=piece_of_cake.qos")
     }
     list("status/log", writable = false) {

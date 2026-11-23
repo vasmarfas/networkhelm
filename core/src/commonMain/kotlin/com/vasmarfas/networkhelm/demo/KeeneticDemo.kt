@@ -209,6 +209,7 @@ internal fun keeneticDemo(): DemoSession = demoSession(
         row(".id=WifiMaster0/AccessPoint1", "name=WifiMaster0/AccessPoint1", "ssid=Demo-Guest", "segment=Guest network", "type=deny", "addresses=00:00:5e:00:53:7a")
     }
     list("mws/member", writable = false) {}
+    settings("rc/dns-proxy", "rebind-protect=auto", "max-ttl=86400", fields = listOf(choice("rebind-protect", "auto", "strict", "disabled")))
     settings("rc/dns-proxy/filter", "engine=public")
     settings("rc/dns-proxy/intercept", "enable=true")
     settings("rc/oc-server", "interface=Bridge0", "pool-start=172.16.5.2", "pool-size=150", "multi-login=false", "nat=false", "enable=false")
