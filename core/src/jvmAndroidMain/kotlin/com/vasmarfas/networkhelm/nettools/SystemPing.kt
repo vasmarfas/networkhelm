@@ -65,7 +65,8 @@ private object SystemHostOps : HostOps {
         NetworkInterface.getNetworkInterfaces()?.toList().orEmpty().filter { it.isUp && !it.isLoopback && !cellular(it.name) }.flatMap { network ->
             network.interfaceAddresses.mapNotNull { entry ->
                 val host = (entry.address as? Inet4Address)?.hostAddress ?: return@mapNotNull null
-                LocalNetwork(network.name, host, entry.networkPrefixLength.toInt())
+                // Windows names an adapter ethernet_32780 and gives the words a person knows it by only as the display name
+                LocalNetwork(if (isWindows) network.displayName ?: network.name else network.name, host, entry.networkPrefixLength.toInt())
             }
         }
     }

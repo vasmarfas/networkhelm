@@ -66,6 +66,11 @@ class LabelsTest {
             "SSHKeepAlive" to "SSH Keep Alive",
             "IPv4Address" to "IPv4 Address",
             "mdns" to "mDNS",
+            "in" to "In",
+            "srcnat" to "srcnat",
+            "rfc2217" to "RFC2217",
+            "domainneeded" to "Domain Required",
+            "fwdelay" to "Forward Delay",
         )
         assertEquals(expected, expected.keys.associateWith(::label))
     }

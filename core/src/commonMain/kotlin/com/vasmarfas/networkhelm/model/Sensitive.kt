@@ -13,6 +13,6 @@ fun Argument.sensitive() = secret(type) || choices.isEmpty() && sensitive(name, 
 // lines of secrets, as the secret variables of a container, are as secret as one
 private fun secret(type: ValueType?) = type == ValueType.Secret || (type as? ValueType.Many)?.element == ValueType.Secret
 
-private val secretWords =listOf("password", "passphrase", "secret", "psk", "private-key", "preshared-key", "pre-shared-key", "auth-key", "authentication-key", "md5-key", "enc-key")
+private val secretWords =listOf("password", "passphrase", "secret", "secrets", "psk", "private-key", "preshared-key", "pre-shared-key", "auth-key", "authentication-key", "md5-key", "enc-key")
 
 private val wepKey = Regex("static-key-[0-3]")

@@ -108,7 +108,7 @@ internal fun parseTailscale(text: String): List<Item> {
             "kind" to kind, "name" to peer.text("HostName"), "dns-name" to peer.text("DNSName").removeSuffix("."), "addresses" to peer.list("TailscaleIPs"), "os" to peer.text("OS"),
             "online" to peer.text("Online"), "active" to peer.text("Active"),
             "connection" to peer.text("CurAddr").ifEmpty { peer.text("Relay").ifEmpty { null }?.let { "relay $it" }.orEmpty() },
-            "rx" to peer.text("RxBytes"), "tx" to peer.text("TxBytes"), "last-seen" to peer.text("LastSeen").takeIf { !it.startsWith("0001-") }.orEmpty(),
+            "rx" to peer.text("RxBytes"), "tx" to peer.text("TxBytes"), "last-seen" to peer.text("LastSeen").takeIf { !it.startsWith("0001-") }?.let(::seen).orEmpty(),
             "exit-node" to peer.text("ExitNode"), "exit-node-option" to peer.text("ExitNodeOption"),
         ),
     )
@@ -134,6 +134,12 @@ internal fun parseTailscale(text: String): List<Item> {
     }
     val peers = (status["Peer"] as? JsonObject).orEmpty().values.mapNotNull { it as? JsonObject }.map { row(it.text("PublicKey"), "peer", it) }
     return listOf(node) + peers.sortedBy { it["name"] }
+}
+
+// tailscale writes the time by RFC 3339 in UTC with a fraction of a second; the windows write a date as 2026-11-18 10:00:00
+private fun seen(moment: String): String {
+    val shown = moment.substringBefore('.').removeSuffix("Z").replace('T', ' ')
+    return if (moment.endsWith("Z")) "$shown UTC" else shown
 }
 
 // the flags of tailscale set for the settings given: a flag as true or false, a list with commas

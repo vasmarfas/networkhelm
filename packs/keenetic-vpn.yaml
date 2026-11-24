@@ -13,6 +13,7 @@ window:
 paths:
   vpn:
     columns: [description, type, server, user, connected, address, uptime, rxbytes, txbytes]
+    bytes: [rxbytes, txbytes]
     form: tunnel
   vpn/wireguard:
     columns: [description, name, address, listen-port, peers, connected, global, uptime, rxbytes, txbytes]

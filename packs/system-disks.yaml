@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=./pack.schema.json
+menu: [System, Disks]
+since: 7.0
+window:
+  title: Disks
+  tabs:
+    - { title: Disks, path: disk }
+paths:
+  disk:
+    bytes: [size, free]

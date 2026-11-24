@@ -120,9 +120,9 @@ internal val grids = listOf(
     ),
     Grid("system/groups", "auth/group", item = "", key = "group", several = setOf("priv", "member"), readonly = setOf("gid", "scope")),
     Grid("system/certificates", "trust/cert", item = "", skip = setOf("crt", "csr", "prv", "crt_payload", "csr_payload", "prv_payload"), dates = setOf("valid_from", "valid_to")),
-    Grid("services/kea-leases", "kea/leases4", search = "kea/leases4/search"),
+    Grid("services/kea-leases", "kea/leases4", search = "kea/leases4/search", dates = setOf("expire")),
     Grid("services/dhcp-leases", "dhcpv4/leases", search = "dhcpv4/leases/search_lease"),
-    Grid("services/dnsmasq-leases", "dnsmasq/leases", search = "dnsmasq/leases/search"),
+    Grid("services/dnsmasq-leases", "dnsmasq/leases", search = "dnsmasq/leases/search", dates = setOf("expire")),
     Grid("services/services", "core/service", search = "core/service/search"),
     Grid("diagnostics/arp", "diagnostics/interface", search = "diagnostics/interface/search_arp", method = "GET"),
     Grid("diagnostics/ndp", "diagnostics/interface", search = "diagnostics/interface/search_ndp", method = "GET"),
@@ -136,10 +136,12 @@ private val OVERVIEW = MenuPath.parse("interfaces/overview")
 private val RESOURCES = MenuPath.parse("system/resources")
 private val FIRMWARE = MenuPath.parse("system/firmware")
 private val SETTINGS = listOf(RESOURCES, FIRMWARE)
+// the status bar asks every router for system/resource under the names RouterOS gives
+private val BAR = MenuPath.parse("system/resource")
 
 private val switches = setOf(
     "log", "quick", "nosync", "source_not", "destination_not", "nonat", "counters", "disableroutes", "local", "ignore", "force", "scrambled_password",
-    "option_data_autocollect", "match-client-id", "ddns_override_no_update", "ddns_override_client_update", "ddns_update_on_renew",
+    "option_data_autocollect", "match-client-id", "ddns_override_no_update", "ddns_override_client_update", "ddns_update_on_renew", "linklocal", "stp",
 )
 
 class OpnsenseSession(
@@ -188,7 +190,7 @@ class OpnsenseSession(
     }
 
     override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
-        if (path in SETTINGS) {
+        if (path in SETTINGS || path == BAR) {
             emitAll(polled(configInterval) { listOf(Item("", calls { settings(path) })) })
             return@flow
         }
@@ -321,11 +323,34 @@ class OpnsenseSession(
         return leaves(element)
     }
 
-    private suspend fun settings(path: MenuPath): Map<String, String> = if (path == FIRMWARE) firmware() else resources()
+    private suspend fun settings(path: MenuPath): Map<String, String> = when (path) {
+        FIRMWARE -> firmware()
+        BAR -> bar()
+        else -> resources()
+    }
+
+    private suspend fun memory() = (api.call("GET", "diagnostics/system/systemResources", null) as? JsonObject)?.get("memory") as? JsonObject
+
+    private suspend fun time() = api.call("GET", "diagnostics/system/systemTime", null) as? JsonObject
+
+    private suspend fun bar(): Map<String, String> {
+        val memory = memory()
+        val time = time()
+        val total = memory?.get("total")?.let { flat(it) }?.toLongOrNull()
+        val used = memory?.get("used")?.let { flat(it) }?.toLongOrNull()
+        return buildMap {
+            time?.get("uptime")?.let { put("uptime", flat(it)) }
+            time?.get("loadavg")?.let { put("load", flat(it)) }
+            if (total != null && used != null) {
+                put("total-memory", "$total")
+                put("free-memory", "${total - used}")
+            }
+        }
+    }
 
     private suspend fun resources(): Map<String, String> {
-        val memory = (api.call("GET", "diagnostics/system/systemResources", null) as? JsonObject)?.get("memory") as? JsonObject
-        val time = api.call("GET", "diagnostics/system/systemTime", null) as? JsonObject
+        val memory = memory()
+        val time = time()
         val disks = (api.call("GET", "diagnostics/system/systemDisk", null) as? JsonObject)?.get("devices") as? JsonArray
         return buildMap {
             put("hostname", device.identity)

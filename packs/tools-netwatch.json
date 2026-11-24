@@ -11,6 +11,7 @@
     "paths": {
         "tool/netwatch": {
             "columns": ["name", "host", "type", "interval", "status", "since", "done-tests", "failed-tests"],
+            "groups": ["done-tests", "failed-tests"],
             "readonly": [
                 "status", "since", "done-tests", "failed-tests", "sent-count", "response-count", "loss-count", "loss-percent", "rtt-avg",
                 "rtt-min", "rtt-max", "rtt-jitter", "rtt-stdev", "tcp-connect-time", "http-status-code", "http-resp-time", "ip"

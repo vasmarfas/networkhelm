@@ -8,6 +8,7 @@ window:
 paths:
   wifi/radio:
     columns: [band, channel, width, load, clients, standard, temperature, busy-channels, access-points]
+    bits: [rate]
 labels:
   load: Channel Load, %
   width: Channel Width, MHz

@@ -33,7 +33,7 @@ paths:
     columns: [tag, type, server, through, default]
     form: outbound
     actions:
-      - { title: Make Default, command: default, selection: true, argument: number }
+      - { title: Make Default, command: default, selection: true, argument: number, depends: [{ default: "false" }] }
   proxy/sing-box/rule:
     columns: [domain, geosite, geoip, ip, inbound, outbound, more]
     form: rule

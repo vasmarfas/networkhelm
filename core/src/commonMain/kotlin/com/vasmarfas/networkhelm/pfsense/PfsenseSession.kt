@@ -215,9 +215,10 @@ class PfsenseSession(
     private suspend fun resource(): Map<String, String> {
         val status = api.call("GET", "status/system", emptyMap(), null) as? JsonObject ?: return emptyMap()
         val values = status.mapValues { flat(it.value) }
-        return values + listOfNotNull(
-            values["cpu_usage"]?.toDoubleOrNull()?.let { "cpu-load" to "${it.toLong()}" },
-            values["mem_usage"]?.toDoubleOrNull()?.let { "memory-usage" to "${it.toLong()}" },
+        // the shares go under the names the status bar reads, so the window does not show them twice
+        return values - "cpu_usage" - "mem_usage" + listOfNotNull(
+            values["cpu_usage"]?.let { "cpu-load" to (it.toDoubleOrNull()?.toLong()?.toString() ?: it) },
+            values["mem_usage"]?.let { "memory-usage" to (it.toDoubleOrNull()?.toLong()?.toString() ?: it) },
             values["uptime"]?.let { "uptime" to uptime(it) },
         )
     }

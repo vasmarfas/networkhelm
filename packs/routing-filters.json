@@ -68,11 +68,11 @@
             ]
         },
         "num-list": {
-            "title": "Routing Num Set",
+            "title": "Routing Num Set <{list}>",
             "tabs": [{ "title": "General", "fields": ["list", "range"] }]
         },
         "community-list": {
-            "title": "Routing Community Set",
+            "title": "Routing Community Set <{list}>",
             "tabs": [{ "title": "General", "fields": ["list", "communities", "regexp"] }]
         }
     }

@@ -9,6 +9,7 @@ paths:
   traffic:
     columns: [name, mac, rx-rate, tx-rate, rxbytes, txbytes, online]
     bits: [rx-rate, tx-rate]
+    bytes: [rxbytes, txbytes]
 labels:
   rx-rate: Receiving
   tx-rate: Sending

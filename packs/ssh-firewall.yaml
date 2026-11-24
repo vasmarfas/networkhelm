@@ -34,9 +34,11 @@ paths:
     columns: [name, default, active, target, interfaces, sources, services, ports, masquerade]
     form: zone
     actions:
-      - { title: Make Default, command: set-default, selection: true, argument: number, confirm: true }
+      - { title: Make Default, command: set-default, selection: true, argument: number, confirm: true, depends: [{ default: "false" }] }
   firewall/nftables:
     columns: [family, table, chain, handle, rule, comment, packets, bytes]
+    bytes: [bytes]
+    groups: [packets]
     quick: chain
     form: nft
     actions:
@@ -45,21 +47,29 @@ paths:
     columns: [family, table, chain, type, hook, priority, policy, rules]
   firewall/iptables:
     columns: [table, chain, number, rule, target, comment, packets, bytes]
+    bytes: [bytes]
+    groups: [packets]
     quick: chain
     form: ipt
     actions:
       - { title: Save for Boot, command: save, confirm: true }
   firewall/iptables/chain:
     columns: [table, chain, policy, rules, packets, bytes]
+    bytes: [bytes]
+    groups: [packets]
     form: ipt-chain
   firewall/ip6tables:
     columns: [table, chain, number, rule, target, comment, packets, bytes]
+    bytes: [bytes]
+    groups: [packets]
     quick: chain
     form: ipt
     actions:
       - { title: Save for Boot, command: save, confirm: true }
   firewall/ip6tables/chain:
     columns: [table, chain, policy, rules, packets, bytes]
+    bytes: [bytes]
+    groups: [packets]
     form: ipt-chain
 forms:
   overview:

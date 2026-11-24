@@ -121,7 +121,7 @@ class PfsenseSessionTest {
         assertEquals("online", session.get(MenuPath.parse("routing/gateway-status"), null)?.get("status"))
         assertFailsWith<DeviceException> { session.set(MenuPath.parse("routing/gateway-status"), "0", mapOf("name" to "rd-test")) }
         val resource = session.get(MenuPath.parse("system/resource"), null)
-        assertEquals(listOf("12", "35", "1d2h3m"), listOf("cpu-load", "memory-usage", "uptime").map { resource?.get(it) })
+        assertEquals(listOf("12", "35", "1d2h3m", null, null), listOf("cpu-load", "memory-usage", "uptime", "cpu_usage", "mem_usage").map { resource?.get(it) })
     }
 
     @Test

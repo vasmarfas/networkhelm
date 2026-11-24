@@ -29,6 +29,7 @@ paths:
   ip/hotspot/user:
     columns: [server, name, address, mac-address, profile, uptime]
     readonly: [uptime, bytes-in, bytes-out, packets-in, packets-out, dynamic, default]
+    bytes: [bytes-in, bytes-out]
     form: user
     actions:
       - { title: Reset Counters, command: reset-counters, selection: true }
@@ -39,6 +40,7 @@ paths:
     form: user-profile
   ip/hotspot/active:
     columns: [server, user, domain, address, uptime, idle-time, session-time-left, bytes-in, bytes-out]
+    bytes: [bytes-in, bytes-out]
     readonly:
       - server
       - user

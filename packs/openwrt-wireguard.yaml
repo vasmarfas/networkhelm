@@ -13,6 +13,7 @@ paths:
     where: { proto: [wireguard] }
   status/wireguard:
     columns: [interface, name, endpoint, allowed-address, last-handshake, rx, tx]
+    bytes: [rx, tx]
     quick: interface
 labels:
   .name: Name

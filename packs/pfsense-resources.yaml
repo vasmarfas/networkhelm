@@ -14,13 +14,13 @@ forms:
     tabs:
       - title: Resources
         readonly: true
-        fields: [platform, cpu_model, cpu_count, cpu_usage, cpu_load_avg, mem_usage, swap_usage, disk_usage, temp_c, uptime, serial]
+        fields: [platform, cpu_model, cpu_count, cpu-load, cpu_load_avg, memory-usage, swap_usage, disk_usage, temp_c, uptime, serial]
 labels:
   cpu_model: CPU
   cpu_count: CPU Count
-  cpu_usage: CPU Usage
+  cpu-load: CPU Usage (%)
   cpu_load_avg: Load Average
-  mem_usage: Memory Usage
-  swap_usage: Swap Usage
-  disk_usage: Disk Usage
-  temp_c: Temperature
+  memory-usage: Memory Usage (%)
+  swap_usage: Swap Usage (%)
+  disk_usage: Disk Usage (%)
+  temp_c: Temperature (°C)

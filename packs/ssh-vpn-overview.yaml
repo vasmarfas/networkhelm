@@ -9,4 +9,4 @@ paths:
   vpn/overview:
     columns: [name, installed, packages]
     actions:
-      - { title: Install Now, command: install, selection: true, confirm: true, output: output }
+      - { title: Install Now, command: install, selection: true, confirm: true, output: output, depends: [{ installed: "false" }] }

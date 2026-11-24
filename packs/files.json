@@ -19,7 +19,7 @@
                 { "title": "Restore", "path": "system/backup/load" }
             ]
         },
-        "system/backup/cloud": {},
+        "system/backup/cloud": { "bytes": ["size"] },
         "system/backup/load": { "confirm": true }
     }
 }

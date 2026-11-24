@@ -277,6 +277,17 @@ class OpnsenseSessionTest {
     }
 
     @Test
+    fun theSwitchesOfABridgeAreFlags() = runTest {
+        val (_, session) = session(
+            mapOf(
+                "GET interfaces/bridge_settings/get_item" to """{"bridge":{"deviceName":"","description":"","linklocal":"0","stp":"1","maxage":"20"}}""",
+            ),
+        )
+        val schema = session.describe(MenuPath.parse("interfaces/bridge"))
+        assertEquals(listOf(ValueType.Flag, ValueType.Flag, ValueType.Text()), listOf("linklocal", "stp", "maxage").map { schema.argument(it)?.type })
+    }
+
+    @Test
     fun dnsmasqListsSaveThroughTheSettingsAndApplyThroughTheService() = runTest {
         val (api, session) = session(
             mapOf(
@@ -400,6 +411,16 @@ class OpnsenseSessionTest {
     }
 
     @Test
+    fun theLeasesOfKeaAndDnsmasqEndAtADateNotInSecondsOfUnix() = runTest {
+        val lease = """{"rows":[{"address":"10.10.0.101","hwaddr":"00:00:5e:00:53:65","expire":"1793439812"}],"rowCount":1,"total":1,"current":1}"""
+        val (_, session) = session(mapOf("POST kea/leases4/search" to lease, "POST dnsmasq/leases/search" to lease))
+        for (path in listOf("services/kea-leases", "services/dnsmasq-leases")) {
+            val row = (session.watch(MenuPath.parse(path)).first() as ListEvent.Snapshot).items.single()
+            assertEquals("2026-10-31 09:43:32", row["expire"], path)
+        }
+    }
+
+    @Test
     fun theSystemListsKeepTheNamesOfTheirControllers() = runTest {
         val (api, session) = session(
             mapOf(
@@ -456,6 +477,11 @@ class OpnsenseSessionTest {
         assertNull(item["boottime"])
         val firmware = session.get(MenuPath.parse("system/firmware"), null)
         assertEquals(listOf("26.7", "", "none"), listOf("product_version", "product_check", "status").map { firmware?.get(it) })
+        val bar = (session.watch(MenuPath.parse("system/resource")).first() as ListEvent.Snapshot).items.single()
+        assertEquals(
+            mapOf("uptime" to "00:02:28", "load" to "0.24, 0.09, 0.03", "total-memory" to "2102894592", "free-memory" to "1594357642"),
+            bar.values,
+        )
     }
 
     private class Silent : ByteStream {

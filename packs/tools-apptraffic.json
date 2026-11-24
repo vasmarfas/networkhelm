@@ -1,0 +1,15 @@
+{
+    "$schema": "./pack.schema.json",
+    "menu": ["Tools", "Apptraffic"],
+    "window": {
+        "title": "Apptraffic",
+        "tabs": [
+            { "title": "Apptraffic", "path": "tool/apptraffic" }
+        ]
+    },
+    "paths": {
+        "tool/apptraffic": {
+            "bytes": ["in-minute", "out-minute", "in-hour", "out-hour", "in-day", "out-day", "in-week", "out-week"]
+        }
+    }
+}

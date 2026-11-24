@@ -38,6 +38,7 @@
                 "local.bytes", "local.eor", "output.procid", "input.procid", "ebgp", "hold-time", "keepalive-time", "uptime", "last-started",
                 "prefix-count", "established"
             ],
+            "bytes": ["remote.bytes", "local.bytes"],
             "actions": [
                 { "title": "Refresh", "command": "refresh", "selection": true },
                 { "title": "Resend", "command": "resend", "selection": true },

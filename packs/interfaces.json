@@ -30,6 +30,7 @@
                 "type", "actual-mtu", "running", "slave", "dynamic", "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second",
                 "rx-packets-per-second", "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second"
             ],
+            "bytes": ["tx-byte", "rx-byte", "fp-tx-byte", "fp-rx-byte"],
             "category": "type",
             "iconBy": "type",
             "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },

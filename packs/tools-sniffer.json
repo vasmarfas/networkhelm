@@ -43,7 +43,9 @@
         },
         "tool/sniffer/host": {
             "columns": ["address", "rate", "peak-rate", "total"],
-            "readonly": ["address", "rate", "peak-rate", "total"]
+            "readonly": ["address", "rate", "peak-rate", "total"],
+            "bits": ["rate", "peak-rate"],
+            "bytes": ["total"]
         },
         "tool/sniffer/protocol": {
             "columns": ["protocol", "packets", "bytes", "share"],

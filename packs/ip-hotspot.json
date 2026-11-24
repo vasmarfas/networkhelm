@@ -34,6 +34,7 @@
         },
         "ip/hotspot/user": {
             "columns": ["server", "name", "address", "mac-address", "profile", "uptime", "bytes-in", "bytes-out", "limit-uptime"],
+            "bytes": ["bytes-in", "bytes-out"],
             "readonly": ["uptime", "bytes-in", "bytes-out", "packets-in", "packets-out", "dynamic", "default"],
             "actions": [
                 { "title": "Reset Counters", "command": "reset-counters", "selection": true }
@@ -52,10 +53,12 @@
             "readonly": [
                 "server", "user", "domain", "address", "mac-address", "login-by", "uptime", "session-time-left", "idle-time",
                 "idle-timeout", "keepalive-timeout", "bytes-in", "bytes-out", "packets-in", "packets-out", "radius", "blocked"
-            ]
+            ],
+            "bytes": ["bytes-in", "bytes-out"]
         },
         "ip/hotspot/host": {
             "columns": ["mac-address", "address", "to-address", "server", "uptime", "idle-time", "found-by", "bytes-in", "bytes-out"],
+            "bytes": ["bytes-in", "bytes-out"],
             "readonly": [
                 "mac-address", "address", "to-address", "server", "uptime", "idle-time", "idle-timeout", "keepalive-timeout",
                 "host-dead-time", "found-by", "bytes-in", "bytes-out", "packets-in", "packets-out", "authorized", "bypassed", "dynamic",

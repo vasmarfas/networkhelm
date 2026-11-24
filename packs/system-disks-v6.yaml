@@ -9,5 +9,6 @@ paths:
   disk:
     columns: [name, label, type, disk, free, size]
     readonly: [name, label, type, disk, free, size]
+    bytes: [free, size]
     actions:
       - { title: Eject Drive, command: eject-drive, selection: true, argument: number }

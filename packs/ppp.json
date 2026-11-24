@@ -245,6 +245,9 @@
             ]
         },
         "ovpn-server": {
+            "only": [
+                { "fields": ["enabled"], "where": { "name": [] }, "hide": true }
+            ],
             "tabs": [
                 {
                     "title": "General",

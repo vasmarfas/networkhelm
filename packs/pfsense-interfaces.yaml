@@ -10,6 +10,7 @@ window:
 paths:
   interfaces/overview:
     columns: [name, descr, hwif, status, ipaddr, subnet, macaddr, mtu, media, inbytes, outbytes]
+    bytes: [inbytes, outbytes]
   interfaces/assigned:
     columns: [if, descr, enable, typev4, ipaddr, subnet, typev6, mtu]
   interfaces/vlan:
@@ -24,3 +25,5 @@ labels:
   typev6: IPv6
   vlanif: VLAN
   pcp: Priority
+  inbytes: Bytes In
+  outbytes: Bytes Out

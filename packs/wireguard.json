@@ -20,6 +20,7 @@
                 "current-endpoint-address", "current-endpoint-port", "last-handshake", "rx", "tx"
             ],
             "readonly": ["current-endpoint-address", "current-endpoint-port", "last-handshake", "rx", "tx"],
+            "bytes": ["rx", "tx"],
             "quick": "interface",
             "form": "peer",
             "actions": [{ "title": "Client Config", "command": "show-client-config", "selection": true, "argument": "number", "output": "conf" }]

@@ -38,7 +38,7 @@ class LinuxVpnTailscaleTest {
         val (node, peer) = parseTailscale(running)
         assertEquals(listOf("100.64.0.1, fd7a:115c:a1e0::1", "example.com", "nh-debian12.example.ts.net"), listOf("addresses", "tailnet", "dns-name").map { node[it] })
         assertEquals(
-            listOf("nodekey:aa", "peer", "nh-peer", "100.64.0.2", "true", "relay fra", "100", "2026-11-18T10:00:00Z", "true"),
+            listOf("nodekey:aa", "peer", "nh-peer", "100.64.0.2", "true", "relay fra", "100", "2026-11-18 10:00:00 UTC", "true"),
             listOf(peer.id) + listOf("kind", "name", "addresses", "online", "connection", "rx", "last-seen", "exit-node-option").map { peer[it] },
         )
         assertEquals(listOf("NoState"), parseTailscale("").map { it["state"] })

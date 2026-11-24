@@ -9,6 +9,6 @@ paths:
   proxy/overview:
     columns: [name, installed, state, autostart, ports, config, packages]
     actions:
-      - { title: Install Now, command: install, selection: true, confirm: true, output: output }
+      - { title: Install Now, command: install, selection: true, confirm: true, output: output, depends: [{ installed: "false" }] }
 labels:
   autostart: Start at Boot

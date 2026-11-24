@@ -9,4 +9,4 @@ paths:
   container-engine:
     columns: [name, installed, version, packages]
     actions:
-      - { title: Install Now, command: install, selection: true, confirm: true, output: output }
+      - { title: Install Now, command: install, selection: true, confirm: true, output: output, depends: [{ installed: "false" }] }
