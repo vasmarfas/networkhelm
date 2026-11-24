@@ -547,13 +547,13 @@ private fun Form(
         val community = state.protocol == Access.Snmp
         if (!community && state.protocol != Access.Vyos) Labeled(stringResource(Res.string.connect_user)) { TextField(state.user, field.testTag("user")) }
         Labeled(stringResource(if (community) Res.string.connect_community else Res.string.connect_password)) {
-            FlowRow(itemVerticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val box = field.testTag("password")
-                if (community) TextField(state.password, box) else SecretField(state.password, box, onGo = onConnect)
-                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Checkbox(state.remember, { state.remember = it })
-                    Text(stringResource(if (community) Res.string.connect_remember_community else Res.string.connect_remember), Modifier.clickable { state.remember = !state.remember }.hand(), color = palette.muted)
-                }
+            val box = field.testTag("password")
+            if (community) TextField(state.password, box) else SecretField(state.password, box, onGo = onConnect)
+        }
+        Labeled("") {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Checkbox(state.remember, { state.remember = it })
+                Text(stringResource(if (community) Res.string.connect_remember_community else Res.string.connect_remember), Modifier.clickable { state.remember = !state.remember }.hand(), color = palette.muted)
             }
         }
         val ownSsh = state.protocol != Access.Tcp8291 && state.protocol != Access.MacTelnet

@@ -43,7 +43,7 @@ class DataTableDragTest {
         val state = TableState<String>()
         setContent {
             NetworkHelmTheme {
-                DataTable(listOf("backup.rsc"), listOf(TableColumn<String>("name", "Name", 200.dp) { it }), key = { it }, state = state)
+                DataTable(listOf("backup.rsc"), listOf(TableColumn<String>("name", "Name", 200.dp) { it }, TableColumn<String>("size", "Size", 80.dp) { "" }), key = { it }, state = state)
             }
         }
         onNodeWithTag("resize-name").performMouseInput {

@@ -198,6 +198,18 @@ class TableDialogParityTest {
         onNodeWithTag("comment").performKeyInput { pressKey(Key.Enter) }
         waitUntil(timeoutMillis = 5_000) { router.changed.isNotEmpty() }
         assertEquals(listOf("*2" to mapOf<String, String?>("comment" to "guests")), router.changed.toList())
+        waitUntil(timeoutMillis = 5_000) { onNodeWithTag("table").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true }
+    }
+
+    @Test
+    fun theTableHasTheKeysAgainAfterTheCommentIsLeft() = runDesktopComposeUiTest(1100, 700) {
+        rulesList(router(), FakeClipboard(), AppSettings(MemoryStorage()))
+        onNodeWithText("drop").performClick()
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.M) } }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("comment")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("comment").performKeyInput { pressKey(Key.Escape) }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasTestTag("comment")).fetchSemanticsNodes().isEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onNodeWithTag("table").fetchSemanticsNode().config.getOrNull(SemanticsProperties.Focused) == true }
     }
 
     @Test

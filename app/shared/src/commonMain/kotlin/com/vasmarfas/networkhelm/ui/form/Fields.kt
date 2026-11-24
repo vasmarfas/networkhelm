@@ -67,6 +67,7 @@ import kotlinx.datetime.YearMonth
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.form_add_line
+import networkhelm.app.shared.generated.resources.form_choice_none
 import networkhelm.app.shared.generated.resources.form_choices
 import networkhelm.app.shared.generated.resources.form_negate
 import networkhelm.app.shared.generated.resources.form_remove_line
@@ -97,9 +98,17 @@ fun FieldEditor(argument: Argument, value: String, onChange: (String) -> Unit, m
         type is ValueType.Enumeration && argument.choices.isNotEmpty() -> {
             val shown = value.ifEmpty { argument.default.orEmpty() }
             val choices = if (shown.isEmpty() || shown in argument.choices) argument.choices else listOf(shown) + argument.choices
-            val named = { choice: String -> argument.labels[choice] ?: choice.takeIf { it != it.lowercase() } ?: label(choice) }
+            // an empty choice, as no schedule of Keenetic, needs words to be seen at all
+            val none = stringResource(Res.string.form_choice_none)
+            val named = { choice: String ->
+                argument.labels[choice] ?: when {
+                    choice.isEmpty() -> none
+                    choice != choice.lowercase() -> choice
+                    else -> label(choice)
+                }
+            }
             if (type.closed && choices.size in 2..4 && choices.sumOf { named(it).length } <= 32) Segments(shown, choices, { named(it) }, onChange, modifier)
-            else Select(shown, choices, { argument.labels[it] ?: it }, onChange, modifier, apart = { it in argument.apart })
+            else Select(shown, choices, { argument.labels[it] ?: it.ifEmpty { none } }, onChange, modifier, apart = { it in argument.apart })
         }
         type is ValueType.Many -> Lines(type, value, onChange, modifier, argument.choices, hidden = hide && type.element == ValueType.Secret)
         type is ValueType.TimeWindow -> TimeWindowField(type, value, onChange, modifier)

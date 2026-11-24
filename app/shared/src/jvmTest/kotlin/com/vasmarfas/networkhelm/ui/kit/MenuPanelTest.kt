@@ -8,6 +8,7 @@ import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SemanticsMatcher
+import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.assertIsFocused
 import androidx.compose.ui.test.assertIsNotEnabled
@@ -103,6 +104,15 @@ class MenuPanelTest {
         onNodeWithContentDescription("Earlier tabs").assertIsNotEnabled()
         onNodeWithContentDescription("Later tabs").assertIsEnabled().performClick()
         waitUntil(timeoutMillis = 5_000) { onNodeWithContentDescription("Earlier tabs").fetchSemanticsNode().config.contains(SemanticsProperties.Disabled).not() }
+    }
+
+    @Test
+    fun aStripThatOpensOnALaterTabShowsIt() = runDesktopComposeUiTest(300, 200) {
+        Locale.setDefault(Locale.ENGLISH)
+        val titles = listOf("Interface", "Interface List", "Ethernet", "EoIP Tunnel", "IP Tunnel", "GRE Tunnel", "VLAN")
+        setContent { NetworkHelmTheme { TabStrip(titles, titles.lastIndex, {}) } }
+        waitUntil(timeoutMillis = 5_000) { onNodeWithContentDescription("Later tabs").fetchSemanticsNode().config.contains(SemanticsProperties.Disabled) }
+        onNodeWithText("VLAN").assertIsDisplayed()
     }
 
     @Test

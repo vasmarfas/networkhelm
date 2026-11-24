@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.ui.main
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.hoverable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.collectIsHoveredAsState
@@ -15,6 +16,7 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
@@ -130,6 +132,7 @@ import com.vasmarfas.networkhelm.ui.kit.LocalSubmit
 import com.vasmarfas.networkhelm.ui.kit.TabStrip
 import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
+import com.vasmarfas.networkhelm.ui.kit.fadedEdges
 import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.kit.sunken
 import com.vasmarfas.networkhelm.ui.theme.Theme
@@ -313,6 +316,8 @@ fun ItemForm(
     }
     // listen says nothing when counters move, so the read-only fields are printed again every second
     val formTabs = spec.form?.tabs.orEmpty()
+    // the status of an element stands at the bottom of its window, as in WinBox, and not again among its fields
+    val bottom = "status" in spec.shown?.readonly.orEmpty() && formTabs.none { "status" in it.fields }
     val counted = formTabs.filter { it.path == null && it.monitor == null }.flatMap { it.fields }.filter { it in spec.shown?.readonly.orEmpty() }
     LaunchedEffect(session, spec.path, id, counted, linked) {
         val element = id ?: return@LaunchedEffect
@@ -345,7 +350,7 @@ fun ItemForm(
         kind == NodeKind.Settings -> spec.title
         id == null && lookup == null -> stringResource(Res.string.form_new, template?.substringBefore(" <") ?: singular(spec.title))
         template != null -> formTitle(template, form::value)
-        else -> "${singular(spec.title)} <${form.value("name") ?: form.value("address") ?: id}>"
+        else -> "${singular(spec.title)} <${TitleKeys.firstNotNullOfOrNull { key -> form.value(key)?.ifEmpty { null } } ?: id}>"
     }
     LaunchedEffect(title) { onTitle(title) }
 
@@ -567,15 +572,18 @@ fun ItemForm(
                                 val prefix = tab.title.lowercase() + "."
                                 // an old name of a field reads as the new one: address of an IP service before 7.24 is Available From
                                 val renamed = spec.form?.renamed.orEmpty().mapValues { (_, new) -> spec.labels[new] ?: label(new) }
-                                val labels = tab.fields.filter { it.startsWith(prefix) }.associateWith { label(it.removePrefix(prefix)) } + renamed + spec.labels
-                                fun live(field: String) = (reported[field] ?: owner.value(field))?.let { display(field, it) }
                                 val described = if (source != null) source.schema else current
+                                // the id of a section of UCI would read Name beside the name option, as in the table
+                                val section = (".name" to "Section").takeIf { described?.argument("name") != null }
+                                val labels = tab.fields.filter { it.startsWith(prefix) }.associateWith { label(it.removePrefix(prefix)) } + renamed + listOfNotNull(section) + spec.labels
+                                fun live(field: String) = (reported[field] ?: owner.value(field))?.let { display(field, it) }
                                 val gates = spec.form?.gates { described?.argument(it) != null || owner.value(it) != null }.orEmpty()
                                 for ((field, rx) in if (tab.monitor != null) txRx(tab.fields) else tab.fields.map { it to null }) {
                                     if (field == GROUP_LINE) {
                                         line = true
                                         continue
                                     }
+                                    if (field == "status" && bottom && source == null) continue
                                     if (field == CHANGELOG_FIELD && source == null) {
                                         if (above && line) GroupLine()
                                         above = true
@@ -693,7 +701,7 @@ fun ItemForm(
                     }
                 }
                 val flagged = spec.shown.letters().map { it.first }.filter { form.router[it] == "true" }
-                val status = (form.value("status")?.takeIf { "status" in spec.shown?.readonly.orEmpty() && formTabs.none { "status" in it.fields } } ?: monitored["status"])
+                val status = (form.value("status")?.takeIf { bottom } ?: monitored["status"])
                     ?.let { "${spec.labels["status"] ?: label("status")}: $it" }
                 val standing = form.router[".inactive"]?.let { if (it == "true") "INACTIVE" else "ACTIVE" }
                 if (classic) {
@@ -848,7 +856,11 @@ private fun Rates(values: List<String?>, names: List<String>) {
 private fun Buttons(compact: Boolean, onHeight: (Int) -> Unit, content: @Composable () -> Unit) {
     val palette = Theme.palette
     if (compact) {
-        FlowRow(Modifier.fillMaxWidth().background(palette.raised).padding(6.dp), verticalArrangement = Arrangement.Center) { content() }
+        // one line that scrolls aside: wrapped, the actions of a wireless interface left its fields a third of a phone
+        val scroll = rememberScrollState()
+        Row(Modifier.fillMaxWidth().background(palette.raised).fadedEdges(scroll, palette.raised, palette.muted).horizontalScroll(scroll).padding(6.dp), verticalAlignment = Alignment.CenterVertically) {
+            content()
+        }
     } else {
         Box(Modifier.width(200.dp).fillMaxHeight().background(palette.raised)) {
             Column(Modifier.wrapContentHeight(Alignment.Top, unbounded = true).onSizeChanged { onHeight(it.height) }.padding(6.dp)) { content() }
@@ -979,7 +991,8 @@ private fun FieldLine(title: String, touched: Boolean, changed: Boolean, faded: 
                 overflow = TextOverflow.Ellipsis,
             )
         }
-        Box(Modifier.weight(1f)) { content() }
+        // a checkbox is lower than a field, and stands in the middle of the height of one, as its label does
+        Box(Modifier.weight(1f).heightIn(min = Theme.metrics.control), contentAlignment = Alignment.CenterStart) { content() }
     }
 }
 
@@ -998,7 +1011,7 @@ internal fun FieldRow(argument: Argument, labels: Map<String, String>, form: For
         Column(Modifier.onFocusChanged { inside = it.hasFocus }) {
             Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 when {
-                    value == null && argument.optional && (!open || waits != null || argument.type in switches) ->
+                    value == null && (waits != null || argument.optional && (!open || argument.type in switches)) ->
                         IconButton(Lucide.Plus, waits ?: stringResource(Res.string.form_set), { form.edit(name, "") }, Modifier.testTag("set-$name"), enabled = waits == null)
                     else -> {
                         val negated = argument.negatable && value.orEmpty().startsWith("!")
@@ -1038,6 +1051,10 @@ internal fun FieldRow(argument: Argument, labels: Map<String, String>, form: For
 
 private val switches = setOf(ValueType.YesNo, ValueType.Flag, ValueType.Switch)
 
+// what names an element without a title of its pack: VyOS keeps the name in .name, an element of OPNsense has a UUID for its id,
+// and a comment says more than the number RouterOS gives a row
+private val TitleKeys = listOf("name", ".name", "address", "description", "descr", "hostname", "comment")
+
 private fun typed(value: String) = value.toLongOrNull()?.let(::limit) ?: value
 
 private val protocolNumber = Regex("""0x[0-9A-Fa-f]+|\d+""")
@@ -1060,6 +1077,7 @@ internal fun singular(title: String): String {
     val word = title.substringAfterLast(' ')
     val one = when {
         word.uppercase() == word -> word
+        word.endsWith("kies") -> word.dropLast(1)
         word.endsWith("ies") -> word.dropLast(3) + "y"
         listOf("iases", "sses", "shes", "ches", "xes").any(word::endsWith) -> word.dropLast(2)
         listOf("ss", "us", "is").any(word::endsWith) -> word
@@ -1200,7 +1218,8 @@ private fun ValueBox(shown: String?, modifier: Modifier, tag: String? = null, co
     val hovered by over.collectIsHoveredAsState()
     val copier = rememberCopier()
     Box(modifier.hoverable(over)) {
-        TextField(state, Modifier.fillMaxWidth().height(Theme.metrics.control).then(if (tag != null) Modifier.testTag(tag) else Modifier), readOnly = true)
+        // a long value goes on over lines, as the end of a read-only line could be seen by no one on a phone
+        TextField(state, Modifier.fillMaxWidth().then(if (tag != null) Modifier.testTag(tag) else Modifier), readOnly = true, wrap = true)
         Row(Modifier.align(Alignment.CenterEnd).padding(end = 2.dp)) {
             if (list != null) IconButton(Lucide.Files, stringResource(Res.string.copy_list), { copier.copy(list) })
             if (hovered && !copied.isNullOrEmpty()) IconButton(Lucide.Copy, stringResource(Res.string.copy_value), { copier.copy(copied) })

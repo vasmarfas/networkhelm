@@ -461,6 +461,33 @@ class ConnectScreenTest {
     }
 
     @Test
+    fun aHugeFileIsNotReadAndTheScreenSaysWhy() = runDesktopComposeUiTest(1100, 760) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val services = Services(storage, MemoryTrustStore(), null, MemorySecrets()) { _, _, _ -> router }
+        var read = false
+        val exchange = object : FileExchange {
+            override suspend fun pick() = listOf(
+                LocalFile("disk.img", 64L * 1024 * 1024) {
+                    read = true
+                    ByteArray(0)
+                },
+            )
+            override suspend fun save(name: String, bytes: ByteArray) = false
+        }
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { ConnectScreen(services, SavedRouters(storage), rememberCoroutineScope(), TableLayouts(storage)) { _, _, _ -> } }
+            }
+        }
+        onNodeWithTag("import").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("disk.img could not be read: it is larger than 32.0 MiB")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithTag("open-file").performClick()
+        waitForIdle()
+        assertFalse(read, "the file is not read")
+    }
+
+    @Test
     fun theSavedListComesBackSortedAsItWasLeftEvenWhenItsLayoutIsReadLate() = runDesktopComposeUiTest(1100, 760) {
         Locale.setDefault(Locale.ENGLISH)
         val storage = MemoryStorage()

@@ -619,7 +619,7 @@ private fun Toolbar(
         if (tab.session.device.platform == Platform.OpenWrt) {
             tab.viewProblem?.let { Text(deviceMessage(it), color = palette.danger, style = Theme.type.small, singleLine = true, overflow = TextOverflow.Ellipsis) }
             val views = MenuView.entries.filter { it != MenuView.Native || tab.session.capabilities.nativeMenu }
-            Select(tab.view, views, { viewLabel(it) }, { view -> scope.launch { tab.changeView(view) } }, Modifier.width(if (compact) 110.dp else 150.dp).testTag("view"), hint = { viewHint(it) })
+            Select(tab.view, views, { viewLabel(it) }, { view -> scope.launch { tab.changeView(view) } }, Modifier.width(if (compact) 140.dp else 150.dp).testTag("view"), hint = { viewHint(it) })
         }
         val search = stringResource(Res.string.search_title)
         val about = stringResource(Res.string.main_about)

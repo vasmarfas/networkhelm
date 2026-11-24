@@ -56,6 +56,8 @@ import androidx.compose.ui.input.key.key
 import androidx.compose.ui.input.key.onKeyEvent
 import androidx.compose.ui.input.key.onPreviewKeyEvent
 import androidx.compose.ui.input.key.type
+import androidx.compose.ui.layout.layout
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
@@ -79,7 +81,7 @@ import com.composables.icons.lucide.Funnel
 import com.composables.icons.lucide.Group
 import com.composables.icons.lucide.LayoutList
 import com.composables.icons.lucide.Lucide
-import com.composables.icons.lucide.MessageSquare
+import com.composables.icons.lucide.MessageSquareMore
 
 
 import com.composables.icons.lucide.Pause
@@ -156,6 +158,7 @@ import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
 import com.vasmarfas.networkhelm.ui.kit.copyClipboard
 import com.vasmarfas.networkhelm.ui.kit.dialogPanel
+import com.vasmarfas.networkhelm.ui.kit.fadedEdges
 import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.readText
 import com.vasmarfas.networkhelm.ui.kit.rememberCopier
@@ -225,6 +228,7 @@ import networkhelm.app.shared.generated.resources.list_copy
 import networkhelm.app.shared.generated.resources.list_detail
 import networkhelm.app.shared.generated.resources.list_disable
 import networkhelm.app.shared.generated.resources.list_do_not_ask
+import networkhelm.app.shared.generated.resources.list_empty
 import networkhelm.app.shared.generated.resources.list_enable
 import networkhelm.app.shared.generated.resources.list_find
 import networkhelm.app.shared.generated.resources.list_find_next
@@ -445,7 +449,9 @@ private fun ListView(
     val pack = tab.shown
     val older = tab.form?.renamed.orEmpty().filterValues { it in schema.lacks }
     val lacking = if (pack?.join != null || pack?.monitor != null) emptySet() else schema.lacks
-    fun named(property: String): String = older[property]?.let { named(it) } ?: tab.labels[property] ?: schema.argument(property)?.label ?: label(property)
+    // a section of UCI with an option name of its own, as the LED led_wan named WAN, has two names to tell apart
+    fun named(property: String): String = older[property]?.let { named(it) } ?: tab.labels[property] ?: schema.argument(property)?.label
+        ?: if (property == ".name" && schema.argument("name") != null) "Section" else label(property)
     val scope = rememberCoroutineScope()
     // the paths of the platforms meet, as /container of RouterOS and container of a Linux host, so a layout is kept for its platform;
     // RouterOS keeps the bare path its layouts were saved under
@@ -610,6 +616,8 @@ private fun ListView(
         scope.launch {
             problem = try {
                 block()
+                // a change that got through takes the line with Retry away, so a read that broke off is asked again
+                if (failed) refresh++
                 null
             } catch (e: DeviceException) {
                 e.message
@@ -645,7 +653,14 @@ private fun ListView(
     val icons = Theme.icons
     val hide = LocalSettings.current.hidePasswords
     val tableColumns = (if (detail && !compact) available - "comment" - pack.letters().map { it.first }.toSet() else visible)
-        .let { listed -> if (comments == CommentMode.InColumn && "comment" !in listed && rows.any { !it["comment"].isNullOrEmpty() }) listed + "comment" else listed }
+        // a comment above its row or hidden has no column, also where the pack names one
+        .let { listed ->
+            when {
+                comments != CommentMode.InColumn -> listed - "comment"
+                "comment" !in listed && rows.any { !it["comment"].isNullOrEmpty() } -> listed + "comment"
+                else -> listed
+            }
+        }
         .mapIndexed { place, column ->
             val argument = schema.argument(column)
             val hidden = hide && (argument?.sensitive() ?: sensitive(column))
@@ -767,9 +782,13 @@ private fun ListView(
                 }
                 if (!classic) finder(field)
             }
+            // the words of the buttons give way to their icons while the window is narrower than the toolbar with them
+            var room by remember { mutableIntStateOf(Int.MAX_VALUE) }
+            var needed by remember(path) { mutableIntStateOf(0) }
+            val short = !compact && needed > room
             @Composable
             fun removeButton() {
-                if (canRemove) ToolbarButton(stringResource(Res.string.list_remove), icons["button/remove"]?.vector, { remove(state.selected.toList()) }, enabled = removable, iconOnly = classic || compact, tint = palette.tintOf(icons["button/remove"]))
+                if (canRemove) ToolbarButton(stringResource(Res.string.list_remove), icons["button/remove"]?.vector, { remove(state.selected.toList()) }, enabled = removable, iconOnly = classic || compact || short, tint = palette.tintOf(icons["button/remove"]))
             }
             @Composable
             fun filterButton() = IconButton(icons["button/filter"]?.vector ?: Lucide.Funnel, stringResource(Res.string.filter_toggle), {
@@ -808,22 +827,35 @@ private fun ListView(
                 onOpenWindow(MenuEntry(link.title, link.path.ifEmpty { null }, window = link.window, arguments = arguments, fill = fill, start = start, item = link.item))
             }
             Row(
-                Modifier.fillMaxWidth().background(palette.raised).then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth().background(palette.raised)
+                    .then(
+                        if (compact) {
+                            val bar = rememberScrollState()
+                            Modifier.fadedEdges(bar, palette.raised, palette.muted).horizontalScroll(bar)
+                        } else {
+                            Modifier.onSizeChanged { room = it.width }.layout { measurable, constraints ->
+                                if (!short) needed = measurable.maxIntrinsicWidth(constraints.maxHeight)
+                                val placeable = measurable.measure(constraints)
+                                layout(placeable.width, placeable.height) { placeable.place(0, 0) }
+                            }
+                        },
+                    )
+                    .padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                if (canAdd) ToolbarButton(stringResource(Res.string.list_new), icons["button/new"]?.vector, { onOpenItem(tab.title, path, null, null, fixed, first.toList(), emptyMap()) }, iconOnly = classic || compact, tint = palette.tintOf(icons["button/new"]))
+                if (canAdd) ToolbarButton(stringResource(Res.string.list_new), icons["button/new"]?.vector, { onOpenItem(tab.title, path, null, null, fixed, first.toList(), emptyMap()) }, iconOnly = classic || compact || short, tint = palette.tintOf(icons["button/new"]))
                 if (kinds.isNotEmpty()) {
-                    ActionsMenu(stringResource(Res.string.list_new), icons["button/new"]?.vector, kinds, { true }, { label(it.substringAfterLast('/')) }, iconOnly = classic || compact, tint = palette.tintOf(icons["button/new"])) { kind ->
+                    ActionsMenu(stringResource(Res.string.list_new), icons["button/new"]?.vector, kinds, { true }, { label(it.substringAfterLast('/')) }, iconOnly = classic || compact || short, tint = palette.tintOf(icons["button/new"])) { kind ->
                         onOpenItem(label(kind.substringAfterLast('/')), MenuPath.parse(kind), null, null, emptyMap(), emptyList(), emptyMap())
                     }
                 }
                 if (classic) removeButton()
                 if (canSwitch) {
-                    ToolbarButton(stringResource(Res.string.list_enable), icons["button/enable"]?.vector, { enable(true) }, enabled = state.selected.isNotEmpty(), iconOnly = classic || compact, tint = palette.tintOf(icons["button/enable"]))
-                    ToolbarButton(stringResource(Res.string.list_disable), icons["button/disable"]?.vector, { enable(false) }, enabled = state.selected.isNotEmpty(), iconOnly = classic || compact, tint = palette.tintOf(icons["button/disable"]))
+                    ToolbarButton(stringResource(Res.string.list_enable), icons["button/enable"]?.vector, { enable(true) }, enabled = state.selected.isNotEmpty(), iconOnly = classic || compact || short, tint = palette.tintOf(icons["button/enable"]))
+                    ToolbarButton(stringResource(Res.string.list_disable), icons["button/disable"]?.vector, { enable(false) }, enabled = state.selected.isNotEmpty(), iconOnly = classic || compact || short, tint = palette.tintOf(icons["button/disable"]))
                 }
                 if (!classic) removeButton()
-                if (canComment) ToolbarButton(stringResource(Res.string.list_comment), icons["button/comment"]?.vector, ::comment, enabled = state.selected.isNotEmpty(), iconOnly = classic || compact, tint = palette.tintOf(icons["button/comment"]))
+                if (canComment) ToolbarButton(stringResource(Res.string.list_comment), icons["button/comment"]?.vector, ::comment, enabled = state.selected.isNotEmpty(), iconOnly = classic || compact || short, tint = palette.tintOf(icons["button/comment"]))
                 if (classic) filterButton()
                 if (compact && movable) {
                     val at = shown.indices.filter { shown[it].id in state.selected }
@@ -840,24 +872,24 @@ private fun ListView(
                 }
                 when {
                     actions.isEmpty() -> {}
-                    classic && !compact -> for (action in actions) {
+                    classic && !compact && !short -> for (action in actions) {
                         val icon = icons["command/${action.command}"]
                         ToolbarButton(action.title, icon?.vector, { run(action) }, enabled = available(action), tint = palette.tintOf(icon))
                     }
-                    actions.size == 1 -> ToolbarButton(actions[0].title, icons["command/${actions[0].command}"]?.vector ?: Lucide.Zap, { run(actions[0]) }, enabled = available(actions[0]), iconOnly = compact)
-                    else -> ActionsMenu(stringResource(Res.string.form_actions), Lucide.Zap, actions, ::available, { it.title }, iconOnly = compact, iconOf = { icons["command/${it.command}"] }, onRun = ::run)
+                    actions.size == 1 -> ToolbarButton(actions[0].title, icons["command/${actions[0].command}"]?.vector ?: Lucide.Zap, { run(actions[0]) }, enabled = available(actions[0]), iconOnly = compact || short)
+                    else -> ActionsMenu(stringResource(Res.string.form_actions), Lucide.Zap, actions, ::available, { it.title }, iconOnly = compact || short, iconOf = { icons["command/${it.command}"] }, onRun = ::run)
                 }
                 val open: (PackLink) -> Unit = ::openLink
                 // what opens a window of its own that needs no row, as New Server or Prune, is a button of its own; the windows of settings
                 // the pack links stay in Configuration
                 for (link in tools.filter { it.global && filled(it) }) {
-                    ToolbarButton(link.title, if (classic && !compact) null else icons["link/${link.title}"]?.vector ?: Lucide.Settings, { open(link) }, iconOnly = compact)
+                    ToolbarButton(link.title, if (classic && !compact && !short) null else icons["link/${link.title}"]?.vector ?: Lucide.Settings, { open(link) }, iconOnly = compact || short)
                 }
                 when {
                     linked.isEmpty() -> {}
-                    classic && !compact -> for (link in linked) ToolbarButton(link.title, null, { open(link) })
-                    linked.size == 1 -> ToolbarButton(linked[0].title, icons["link/${linked[0].title}"]?.vector ?: Lucide.Settings, { open(linked[0]) }, iconOnly = compact)
-                    else -> ActionsMenu(stringResource(Res.string.form_configuration), Lucide.Settings, linked, { true }, { it.title }, iconOnly = compact, iconOf = { icons["link/${it.title}"] }, onRun = open)
+                    classic && !compact && !short -> for (link in linked) ToolbarButton(link.title, null, { open(link) })
+                    linked.size == 1 -> ToolbarButton(linked[0].title, icons["link/${linked[0].title}"]?.vector ?: Lucide.Settings, { open(linked[0]) }, iconOnly = compact || short)
+                    else -> ActionsMenu(stringResource(Res.string.form_configuration), Lucide.Settings, linked, { true }, { it.title }, iconOnly = compact || short, iconOf = { icons["link/${it.title}"] }, onRun = open)
                 }
                 if (!compact) Spacer(Modifier.weight(1f))
                 if (!classic) filterButton()
@@ -873,7 +905,7 @@ private fun ListView(
                     )
                     val followed = stringResource(Res.string.list_comments_settings, modes.getValue(everywhere))
                     val title = stringResource(if (ownComments == null) Res.string.list_comments else Res.string.list_comments_own)
-                    ActionsMenu(title, Lucide.MessageSquare, listOf<CommentMode?>(null) + CommentMode.entries, { true }, { mode -> if (mode == null) followed else modes.getValue(mode) }, Modifier.testTag("comments"), active = ownComments != null, iconOnly = true, selected = { it == ownComments }) { mode -> ownComments = mode }
+                    ActionsMenu(title, Lucide.MessageSquareMore, listOf<CommentMode?>(null) + CommentMode.entries, { true }, { mode -> if (mode == null) followed else modes.getValue(mode) }, Modifier.testTag("comments"), active = ownComments != null, iconOnly = true, selected = { it == ownComments }) { mode -> ownComments = mode }
                 }
                 if (!compact) search(Modifier.width(200.dp))
             }
@@ -913,6 +945,7 @@ private fun ListView(
                 onCell = { id, column -> pointed = column?.let { id to it } },
                 focus = table,
                 picker = { ColumnPicker(available, visible, ::named) { chosen = it } },
+                empty = stringResource(Res.string.list_empty).takeIf { arrived != null && reading == null && rows.isEmpty() },
                 modifier = Modifier.weight(1f).fillMaxWidth(),
                 menu = { close ->
                     fun pick(action: () -> Unit) {
@@ -1014,15 +1047,22 @@ private fun ListView(
             // the rows the action goes to, with the packages an overview puts in
             val named = rows.filter { it.id in ids }.map { row -> listOfNotNull(visible.firstOrNull()?.let(row::get), row["packages"]).filter { it.isNotEmpty() }.joinToString(": ") }.filter { it.isNotEmpty() }
             val listed: (@Composable () -> Unit)? = if (named.isEmpty()) null else ({ Text(named.joinToString("\n"), style = Theme.type.mono) })
-            Confirm(stringResource(Res.string.command_question, action.title), action.title, onCancel = { confirming = null }, content = listed) {
+            Confirm(stringResource(Res.string.command_question, action.title), action.title, onCancel = {
                 confirming = null
+                table.requestFocus()
+            }, content = listed) {
+                confirming = null
+                table.requestFocus()
                 val property = action.output
                 if (property != null) act { output = action.title to session.output(path, action, ids, property) } else perform(action, ids)
             }
         }
         output?.let { (heading, reply) -> Output(heading, reply) { output = null } }
         pasting?.let { adds ->
-            Confirm(pluralStringResource(Res.plurals.list_paste_question, adds.size, adds.size), stringResource(Res.string.list_paste), onCancel = { pasting = null }, content = {
+            Confirm(pluralStringResource(Res.plurals.list_paste_question, adds.size, adds.size), stringResource(Res.string.list_paste), onCancel = {
+                pasting = null
+                table.requestFocus()
+            }, content = {
                 Box(Modifier.heightIn(max = 320.dp).widthIn(max = 640.dp).verticalScroll(rememberScrollState())) {
                     SelectionContainer {
                         Text(adds.joinToString("\n") { command(session.device.platform, path, EditKind.Add, emptyList(), it) }, style = Theme.type.mono)
@@ -1030,16 +1070,21 @@ private fun ListView(
                 }
             }) {
                 pasting = null
+                table.requestFocus()
                 act { for (values in adds) session.add(path, values) }
             }
         }
         commenting?.let { comment ->
-            Confirm(stringResource(Res.string.list_comment), stringResource(Res.string.form_ok), onCancel = { commenting = null }, typing = true, content = {
+            Confirm(stringResource(Res.string.list_comment), stringResource(Res.string.form_ok), onCancel = {
+                commenting = null
+                table.requestFocus()
+            }, typing = true, content = {
                 TextField(comment, Modifier.width(320.dp).testTag("comment"))
             }) {
                 val ids = state.selected.toList()
                 val text = comment.text.toString()
                 commenting = null
+                table.requestFocus()
                 act { for (id in ids) session.set(path, id, mapOf("comment" to text)) }
             }
         }

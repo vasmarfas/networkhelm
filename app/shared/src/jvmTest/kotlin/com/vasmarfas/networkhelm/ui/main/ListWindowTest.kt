@@ -57,6 +57,7 @@ import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.model.MenuSchema
 import com.vasmarfas.networkhelm.model.NodeKind
+import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.packs.MenuEntry
 import com.vasmarfas.networkhelm.packs.bundledPacks
@@ -226,6 +227,95 @@ class ListWindowTest {
     }
 
     @Test
+    fun theSizesOfDisksStandInTheirUnits() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val disk = MenuPath.parse("disk")
+        val schema = MenuSchema(
+            disk, NodeKind.List, emptyList(), listOf("print"),
+            listOf(Argument("slot", ValueType.Text(), readOnly = true), Argument("size", ValueType.Text(), readOnly = true), Argument("free", ValueType.Text(), readOnly = true)),
+        )
+        val router = FakeRouter(mapOf("disk" to listOf(Item("*1", mapOf("slot" to "usb1", "size" to "31914983424", "free" to "28521267200")))), schemas = mapOf("disk" to schema))
+        val storage = MemoryStorage()
+        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Disks", "disk"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("29.7 GiB")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasText("26.6 GiB")).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun aSectionOfUciWithANameOfItsOwnIsTitledSection() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val leds = MenuPath.parse("system/led")
+        val schema = MenuSchema(leds, NodeKind.List, emptyList(), listOf("print"), listOf(Argument(".name", ValueType.Text(), readOnly = true), Argument("name", ValueType.Text())))
+        val router = FakeRouter(mapOf("system/led" to listOf(Item("led_wan", mapOf(".name" to "led_wan", "name" to "WAN")))), schemas = mapOf("system/led" to schema), platform = Platform.OpenWrt)
+        val storage = MemoryStorage()
+        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("LEDs", "system/led"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("led_wan")).fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(onAllNodes(hasText("Section")).fetchSemanticsNodes().isNotEmpty())
+    }
+
+    @Test
+    fun aListTheRouterGaveEmptySaysSo() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(mapOf("ip/firewall/filter" to emptyList())), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("No entries")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
+    fun aNarrowWindowKeepsItsSearchAndGivesTheButtonsOnlyTheirIcons() = runDesktopComposeUiTest(900, 560) {
+        Locale.setDefault(Locale.ENGLISH)
+        val storage = MemoryStorage()
+        val tab = RouterTab(FakeRouter(mapOf("ip/firewall/filter" to rules)), "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Enable")).fetchSemanticsNodes().isEmpty() }
+        assertTrue(onAllNodes(hasContentDescription("Enable")).fetchSemanticsNodes().isNotEmpty(), "the button stays as its icon")
+        val search = onNodeWithTag("find").fetchSemanticsNode().boundsInRoot.width
+        assertTrue(search >= 150f, "the search is $search wide")
+    }
+
+    @Test
+    fun aListWhoseReadBrokeOffIsAskedAgainOnceAChangeGetsThrough() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val router = FakeRouter(mapOf("ip/firewall/filter" to rules))
+        var broken = true
+        var watches = 0
+        val falls = CompletableDeferred<Unit>()
+        val failing = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                watches++
+                emit(ListEvent.Snapshot(rules))
+                if (broken) {
+                    falls.await()
+                    throw DeviceException(ErrorCategory.Api, "the read fell over")
+                }
+                awaitCancellation()
+            }
+        }
+        val storage = MemoryStorage()
+        val tab = RouterTab(failing, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Firewall", "ip/firewall/filter"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("drop")).fetchSemanticsNodes().isNotEmpty() }
+        falls.complete(Unit)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("the read fell over")).fetchSemanticsNodes().isNotEmpty() }
+        broken = false
+        val before = watches
+        onNodeWithText("drop").performClick()
+        onNodeWithTag("table").performKeyInput { withKeyDown(Key.CtrlLeft) { pressKey(Key.E) } }
+        waitUntil(timeoutMillis = 5_000) { router.changed.isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { watches > before }
+        assertTrue(onAllNodes(hasText("the read fell over")).fetchSemanticsNodes().isEmpty())
+    }
+
+    @Test
     fun aReadOnlyUserGetsNoButtonsForChangesAndAClosedMenuSaysWhy() = runDesktopComposeUiTest(1000, 620) {
         Locale.setDefault(Locale.ENGLISH)
         val router = FakeRouter(mapOf("ip/firewall/filter" to rules), policies = setOf("read", "test"), deviceMode = mapOf("traffic-gen" to "false"))
@@ -334,7 +424,7 @@ class ListWindowTest {
         onNodeWithTag("table").performKeyInput { pressKey(Key.Delete) }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Remove 1 item?")).fetchSemanticsNodes().isNotEmpty() }
         picture("list-remove")
-        onAllNodes(hasText("Remove"))[1].performClick()
+        onNode(hasText("Remove") and hasAnyAncestor(hasTestTag("confirm"))).performClick()
         waitUntil(timeoutMillis = 5_000) { router.removed.isNotEmpty() }
         assertEquals(listOf(listOf("*1")), router.removed)
     }

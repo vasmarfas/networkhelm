@@ -16,6 +16,7 @@ import com.vasmarfas.networkhelm.model.Argument
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import java.io.File
+import java.util.Locale
 import javax.imageio.ImageIO
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -43,6 +44,26 @@ class SegmentsTest {
         waitForIdle()
         assertEquals("none", value)
         onNodeWithText("None").assertIsSelected()
+    }
+
+    @Test
+    fun anEmptyChoiceStandsAsNotSet() = runDesktopComposeUiTest(600, 120) {
+        Locale.setDefault(Locale.ENGLISH)
+        val schedule = Argument("schedule", ValueType.Enumeration(closed = true), listOf("", "Schedule0", "Schedule1"))
+        var value = "Schedule0"
+        setContent {
+            var shown by remember { mutableStateOf("Schedule0") }
+            NetworkHelmTheme {
+                FieldEditor(schedule, shown, {
+                    shown = it
+                    value = it
+                })
+            }
+        }
+        onNodeWithText("Not set").performClick()
+        waitForIdle()
+        assertEquals("", value)
+        onNodeWithText("Not set").assertIsSelected()
     }
 
     @Test

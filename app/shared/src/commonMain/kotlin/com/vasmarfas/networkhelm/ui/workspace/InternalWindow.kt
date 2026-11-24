@@ -127,7 +127,7 @@ internal fun InternalWindow(
                         .padding(start = if (material) 12.dp else 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    val titleWidth = if (inTitle == null) Modifier.weight(1f) else Modifier.padding(end = 8.dp).widthIn(max = size.width / 3)
+                    val titleWidth = if (inTitle == null) Modifier.weight(1f) else Modifier.padding(end = 8.dp).widthIn(max = size.width * 2 / 3)
                     val titleStyle = when {
                         Theme.classic -> Theme.type.body
                         material -> Theme.type.strong.copy(fontSize = 14.sp, lineHeight = 20.sp)

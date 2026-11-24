@@ -25,6 +25,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.app.BarItem
 import com.vasmarfas.networkhelm.app.LocalSettings
+import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.LinkState
@@ -42,6 +44,7 @@ import com.vasmarfas.networkhelm.ui.chart.isoDate
 import com.vasmarfas.networkhelm.ui.chart.kibiCount
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.emitAll
@@ -51,6 +54,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
+import kotlinx.coroutines.flow.retryWhen
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
 import networkhelm.app.shared.generated.resources.resource_cpu
@@ -59,10 +63,14 @@ import networkhelm.app.shared.generated.resources.resource_load
 import networkhelm.app.shared.generated.resources.resource_memory
 import networkhelm.app.shared.generated.resources.resource_uptime
 import kotlin.math.roundToInt
+import kotlin.time.Duration.Companion.seconds
 
 private val PhoneItems = setOf(BarItem.Cpu, BarItem.Memory, BarItem.Uptime)
 
 private val FromResource = setOf(BarItem.Cpu, BarItem.Memory, BarItem.Disk, BarItem.Uptime)
+
+// a menu or a right the router lacks does not come by asking again
+private val Lasting = setOf(ErrorCategory.MissingItem, ErrorCategory.Unsupported, ErrorCategory.PermissionDenied, ErrorCategory.ArgumentValue)
 
 private val ROUTES = MenuPath.parse("ip/route")
 private val INTERFACES = MenuPath.parse("interface")
@@ -157,16 +165,23 @@ private fun RouterName(tab: RouterTab) {
 
 private fun resourceOf(tab: RouterTab, openWrt: Boolean, cpu: Series, memory: Series): Flow<Item> =
     if (openWrt) {
-        tab.session.watchSettings(MenuPath.parse("status/resource")).onTheSecond().onEach { values -> used(values)?.let(memory.ring::add) }.catch { }
+        tab.session.watchSettings(MenuPath.parse("status/resource")).onTheSecond().onEach { values -> used(values)?.let(memory.ring::add) }.again()
     } else {
         tab.session.watchSettings(MenuPath.parse("system/resource"), listOf("uptime", "cpu-load", "free-memory", "total-memory", "free-hdd-space", "total-hdd-space")).onTheSecond()
             .onEach { values ->
                 values["cpu-load"]?.toDoubleOrNull()?.let(cpu.ring::add)
                 used(values)?.let(memory.ring::add)
-            }.catch { }
+            }.again()
     }
 
-private fun clockOf(tab: RouterTab): Flow<Item> = tab.session.watchSettings(MenuPath.parse("system/clock"), listOf("date", "time")).onTheSecond().catch { }
+private fun clockOf(tab: RouterTab): Flow<Item> = tab.session.watchSettings(MenuPath.parse("system/clock"), listOf("date", "time")).onTheSecond().again()
+
+// a read the router failed is asked again after a pause, so the bar does not stand on old values
+internal fun <T> Flow<T>.again(): Flow<T> = retryWhen { cause, _ ->
+    val passing = cause is DeviceException && cause.category !in Lasting
+    if (passing) delay(5.seconds)
+    passing
+}.catch { }
 
 private class Rates(val name: String, val received: String, val sent: String)
 
@@ -206,7 +221,8 @@ private fun Processor(values: Item, cpu: Series) {
             Text("${stringResource(Res.string.resource_cpu)} $it %", maxLines = 1)
             Trend(listOf(cpu), 100.0)
         }
-        load?.let { Text("${stringResource(Res.string.resource_load)} $it", maxLines = 1) }
+        // a phone keeps the load of the last minute, so the uptime after it still fits
+        load?.let { Text("${stringResource(Res.string.resource_load)} ${if (LocalCompact.current) it.substringBefore(',').substringBefore(' ') else it}", maxLines = 1) }
     }
 }
 

@@ -3,6 +3,7 @@ package com.vasmarfas.networkhelm.ui.main
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.semantics.SemanticsActions
+import androidx.compose.ui.semantics.SemanticsProperties
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.assertCountEquals
@@ -20,9 +21,11 @@ import com.vasmarfas.networkhelm.app.MemoryStorage
 import com.vasmarfas.networkhelm.app.Settings
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.Filter
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.LINK_LOST
 import com.vasmarfas.networkhelm.model.LinkState
+import com.vasmarfas.networkhelm.model.ListEvent
 import com.vasmarfas.networkhelm.model.MenuPath
 import com.vasmarfas.networkhelm.packs.bundledPacks
 import com.vasmarfas.networkhelm.session.DeviceSession
@@ -30,7 +33,10 @@ import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.emitAll
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.toList
+import kotlinx.coroutines.test.runTest
 import java.io.File
 import java.util.Locale
 import javax.imageio.ImageIO
@@ -163,6 +169,31 @@ class ResourceBarTest {
     }
 
     @Test
+    fun theResourcesTheRouterFailedToGiveAreAskedAgain() = runDesktopComposeUiTest(1100, 60) {
+        val router = FakeRouter(mapOf("system/resource" to listOf(Item("", mapOf("cpu-load" to "3")))))
+        var asked = 0
+        val failing = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                if (path == MenuPath.parse("system/resource") && asked++ == 0) throw DeviceException(ErrorCategory.Api, "busy")
+                emitAll(router.watch(path, filter, properties))
+            }
+        }
+        bar(emptyMap(), router = failing)
+        waitUntil(timeoutMillis = 15_000) { onAllNodes(hasText("CPU 3 %")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(2, asked)
+    }
+
+    @Test
+    fun aMenuTheRouterLacksIsNotAskedAgain() = runTest {
+        var asked = 0
+        flow<Item> {
+            asked++
+            throw DeviceException(ErrorCategory.MissingItem, "no such command")
+        }.again().toList()
+        assertEquals(1, asked)
+    }
+
+    @Test
     fun theLastItemsGiveWayOnANarrowBar() = runDesktopComposeUiTest(330, 60) {
         bar(mapOf("cpu-load" to "11", "free-memory" to "1369366528", "total-memory" to "2077253632", "free-hdd-space" to "36540416", "total-hdd-space" to "88150016", "uptime" to "7h21m11s"))
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("CPU 11 %")).fetchSemanticsNodes().isNotEmpty() }
@@ -183,6 +214,14 @@ class ResourceBarTest {
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Memory 34 %")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("CPU 3 %").assertExists()
         assertEquals("Uptime\u00A02w3d10h20m30s", firstLine("Uptime\u00A02w3d10h20m30s"))
+    }
+
+    @Test
+    fun aPhoneShowsTheLoadOfTheLastMinuteOnly() = runDesktopComposeUiTest(375, 60) {
+        bar(mapOf("load" to "0.08, 0.05, 0.01", "free-memory" to "3078590464", "total-memory" to "4116185088", "uptime" to "3d4h12m"), compact = true)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Load 0.08")).fetchSemanticsNodes().isNotEmpty() }
+        val uptime = onAllNodes(hasText("3d4h12m", substring = true)).fetchSemanticsNodes().single().config[SemanticsProperties.Text].single().text
+        assertEquals(uptime, firstLine(uptime))
     }
 
     @Test

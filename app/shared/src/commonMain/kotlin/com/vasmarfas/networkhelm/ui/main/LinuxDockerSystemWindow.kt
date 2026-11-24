@@ -30,6 +30,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.model.DeviceException
@@ -228,10 +229,10 @@ private fun SystemOverview(session: DeviceSession) {
             if (busiest.isNotEmpty()) {
                 Text(stringResource(Res.string.docker_load_top), Modifier.padding(top = 12.dp), style = Theme.type.strong)
                 for (container in busiest) {
-                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        Text(container["name"].orEmpty(), Modifier.width(200.dp), style = Theme.type.mono)
-                        Text(container["cpu"]?.let { "$it %" }.orEmpty(), Modifier.width(90.dp), style = Theme.type.mono)
-                        Text(container["memory"]?.toDoubleOrNull()?.let(::byteSize).orEmpty(), style = Theme.type.mono)
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(container["name"].orEmpty(), Modifier.weight(1f), style = Theme.type.mono, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(container["cpu"]?.let { "$it %" }.orEmpty(), Modifier.width(72.dp), style = Theme.type.mono, maxLines = 1)
+                        Text(container["memory"]?.toDoubleOrNull()?.let(::byteSize).orEmpty(), Modifier.width(96.dp), style = Theme.type.mono, maxLines = 1)
                     }
                 }
             }

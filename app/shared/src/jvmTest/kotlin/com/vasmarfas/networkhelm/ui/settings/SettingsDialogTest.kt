@@ -113,7 +113,7 @@ class SettingsDialogTest {
         tables["ip/firewall/mangle"] = TableLayout(columns = listOf("chain"), comments = CommentMode.Hidden)
         tables["ip/firewall/raw"] = TableLayout(columns = listOf("action"))
         setContent { NetworkHelmTheme { SettingsDialog(settings, tables = tables) {} } }
-        onNodeWithText("A table can keep a mode of its own", substring = true).assertExists()
+        onNodeWithText("can give it a mode of its own", substring = true).assertExists()
 
         onNodeWithTag("comments").performScrollTo().performClick()
         onNodeWithText("In a column").performClick()

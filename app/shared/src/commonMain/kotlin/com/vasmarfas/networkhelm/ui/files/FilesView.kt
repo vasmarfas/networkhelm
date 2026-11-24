@@ -7,6 +7,7 @@ import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -97,6 +98,7 @@ import com.vasmarfas.networkhelm.ui.kit.IconButton
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.TextField
 import com.vasmarfas.networkhelm.ui.kit.ToolbarButton
+import com.vasmarfas.networkhelm.ui.kit.fadedEdges
 import com.vasmarfas.networkhelm.ui.kit.hand
 import com.vasmarfas.networkhelm.ui.kit.rememberCopier
 import com.vasmarfas.networkhelm.ui.main.ActionsMenu
@@ -157,6 +159,7 @@ import networkhelm.app.shared.generated.resources.files_path
 import networkhelm.app.shared.generated.resources.files_properties
 import networkhelm.app.shared.generated.resources.files_refresh
 import networkhelm.app.shared.generated.resources.files_rename
+import networkhelm.app.shared.generated.resources.files_replace_local_question
 import networkhelm.app.shared.generated.resources.files_replace_question
 import networkhelm.app.shared.generated.resources.files_selected_size
 import networkhelm.app.shared.generated.resources.files_send
@@ -392,6 +395,13 @@ internal fun FilesView(
     fun send(files: List<LocalFile>, into: String) {
         if (files.any { it.name.endsWith(".auto.npk") || it.name.endsWith(".auto.rsc") }) sending = files to into else place(files, into)
     }
+    var overwriting by remember { mutableStateOf<Triple<LocalFolder, List<Entry>, String>?>(null) }
+    suspend fun fetch(files: List<Entry>, destination: LocalFolder) {
+        for (file in files) {
+            weigh(file.name, file.size)
+            destination.write(file.name, backend.read(file))
+        }
+    }
     fun download(files: List<Entry>) {
         for (file in files.filter { !it.directory }) {
             transfers.add(file.name, false) {
@@ -494,7 +504,7 @@ internal fun FilesView(
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             Row(
-                Modifier.fillMaxWidth().background(palette.raised).then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth().background(palette.raised).then(if (compact) rememberScrollState().let { Modifier.fadedEdges(it, palette.raised, palette.muted).horizontalScroll(it) } else Modifier).padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
             ) {
@@ -529,7 +539,7 @@ internal fun FilesView(
                 TextField(query, Modifier.width(if (compact) 140.dp else 200.dp).focusRequester(find).testTag("find"), placeholder = stringResource(Res.string.list_find))
             }
             Row(
-                Modifier.fillMaxWidth().background(palette.raised).then(if (compact) Modifier.horizontalScroll(rememberScrollState()) else Modifier).padding(horizontal = 4.dp, vertical = 2.dp),
+                Modifier.fillMaxWidth().background(palette.raised).then(if (compact) rememberScrollState().let { Modifier.fadedEdges(it, palette.raised, palette.muted).horizontalScroll(it) } else Modifier).padding(horizontal = 4.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 if (canCreate) {
@@ -545,10 +555,10 @@ internal fun FilesView(
                         ToolbarButton(stringResource(Res.string.files_download_folder), Lucide.FolderDown, {
                             guarded {
                                 val destination = exchange.pickFolder() ?: return@guarded
-                                for (file in chosen.filter { !it.directory }) {
-                                    weigh(file.name, file.size)
-                                    destination.write(file.name, backend.read(file))
-                                }
+                                val files = chosen.filter { !it.directory }
+                                // Windows and macOS take names that differ only in case for one file
+                                val taken = files.map { it.name }.filter { name -> destination.files.any { it.name.equals(name, ignoreCase = true) } }
+                                if (taken.isNotEmpty()) overwriting = Triple(destination, files, taken.joinToString(", ")) else fetch(files, destination)
                             }
                         }, enabled = chosen.any { !it.directory }, iconOnly = compact)
                     }
@@ -639,10 +649,12 @@ internal fun FilesView(
             problem?.let { Text(it, Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 2.dp).testTag("files-problem"), style = Theme.type.small, color = palette.danger) }
             chosenRows.singleOrNull()?.let { Details(it, compact) }
             DisableSelection {
-                Row(
+                // on a phone the facts of the footer go on to a second line whole, not a few letters at a time
+                FlowRow(
                     Modifier.fillMaxWidth().background(palette.raised).padding(horizontal = 8.dp, vertical = 3.dp),
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    itemVerticalAlignment = Alignment.CenterVertically,
                 ) {
                     val total = tree.countIn(root)
                     val counted = when {
@@ -680,6 +692,12 @@ internal fun FilesView(
             Confirm(stringResource(Res.string.files_replace_question, taken), stringResource(Res.string.file_replace), onCancel = { replacing = null }) {
                 replacing = null
                 upload(files, into)
+            }
+        }
+        overwriting?.let { (destination, files, taken) ->
+            Confirm(stringResource(Res.string.files_replace_local_question, destination.name, taken), stringResource(Res.string.file_replace), onCancel = { overwriting = null }) {
+                overwriting = null
+                guarded { fetch(files, destination) }
             }
         }
         renaming?.let { (entry, field) ->

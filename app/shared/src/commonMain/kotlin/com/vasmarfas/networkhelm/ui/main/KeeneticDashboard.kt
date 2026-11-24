@@ -23,9 +23,12 @@ import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.coerceIn
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.composeunstyled.Text
@@ -283,10 +286,15 @@ internal fun Load(title: String, fraction: Float?, text: String?) {
 @Composable
 internal fun Facts(word: (String) -> String, vararg facts: Pair<String, String?>) {
     val palette = Theme.palette
+    val shown = facts.filterNot { it.second.isNullOrEmpty() }
+    // the names take the width of the longest of them, so a longer translation is not cut beside empty space
+    val measurer = rememberTextMeasurer()
+    val body = Theme.type.body
+    val names = with(LocalDensity.current) { shown.maxOfOrNull { measurer.measure(word(it.first), body).size.width }?.toDp() ?: 0.dp }
     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
-        for ((title, value) in facts.filterNot { it.second.isNullOrEmpty() }) {
+        for ((title, value) in shown) {
             Row(Modifier.fillMaxWidth().padding(vertical = 1.dp).semantics(mergeDescendants = true) {}, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(word(title), Modifier.width(160.dp), color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Text(word(title), Modifier.width((names + 2.dp).coerceIn(120.dp, 200.dp)), color = palette.muted, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(value.orEmpty(), Modifier.weight(1f), maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
         }

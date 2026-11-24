@@ -50,6 +50,7 @@ internal fun PortsReferencePane() {
         key = { it.port },
         highlight = query,
         detail = LocalCompact.current,
-        modifier = Modifier.fillMaxWidth().height(TableHeight).testTag("ports-ref-table"),
+        // the list is all this tool has, so it takes the room the others give their forms
+        modifier = Modifier.fillMaxWidth().height(TableHeight + 200.dp).testTag("ports-ref-table"),
     )
 }

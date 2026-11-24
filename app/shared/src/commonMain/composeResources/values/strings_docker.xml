@@ -175,7 +175,7 @@
     <string name="docker_registries_remove">Remove</string>
     <string name="docker_registries_host_login">Log In on the Host</string>
     <string name="docker_registries_host_hint">The CLI of the host keeps a login of the host in its config file; the pulls and pushes of the app need none.</string>
-    <string name="docker_registries_none">A login added here goes with every pull and push of its registry, from the protected store of the app.</string>
+    <string name="docker_registries_none">The login is kept in the protected store of the app and goes to the engine when an image is pulled from this registry or pushed to it.</string>
     <string name="docker_registries_keep">An empty password keeps the one the login has. Click the row again to add a new login instead.</string>
     <string name="docker_group_root">This login is in the group docker: through Docker it can do on the host whatever root can.</string>
     <string name="docker_group_close">Close</string>

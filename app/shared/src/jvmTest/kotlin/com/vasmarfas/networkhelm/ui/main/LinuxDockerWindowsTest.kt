@@ -521,7 +521,7 @@ class LinuxDockerWindowsTest {
         picture("docker-containers-overview")
         // the other entries of the group turn the tab of the same window, the windows of the app among them
         tab.open(MenuEntry("Registries", "container/image", window = "docker-registries"))
-        shown("A login added here")
+        shown("The login is kept in the protected store")
         tab("Monitor")
         shown("Events")
         picture("docker-containers-monitor")

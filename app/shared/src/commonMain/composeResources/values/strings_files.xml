@@ -16,6 +16,7 @@
     <string name="files_name_hint">Name</string>
     <string name="files_name_taken">%1$s already exists here.</string>
     <string name="files_replace_question">The router already has %1$s. Replace?</string>
+    <string name="files_replace_local_question">The folder %1$s already has %2$s. Replace?</string>
     <string name="files_bad_name">A name cannot hold a slash.</string>
     <string name="files_no_folder">There is no folder %1$s.</string>
     <string name="files_empty">This folder is empty</string>

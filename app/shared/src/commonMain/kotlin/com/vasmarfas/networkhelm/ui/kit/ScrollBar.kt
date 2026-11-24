@@ -35,7 +35,11 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.onSizeChanged
@@ -206,4 +210,24 @@ private fun LazyListState.showAt(fraction: Float) {
     val viewport = info.viewportEndOffset - info.viewportStartOffset
     val row = fraction.coerceIn(0f, 1f) * (info.totalItemsCount - viewport / average).coerceAtLeast(0f)
     requestScrollToItem(row.toInt(), ((row - row.toInt()) * average).roundToInt())
+}
+
+// a row wider than a phone fades with a chevron at the edge it goes on past, so the buttons beyond it are seen to be there
+fun Modifier.fadedEdges(state: ScrollState, color: Color, mark: Color): Modifier = drawWithContent {
+    drawContent()
+    val band = 24.dp.toPx()
+    val tip = 4.dp.toPx()
+    val middle = size.height / 2
+    fun chevron(x: Float, sign: Float) {
+        drawLine(mark, Offset(x - sign * tip, middle - 2 * tip), Offset(x, middle), 1.5.dp.toPx())
+        drawLine(mark, Offset(x, middle), Offset(x - sign * tip, middle + 2 * tip), 1.5.dp.toPx())
+    }
+    if (state.canScrollForward) {
+        drawRect(Brush.horizontalGradient(listOf(color.copy(alpha = 0f), color), startX = size.width - band, endX = size.width), Offset(size.width - band, 0f), Size(band, size.height))
+        chevron(size.width - 6.dp.toPx(), 1f)
+    }
+    if (state.canScrollBackward) {
+        drawRect(Brush.horizontalGradient(listOf(color, color.copy(alpha = 0f)), startX = 0f, endX = band), Offset.Zero, Size(band, size.height))
+        chevron(6.dp.toPx(), -1f)
+    }
 }

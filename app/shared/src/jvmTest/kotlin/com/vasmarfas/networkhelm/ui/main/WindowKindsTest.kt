@@ -372,6 +372,16 @@ class WindowKindsTest {
     }
 
     @Test
+    fun anElementWithoutANameIsTitledByWhatNamesItBestNotByItsId() = runDesktopComposeUiTest(1100, 700) {
+        val bridges = MenuPath.parse("interfaces/bridge")
+        val schema = MenuSchema(bridges, NodeKind.List, emptyList(), listOf("add", "print", "remove", "set"), listOf(Argument("description", ValueType.Text())))
+        val bridge = Item("7d0c1a5e-4b2f-4c3a-8e11-2f6a9b3c5d71", mapOf("deviceName" to "bridge0", "description" to "Lab switch"))
+        val tab = show(FakeRouter(mapOf(bridges.toString() to listOf(bridge)), schemas = mapOf(bridges.toString() to schema)), MenuEntry("Bridges", bridges.toString()))
+        tab.openItem("Bridges", bridges, bridge.id)
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Bridge <Lab switch>")).fetchSemanticsNodes().isNotEmpty() }
+    }
+
+    @Test
     fun theStateOfAClientStaysAtTheBottom() = runDesktopComposeUiTest(1100, 700) {
         val clients = MenuPath.parse("ip/dhcp-client")
         val schema = MenuSchema(

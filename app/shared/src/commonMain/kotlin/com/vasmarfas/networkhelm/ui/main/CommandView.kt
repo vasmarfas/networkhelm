@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.composeunstyled.Text
 import com.vasmarfas.networkhelm.model.DeviceException
@@ -70,7 +71,9 @@ import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.pluralStringResource
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
+import networkhelm.app.shared.generated.resources.command_done
 import networkhelm.app.shared.generated.resources.command_fasttrack
+import networkhelm.app.shared.generated.resources.command_no_arguments
 import networkhelm.app.shared.generated.resources.command_question
 import networkhelm.app.shared.generated.resources.command_start
 import networkhelm.app.shared.generated.resources.command_stop
@@ -113,6 +116,7 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
     var running by remember { mutableStateOf<Job?>(null) }
     var runWith by remember { mutableStateOf(emptyMap<String, String>()) }
     var problem by remember { mutableStateOf<String?>(null) }
+    var finished by remember { mutableStateOf(false) }
     var asking by remember { mutableStateOf(false) }
     // torch sends nothing in a second without traffic, so the quiet seconds count as tables without flows
     var quiet by remember { mutableIntStateOf(0) }
@@ -146,6 +150,7 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
         traffic.clear()
         history.clear()
         problem = null
+        finished = false
         val job = scope.launch(start = CoroutineStart.LAZY) {
             try {
                 session.run(tab.path.parent ?: MenuPath.Root, tab.path.segments.last(), arguments).collect { reply ->
@@ -153,6 +158,7 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
                     rows = collected(rows, item, pack?.flows.orEmpty())
                     sample(reply)
                 }
+                finished = true
             } catch (e: DeviceException) {
                 problem = e.message
             } finally {
@@ -272,6 +278,9 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
         val failed = problem
         if (failed != null) {
             Text(deviceMessage(failed), color = palette.danger, style = Theme.type.small, maxLines = lines)
+        } else if (finished && rows.isEmpty()) {
+            // a command that answers nothing, as the change of a password, says that it went through
+            Text(stringResource(Res.string.command_done), Modifier.testTag("command-done"), color = palette.success, style = Theme.type.small, maxLines = lines)
         } else if (pack?.fasttrack == true) {
             Text(stringResource(Res.string.command_fasttrack), color = palette.warning, style = Theme.type.small, maxLines = lines)
         }
@@ -283,7 +292,16 @@ internal fun ConsoleCommandView(session: DeviceSession, tab: WindowTab, schema: 
                 TabStrip(sections.map { it.first }, section.coerceAtMost(sections.lastIndex), { section = it }, Modifier.fillMaxWidth().background(palette.raised), under = palette.surface)
             }
             Box(Modifier.weight(1f).fillMaxWidth()) {
-                if (fieldsOnly) inputs() else VerticalSplit(split, Modifier.fillMaxSize(), first = inputs, second = outputs)
+                when {
+                    fieldsOnly && sections.isEmpty() -> Text(
+                        stringResource(Res.string.command_no_arguments, tab.title),
+                        Modifier.align(Alignment.Center).padding(16.dp).testTag("command-no-arguments"),
+                        color = palette.muted,
+                        textAlign = TextAlign.Center,
+                    )
+                    fieldsOnly -> inputs()
+                    else -> VerticalSplit(split, Modifier.fillMaxSize(), first = inputs, second = outputs)
+                }
             }
             if (compact) Box(Modifier.fillMaxWidth().background(palette.raised).padding(start = 8.dp, end = 8.dp, top = 4.dp)) { notice(Int.MAX_VALUE) }
             Row(

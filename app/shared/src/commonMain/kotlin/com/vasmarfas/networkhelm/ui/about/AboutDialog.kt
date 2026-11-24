@@ -74,7 +74,7 @@ fun AboutDialog(onClose: () -> Unit) {
             Modifier.widthIn(max = 760.dp).heightIn(max = 640.dp).padding(16.dp).dialogPanel(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp),
         ) {
-            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 Image(appIcon(), null, Modifier.size(48.dp))
                 Column(Modifier.weight(1f)) {
                     Text("NetworkHelm $appVersion", style = Theme.type.strong)

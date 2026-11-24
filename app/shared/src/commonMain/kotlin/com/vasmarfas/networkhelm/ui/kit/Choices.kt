@@ -7,6 +7,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.gestures.animateScrollBy
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -83,6 +86,7 @@ import com.vasmarfas.networkhelm.ui.theme.Theme
 import com.vasmarfas.networkhelm.ui.theme.lit
 import com.vasmarfas.networkhelm.ui.theme.on
 import kotlin.math.roundToInt
+import kotlinx.coroutines.flow.filter
 import kotlinx.coroutines.launch
 import org.jetbrains.compose.resources.stringResource
 import networkhelm.app.shared.generated.resources.Res
@@ -249,6 +253,10 @@ fun <T> Select(
     val palette = Theme.palette
     val material = Theme.material
     val shape = RoundedCornerShape(Theme.metrics.radius)
+    // the focus colours the frame, as in a text field: the overlay of the theme would grey the box as if it were read only
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val hovered by interactions.collectIsHoveredAsState()
     UnstyledDropdownMenu(
         expanded = expanded,
         onExpandedChange = { expanded = it },
@@ -262,9 +270,10 @@ fun <T> Select(
         anchor = {
             UnstyledButton(
                 onClick = { expanded = true },
-                indication = LocalIndication.current,
+                interactionSource = interactions,
                 contentPadding = PaddingValues(start = if (material) 10.dp else 8.dp, end = if (material) 8.dp else 6.dp),
-                modifier = Modifier.height(Theme.metrics.control).clip(shape).background(palette.surface).border(1.dp, if (material) palette.faint else palette.line, shape).hand(),
+                modifier = Modifier.height(Theme.metrics.control).clip(shape).background(if (hovered) palette.raised else palette.surface)
+                    .border(if (material && focused) 2.dp else 1.dp, if (focused) palette.accent else if (material) palette.faint else palette.line, shape).hand(),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     DisableSelection { Text(label(value), Modifier.weight(1f), color = if (dimmed(value)) palette.faint else palette.text, singleLine = true, overflow = TextOverflow.Ellipsis) }
@@ -375,6 +384,19 @@ fun TabStrip(
     val overflow = scroll.maxValue in 1 until Int.MAX_VALUE
     fun page(sign: Int) = scope.launch { scroll.animateScrollBy(sign * scroll.viewportSize * 0.8f) }
     val places = remember(titles.size) { List(titles.size) { BringIntoViewRequester() } }
+    // a window that opens on a later tab shows it: the strip scrolls by itself, as a bringing into view moves the screen
+    // around it too, and keeps the tab in sight while the arrows that come after the first measure narrow it
+    val spans = remember(titles.size) { IntArray(titles.size * 2) }
+    LaunchedEffect(selected, titles.size) {
+        snapshotFlow { scroll.viewportSize to scroll.maxValue }.filter { it.second < Int.MAX_VALUE }.collect { (viewport, _) ->
+            val left = spans.getOrNull(selected * 2) ?: return@collect
+            val right = left + spans[selected * 2 + 1]
+            when {
+                left < scroll.value -> scroll.scrollTo(left)
+                right > scroll.value + viewport -> scroll.scrollTo(right - viewport)
+            }
+        }
+    }
     val tabShape = RoundedCornerShape(topStart = Theme.metrics.radius, topEnd = Theme.metrics.radius)
     Row(modifier.height(Theme.metrics.toolbar).then(if (boxed && titleText == null) Modifier.padding(start = 4.dp) else Modifier)) {
         if (titleText != null) {
@@ -401,6 +423,10 @@ fun TabStrip(
                 Box(
                     Modifier
                         .fillMaxHeight()
+                        .onPlaced {
+                            spans[index * 2] = it.positionInParent().x.toInt()
+                            spans[index * 2 + 1] = it.size.width
+                        }
                         .bringIntoViewRequester(places[index])
                         .then(if (classic && !active) Modifier.padding(top = 2.dp) else Modifier)
                         .then(if (boxed) Modifier.padding(top = 4.dp).clip(tabShape).background(if (active) chosenBox else otherBox) else Modifier)

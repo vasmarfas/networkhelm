@@ -48,6 +48,20 @@ class ToolWindowsTest {
     }
 
     @Test
+    fun aCommandWithoutParametersSaysWhatStartDoesAndThatItWentThrough() = runDesktopComposeUiTest(1100, 700) {
+        val reboot = MenuPath.parse("system/reboot")
+        val router = FakeRouter(schemas = mapOf(reboot.toString() to MenuSchema(reboot, NodeKind.Command, emptyList(), emptyList(), emptyList())))
+        show(router, MenuEntry("Reboot", reboot.toString()))
+        waitUntil(timeoutMillis = 5_000) { present("Reboot takes no parameters. Start runs it on the router.") }
+        start()
+        waitUntil(timeoutMillis = 5_000) { present("Run Reboot?") }
+        assertTrue(router.ran.isEmpty(), "nothing runs before the answer")
+        onNode(hasText("Reboot") and hasAnyAncestor(hasTestTag("confirm"))).performClick()
+        waitUntil(timeoutMillis = 5_000) { present("Done") }
+        assertEquals(listOf("system/reboot"), router.ran.map { it.first })
+    }
+
+    @Test
     fun thePingTableTitlesItsTimeInMillisecondsAndItsSizeAsTheReplySizeWhileTheFormKeepsPacketSize() = runDesktopComposeUiTest(1100, 700) {
         val ping = MenuPath.parse("tool/ping")
         val schema = MenuSchema(ping, NodeKind.Command, emptyList(), emptyList(), listOf(Argument("address", ValueType.Ip4), Argument("size", ValueType.Integer(28, 65535))))

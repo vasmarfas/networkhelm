@@ -180,6 +180,8 @@ fun <T, K : Any> DataTable(
     menu: (@Composable (close: () -> Unit) -> Unit)? = null,
     onCell: (K, String?) -> Unit = { _, _ -> },
     focus: FocusRequester = remember { FocusRequester() },
+    // what the table says with no row at all, as a list the router gave empty
+    empty: String? = null,
 ) {
     val palette = Theme.palette
     val metrics = Theme.metrics
@@ -227,8 +229,9 @@ fun <T, K : Any> DataTable(
         val sample = rows.take(100)
         columns.filter { it.width == null }.associate { column ->
             val values = sample.map { column.value(it) }
-            val longest = values.map(column.shown).maxByOrNull { it.length }.orEmpty()
-            val px = listOfNotNull(column.title + " ▲", longest, column.widest).maxOf { measurer.measure(it, body, maxLines = 1, softWrap = false).size.width }
+            // in a proportional font a value is not the widest for being the longest, so the few longest are measured
+            val longest = values.map(column.shown).distinct().sortedByDescending { it.length }.take(8)
+            val px = (listOfNotNull(column.title + " ▲", column.widest) + longest).maxOf { measurer.measure(it, body, maxLines = 1, softWrap = false).size.width }
             val icon = if (sample.any { column.icon(it, column.value(it)) != null }) metrics.icon + 4.dp else 0.dp
             column.key to (with(density) { px.toDp() } + 16.dp + icon).coerceIn(56.dp, 360.dp)
         }
@@ -263,6 +266,8 @@ fun <T, K : Any> DataTable(
     val lead = (if (flags != null) flagWidth else 0.dp) + if (numbers != null) numberWidth else 0.dp
     val total = columns.fold(lead) { sum, column -> sum + width(column) } + 28.dp
     var room by remember { mutableStateOf(0.dp) }
+    // the last column takes the room the others leave, so a long value is not cut beside empty space
+    fun drawn(column: TableColumn<T>) = width(column) + if (!detail && column == columns.lastOrNull()) (room - total).coerceAtLeast(0.dp) else 0.dp
     val mark = SpanStyle(background = palette.warning.copy(alpha = 0.35f))
     val list = rememberLazyListState()
     var dragY by remember { mutableStateOf<Float?>(null) }
@@ -271,7 +276,7 @@ fun <T, K : Any> DataTable(
     val withMenu by rememberUpdatedState(menu != null)
     val pointed by rememberUpdatedState(onCell)
     val columnAt by rememberUpdatedState { x: Float ->
-        val ends = columns.runningFold(lead) { end, column -> end + width(column) }.drop(1)
+        val ends = columns.runningFold(lead) { end, column -> end + drawn(column) }.drop(1)
         if (detail) null else columns.getOrNull(ends.indexOfFirst { with(density) { it.toPx() } > x })?.key
     }
     val rowPx = with(density) { metrics.row.toPx() }
@@ -382,7 +387,7 @@ fun <T, K : Any> DataTable(
                             }
                             columns.forEachIndexed { index, column ->
                                 key(column.key) {
-                                    DisableSelection { Header(column, width(column), state, separators, { state.widths[column.key] = it }, onMoveColumn?.let { { shift -> dropColumn(index, shift) } }) }
+                                    DisableSelection { Header(column, drawn(column), state, separators, { state.widths[column.key] = it }, onMoveColumn?.let { { shift -> dropColumn(index, shift) } }) }
                                 }
                             }
                         }
@@ -550,7 +555,7 @@ fun <T, K : Any> DataTable(
                                             for (column in columns) {
                                                 val value = column.value(row)
                                                 val icon = column.icon(row, value)
-                                                Row(Modifier.width(width(column)).fillMaxHeight().then(divider).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                                                Row(Modifier.width(drawn(column)).fillMaxHeight().then(divider).padding(horizontal = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                                                     if (icon != null) UnstyledIcon(icon.vector, null, Modifier.padding(end = 4.dp).size(metrics.icon).testTag("cell-icon"), tint = palette.tintOf(icon)?.takeIf { color == palette.text } ?: color)
                                                     Text(marked(column.shown(value), highlight, mark), color = color, singleLine = true, overflow = TextOverflow.Ellipsis)
                                                 }
@@ -577,6 +582,7 @@ fun <T, K : Any> DataTable(
                 }
             }
             ListScrollBar(list, Modifier.align(Alignment.CenterEnd).padding(top = if (detail) 0.dp else metrics.row))
+            if (empty != null && rows.isEmpty()) Text(empty, Modifier.align(Alignment.Center).padding(16.dp).testTag("table-empty"), color = palette.muted, style = Theme.type.small)
             // the button of the columns stays at the end of the header while the columns scroll under it
             if (picker != null && !detail) {
                 val classic = Theme.classic

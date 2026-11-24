@@ -56,6 +56,7 @@ import com.vasmarfas.networkhelm.transport.BrowserBlockedException
 import com.vasmarfas.networkhelm.transport.TrustPolicy
 import com.vasmarfas.networkhelm.transport.TrustRequest
 import com.vasmarfas.networkhelm.transport.openTcp
+import com.vasmarfas.networkhelm.ui.chart.byteCount
 import com.vasmarfas.networkhelm.ui.files.FileExchange
 import com.vasmarfas.networkhelm.ui.files.LocalFile
 import com.vasmarfas.networkhelm.winbox.WinBoxBookException
@@ -79,6 +80,9 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.Json
 import kotlin.io.encoding.Base64
+import org.jetbrains.compose.resources.getString
+import networkhelm.app.shared.generated.resources.Res
+import networkhelm.app.shared.generated.resources.connect_file_too_big
 
 sealed interface Problem {
     data object Address : Problem
@@ -651,14 +655,21 @@ class ConnectState(
         }
     }
 
-    // a file the system does not give is a problem of the screen, told in the words of the system
-    private suspend fun contents(file: LocalFile): ByteArray? = try {
-        file.read()
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        problem = Problem.Unreadable(file.name, e.message ?: e.toString())
-        null
+    // a file the system does not give is a problem of the screen, told in the words of the system; a file of hundreds of
+    // megabytes dropped here by mistake is not read, it would run the memory out
+    private suspend fun contents(file: LocalFile): ByteArray? {
+        if ((file.size ?: 0L) > FILE_LIMIT) {
+            problem = Problem.Unreadable(file.name, getString(Res.string.connect_file_too_big, byteCount(FILE_LIMIT.toDouble())))
+            return null
+        }
+        return try {
+            file.read()
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            problem = Problem.Unreadable(file.name, e.message ?: e.toString())
+            null
+        }
     }
 
     suspend fun openFiles(files: List<LocalFile>, onOpened: (DeviceSession, String, RouterOsLogin?) -> Unit) {
@@ -875,5 +886,6 @@ class ConnectState(
 private const val PROBE_TIMEOUT = 1_500
 private const val DEFAULT_COMMUNITY = "public"
 private const val OWN_MAC = "own-mac"
+private const val FILE_LIMIT = 32L * 1024 * 1024
 
 private val BROWSER_SHUT = setOf(8728, 8729, 8291, 20561, 22, 161, 1900)

@@ -10,6 +10,9 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.focusable
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsFocusedAsState
+import androidx.compose.foundation.interaction.collectIsHoveredAsState
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -305,6 +308,7 @@ fun TextField(
     mono: Boolean = false,
     error: Boolean = false,
     inputTransformation: InputTransformation? = null,
+    wrap: Boolean = false,
 ) {
     val palette = Theme.palette
     val material = Theme.material
@@ -321,17 +325,17 @@ fun TextField(
             textColor = if (enabled) palette.text else palette.faint,
             cursorBrush = SolidColor(palette.accent),
             selectionColors = LocalTextSelectionColors.current,
-            lineLimits = TextFieldLineLimits.SingleLine,
+            lineLimits = if (wrap) TextFieldLineLimits.MultiLine() else TextFieldLineLimits.SingleLine,
             inputTransformation = inputTransformation,
             keyboardOptions = KeyboardOptions(autoCorrectEnabled = false),
             modifier = modifier
                 .onEnter(LocalSubmit.current.takeIf { enabled && !readOnly })
                 .onFocusChanged { focused = it.isFocused }
-                .height(Theme.metrics.control)
+                .then(if (wrap) Modifier.heightIn(min = Theme.metrics.control) else Modifier.height(Theme.metrics.control))
                 .clip(shape)
                 .background(if (readOnly) palette.raised else palette.surface)
                 .border(if (material && ring) 2.dp else 1.dp, if (error) palette.danger else if (ring) palette.accent else if (material) palette.faint else palette.line, shape)
-                .padding(horizontal = if (material) 10.dp else 6.dp),
+                .padding(horizontal = if (material) 10.dp else 6.dp, vertical = if (wrap) 4.dp else 0.dp),
         ) {
             TextInput(
                 Modifier.fillMaxHeight().wrapContentHeight(),
@@ -433,11 +437,27 @@ fun Checkbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
     val box = if (material) 18.dp else 16.dp
     val mark = if (material) 14.dp else 12.dp
     val target = if (LocalCompact.current) 40.dp else box
+    // the focus rings the box: the overlay of the theme would grey it as if it were read only
+    val interactions = remember { MutableInteractionSource() }
+    val focused by interactions.collectIsFocusedAsState()
+    val hovered by interactions.collectIsHoveredAsState()
+    val edge = when {
+        focused && filled -> palette.text
+        filled || focused -> palette.accent
+        Theme.classic -> palette.line
+        enabled -> palette.muted
+        else -> palette.faint
+    }
+    val ground = when {
+        filled -> palette.accent
+        !enabled || hovered && !Theme.classic -> palette.raised
+        else -> palette.surface
+    }
     UnstyledCheckbox(
         checked = checked,
         onCheckedChange = onCheckedChange,
         enabled = enabled,
-        indication = LocalIndication.current,
+        interactionSource = interactions,
         modifier = modifier.size(target).hand(enabled),
     ) {
         Box(Modifier.size(target), contentAlignment = Alignment.Center) {
@@ -445,13 +465,13 @@ fun Checkbox(checked: Boolean, onCheckedChange: (Boolean) -> Unit, modifier: Mod
                 Modifier
                     .size(box)
                     .clip(shape)
-                    .background((if (filled) palette.accent else palette.surface).eased())
-                    .border(if (material && !filled) 2.dp else 1.dp, (if (filled) palette.accent else if (material) palette.muted else palette.line).eased(), shape),
+                    .background(ground.eased())
+                    .border(if (material && !filled || focused) 2.dp else 1.dp, edge.eased(), shape),
                 contentAlignment = Alignment.Center,
             ) {
                 if (unset && !checked) UnstyledIcon(Lucide.Minus, null, Modifier.size(mark), tint = palette.faint)
                 CheckedIndicator {
-                    UnstyledIcon(Lucide.Check, null, Modifier.size(mark), tint = if (filled) palette.on(palette.accent) else if (enabled) palette.text else palette.faint)
+                    UnstyledIcon(Lucide.Check, null, Modifier.size(mark), tint = if (filled) palette.on(palette.accent) else if (enabled) palette.text else palette.muted)
                 }
             }
         }

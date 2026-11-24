@@ -28,6 +28,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.input.pointer.PointerEventType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -180,7 +181,12 @@ internal fun TopologyView(tab: RouterTab) {
             }
             for (node in shown.nodes) {
                 val at = place(node) - half
-                NodeBox(node, Modifier.offset { IntOffset(at.x.roundToInt(), at.y.roundToInt()) }) { chosen = it }
+                // a map fitted into a narrow screen shrinks its nodes with their distances, or they would lie on each other
+                val shrunk = Modifier.graphicsLayer {
+                    scaleX = scale.coerceAtMost(1f)
+                    scaleY = scale.coerceAtMost(1f)
+                }
+                NodeBox(node, Modifier.offset { IntOffset(at.x.roundToInt(), at.y.roundToInt()) }.then(shrunk)) { chosen = it }
             }
             if (shown.nodes.isEmpty()) Text(stringResource(Res.string.topology_no_nodes), Modifier.align(Alignment.Center), color = palette.muted)
         }

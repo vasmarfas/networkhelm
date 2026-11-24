@@ -175,7 +175,7 @@
     <string name="docker_registries_remove">Удалить</string>
     <string name="docker_registries_host_login">Войти на хосте</string>
     <string name="docker_registries_host_hint">CLI хоста хранит вход хоста в своём файле настроек; скачиваниям и отправкам программы он не нужен.</string>
-    <string name="docker_registries_none">Логин, добавленный здесь, уходит с каждым скачиванием и отправкой своего реестра из защищённого хранилища программы.</string>
+    <string name="docker_registries_none">Логин хранится в защищённом хранилище программы и передаётся движку, когда образ скачивается из этого реестра или отправляется в него.</string>
     <string name="docker_registries_keep">Пустой пароль оставляет прежний. Повторный щелчок по строке снимает выбор, чтобы добавить новый логин.</string>
     <string name="docker_group_root">Этот вход состоит в группе docker: через Docker он может на хосте всё, что может root.</string>
     <string name="docker_group_close">Закрыть</string>

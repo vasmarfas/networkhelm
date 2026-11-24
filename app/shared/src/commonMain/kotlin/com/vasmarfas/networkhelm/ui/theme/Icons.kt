@@ -35,6 +35,7 @@ import com.composables.icons.lucide.Circle
 import com.composables.icons.lucide.CircleCheck
 import com.composables.icons.lucide.CircleDot
 import com.composables.icons.lucide.CircleOff
+import com.composables.icons.lucide.CircleStop
 import com.composables.icons.lucide.CircleX
 import com.composables.icons.lucide.Clock
 import com.composables.icons.lucide.Cloud
@@ -191,6 +192,7 @@ val IconSet: Map<String, ImageVector> = mapOf(
     "circle-check" to Lucide.CircleCheck,
     "circle-dot" to Lucide.CircleDot,
     "circle-off" to Lucide.CircleOff,
+    "circle-stop" to Lucide.CircleStop,
     "circle-x" to Lucide.CircleX,
     "clock" to Lucide.Clock,
     "cloud" to Lucide.Cloud,
@@ -491,7 +493,7 @@ val DefaultIcons: Map<String, String> = mapOf(
     "command/sftp" to "folder-up",
     "command/show-client-config" to "qr-code",
     "command/start" to "play",
-    "command/stop" to "square",
+    "command/stop" to "circle-stop",
     "command/sync-time" to "clock",
     "command/take" to "camera",
     "command/terminate" to "octagon-x",

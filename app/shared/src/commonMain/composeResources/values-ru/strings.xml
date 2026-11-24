@@ -161,6 +161,7 @@
     <string name="error_winbox_file">Это не адресная книга WinBox, которую приложение умеет читать: файл повреждён или закрыт паролем. Экспортируйте список из WinBox без пароля и импортируйте снова.</string>
     <string name="error_not_config">%1$s — не /export RouterOS и не конфигурация или бэкап OpenWrt</string>
     <string name="error_unreadable">Файл %1$s не прочитан: %2$s</string>
+    <string name="connect_file_too_big">размер больше %1$s</string>
     <string name="error_through_missing">Роутера %1$s, через который нужно пройти, нет в сохранённых</string>
     <string name="error_through_circle">Роутеры, через которые нужно пройти, ведут по кругу</string>
     <string name="error_no_snmp">%1$s не ответил по SNMP: неверная community или у неё нет права чтения, агент выключен или закрыт UDP 161</string>
@@ -265,6 +266,7 @@
     <string name="list_move_up">Переместить выше</string>
     <string name="list_move_down">Переместить ниже</string>
     <string name="list_find">Найти</string>
+    <string name="list_empty">Записей нет</string>
     <string name="list_find_next">Следующее совпадение</string>
     <string name="list_find_previous">Предыдущее совпадение</string>
     <string name="list_do_not_ask">Больше не спрашивать</string>
@@ -356,6 +358,7 @@
     <string name="form_whole_number">Целое число</string>
     <string name="form_set">Задать значение</string>
     <string name="form_unset">Снять значение</string>
+    <string name="form_choice_none">Не задано</string>
     <string name="form_only_with">Только при %1$s: %2$s</string>
     <string name="form_negate">Отрицание</string>
     <string name="form_add_line">Добавить строку</string>
@@ -402,6 +405,8 @@
     <string name="form_reset_question">Вернуть поля окна %1$s к значениям RouterOS по умолчанию?</string>
     <string name="command_fasttrack">Пока команда работает, роутер выключает FastTrack и fast path для всего трафика.</string>
     <string name="command_question">Выполнить %1$s?</string>
+    <string name="command_no_arguments">У команды %1$s нет параметров. Кнопка Старт выполнит её на роутере.</string>
+    <string name="command_done">Выполнено</string>
     <string name="settings_title">Настройки</string>
     <string name="tools_title">Сетевые инструменты</string>
     <string name="tools_close">Закрыть</string>
@@ -510,7 +515,7 @@
     <string name="settings_rows">Строки таблиц</string>
     <string name="settings_rows_theme">Как в теме</string>
     <string name="settings_comments">Комментарии в таблицах</string>
-    <string name="settings_comments_hint">Таблица может держать свой режим: его задаёт кнопка комментариев в её окне, и пока он есть, кнопка подсвечена. Изменение здесь действует на все таблицы.</string>
+    <string name="settings_comments_hint">Здесь задаётся режим для всех таблиц. Кнопка комментариев в окне таблицы может дать ей свой режим, тогда кнопка подсвечена.</string>
     <string name="settings_separators">Линии между колонками таблиц</string>
     <string name="settings_confirm_removal">Спрашивать перед удалением с роутера</string>
     <string name="settings_tables_as_tabs">Таблицы окна настроек — вкладками этого окна</string>
@@ -1002,7 +1007,7 @@
     <string name="tools_n2_isp">Провайдер</string>
     <string name="tools_n2_ip_query">Адрес или имя хоста</string>
     <string name="tools_n2_ip_mine">пусто: ваш публичный адрес</string>
-    <string name="tools_n2_ip_hosts">Обращается к ipwho.is (при отказе к ipapi.co), к data.iana.org и RDAP-серверу реестра, к DNS-серверу 1.1.1.1 за именами и за asn.cymru.com, а для вашего адреса ещё к api.ipify.org или api6.ipify.org.</string>
+    <string name="tools_n2_ip_hosts">Обращается к ipwho.is (при отказе к ipapi.co), к data.iana.org и RDAP-серверу реестра, к DNS-серверу 1.1.1.1 за обратными именами и записями asn.cymru.com, а для вашего адреса ещё к api.ipify.org или api6.ipify.org.</string>
     <string name="tools_n2_ip_address">Адреса</string>
     <string name="tools_n2_ip_reverse">Обратный DNS</string>
     <string name="tools_n2_ip_routing">Маршрутизация</string>

@@ -54,6 +54,7 @@ import com.vasmarfas.networkhelm.ui.table.TableLayouts
 import com.vasmarfas.networkhelm.ui.theme.NetworkHelmTheme
 import java.net.ConnectException
 import java.util.Locale
+import java.util.concurrent.ConcurrentHashMap
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
@@ -64,7 +65,8 @@ import kotlinx.coroutines.test.TestScope
 class FilesTest {
 
     private class Sftp(private val folders: Map<String, List<RemoteFile>> = emptyMap()) : SftpClient {
-        val written = mutableMapOf<String, String>()
+        // the files of a folder go up at once, each in a coroutine of its own
+        val written = ConcurrentHashMap<String, String>()
         val renamed = mutableListOf<Pair<String, String>>()
         val made = mutableListOf<String>()
         val removed = mutableListOf<String>()
@@ -400,6 +402,40 @@ class FilesTest {
         onNodeWithText("Download to a folder").performClick()
         waitUntil(timeoutMillis = 5_000) { written.isNotEmpty() }
         assertEquals(mapOf("notes.txt" to "contents of /pub/notes.txt"), written.toMap())
+    }
+
+    @Test
+    fun aFileComesDownOverOneOfTheFolderOnlyAfterTheQuestion() = runDesktopComposeUiTest(1100, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        val written = mutableMapOf<String, String>()
+        val folder = LocalFolder("backups", listOf(LocalFile("RC.LOCAL") { "old".encodeToByteArray() })) { name, bytes ->
+            written[name] = bytes.decodeToString()
+        }
+        val exchange = object : FileExchange {
+            override suspend fun pick() = emptyList<LocalFile>()
+            override suspend fun save(name: String, bytes: ByteArray) = false
+            override val folders = true
+            override suspend fun pickFolder() = folder
+        }
+        val files = listOf(Item("*1", mapOf("name" to "rc.local", "type" to ".local file", "size" to "127")))
+        val router = FakeRouter(mapOf("file" to files), ssh = Ssh(Sftp()), fileTexts = mapOf("*1" to "rd-test"))
+        val storage = MemoryStorage()
+        val tab = RouterTab(router, "192.0.2.1", bundledPacks().values, storage, TableLayouts(storage))
+        setContent {
+            CompositionLocalProvider(LocalFileExchange provides exchange) {
+                NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        tab.open(MenuEntry("Files", "file"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("rc.local")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("rc.local").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Download to a folder")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Download to a folder").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("The folder backups already has rc.local. Replace?")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(emptyMap(), written.toMap(), "nothing is written before the answer")
+        onNodeWithText("Replace").performClick()
+        waitUntil(timeoutMillis = 5_000) { written.isNotEmpty() }
+        assertEquals(mapOf("rc.local" to "rd-test"), written.toMap())
     }
 
     @Test

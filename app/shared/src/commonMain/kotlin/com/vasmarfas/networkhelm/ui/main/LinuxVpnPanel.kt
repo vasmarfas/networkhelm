@@ -38,6 +38,7 @@ import com.vasmarfas.networkhelm.ui.chart.byteSize
 import com.vasmarfas.networkhelm.ui.files.LocalFileExchange
 import com.vasmarfas.networkhelm.ui.kit.Button
 import com.vasmarfas.networkhelm.ui.kit.Checkbox
+import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.kit.ScrollArea
 import com.vasmarfas.networkhelm.ui.kit.Segments
 import com.vasmarfas.networkhelm.ui.table.DataTable
@@ -100,6 +101,7 @@ private val VPN_SESSIONS = MenuPath.parse("vpn/session")
 private val VPN_HISTORY = MenuPath.parse("vpn/history")
 private val VPN_PEERS = MenuPath.parse("vpn/wireguard/peer")
 private val AWG_PEERS = MenuPath.parse("vpn/amneziawg/peer")
+private const val NO_BREAK = "\u00A0"
 private val VPN_COLLECTOR = MenuPath.parse("vpn/collector")
 private const val VPN_SAMPLES = 120
 
@@ -317,7 +319,7 @@ private fun totals(rows: List<Item>): List<UserTotal> = rows.groupBy { it["user"
 private fun Tile(service: Item) {
     val palette = Theme.palette
     val state = service["state"].orEmpty()
-    Column(Modifier.width(200.dp).background(palette.raised).padding(10.dp).testTag("vpn-tile"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+    Column(Modifier.then(if (LocalCompact.current) Modifier.fillMaxWidth() else Modifier.width(200.dp)).background(palette.raised).padding(10.dp).testTag("vpn-tile"), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(service["name"].orEmpty(), Modifier.weight(1f), style = Theme.type.strong, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(service["kind"].orEmpty(), color = palette.muted, style = Theme.type.small, maxLines = 1)
@@ -335,7 +337,9 @@ private fun Tile(service: Item) {
         if (port.isNotEmpty()) Text(port, style = Theme.type.mono, maxLines = 1)
         Text(stringResource(Res.string.vpn_tile_sessions, service["sessions"].orEmpty()), style = Theme.type.small)
         if (!service["rx-rate"].isNullOrEmpty() || !service["tx-rate"].isNullOrEmpty()) {
-            Text(stringResource(Res.string.vpn_tile_rates, bitsOf(service["rx-rate"].orEmpty()), bitsOf(service["tx-rate"].orEmpty())), style = Theme.type.small)
+            // a no-break space keeps a rate with its unit when the line wraps
+            val rate = { name: String -> bitsOf(service[name].orEmpty()).replace(" ", NO_BREAK) }
+            Text(stringResource(Res.string.vpn_tile_rates, rate("rx-rate"), rate("tx-rate")), style = Theme.type.small)
         }
     }
 }

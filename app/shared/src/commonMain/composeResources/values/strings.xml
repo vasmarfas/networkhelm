@@ -161,6 +161,7 @@
     <string name="error_winbox_file">This is not an address book of WinBox that the app can read: the file is damaged or closed with a file password. Export the list from WinBox without a password and import it again.</string>
     <string name="error_not_config">%1$s is neither an /export of RouterOS nor a configuration or backup of OpenWrt</string>
     <string name="error_unreadable">%1$s could not be read: %2$s</string>
+    <string name="connect_file_too_big">it is larger than %1$s</string>
     <string name="error_through_missing">%1$s, the router to go through, is not in the saved list</string>
     <string name="error_through_circle">The routers to go through lead back to one of them</string>
     <string name="error_no_snmp">No SNMP answer from %1$s: the community is wrong or is not allowed to read, the agent is off or UDP 161 is closed</string>
@@ -265,6 +266,7 @@
     <string name="list_move_up">Move up</string>
     <string name="list_move_down">Move down</string>
     <string name="list_find">Find</string>
+    <string name="list_empty">No entries</string>
     <string name="list_find_next">Next match</string>
     <string name="list_find_previous">Previous match</string>
     <string name="list_do_not_ask">Do not ask again</string>
@@ -356,6 +358,7 @@
     <string name="form_whole_number">Whole number</string>
     <string name="form_set">Set the value</string>
     <string name="form_unset">Unset the value</string>
+    <string name="form_choice_none">Not set</string>
     <string name="form_only_with">Only with %1$s: %2$s</string>
     <string name="form_negate">Negate</string>
     <string name="form_add_line">Add a line</string>
@@ -402,6 +405,8 @@
     <string name="form_reset_question">Return the fields of %1$s to the defaults of RouterOS?</string>
     <string name="command_fasttrack">While it runs, the router turns FastTrack and fast path off for all traffic.</string>
     <string name="command_question">Run %1$s?</string>
+    <string name="command_no_arguments">%1$s takes no parameters. Start runs it on the router.</string>
+    <string name="command_done">Done</string>
     <string name="settings_title">Settings</string>
     <string name="tools_title">Network tools</string>
     <string name="tools_close">Close</string>
@@ -510,7 +515,7 @@
     <string name="settings_rows">Table rows</string>
     <string name="settings_rows_theme">As in the theme</string>
     <string name="settings_comments">Comments in tables</string>
-    <string name="settings_comments_hint">A table can keep a mode of its own: the comments button of its window sets it and stays highlighted while it does. A change here applies to every table.</string>
+    <string name="settings_comments_hint">This sets the mode of every table. The comments button in the window of a table can give it a mode of its own, and then the button is highlighted.</string>
     <string name="settings_separators">Lines between the columns of tables</string>
     <string name="settings_confirm_removal">Ask before removing from the router</string>
     <string name="settings_tables_as_tabs">Open the tables of a settings window as its tabs</string>
@@ -990,7 +995,7 @@
     <string name="tools_n2_isp">Provider</string>
     <string name="tools_n2_ip_query">Address or host name</string>
     <string name="tools_n2_ip_mine">empty: your public address</string>
-    <string name="tools_n2_ip_hosts">Asks ipwho.is (ipapi.co if it fails), data.iana.org and the RDAP server of the registry, the DNS server 1.1.1.1 for names and for asn.cymru.com, and for your own address also api.ipify.org or api6.ipify.org.</string>
+    <string name="tools_n2_ip_hosts">Asks ipwho.is (ipapi.co if it fails), data.iana.org and the RDAP server of the registry, the DNS server 1.1.1.1 for reverse names and asn.cymru.com records, and for your own address also api.ipify.org or api6.ipify.org.</string>
     <string name="tools_n2_ip_address">Addresses</string>
     <string name="tools_n2_ip_reverse">Reverse DNS</string>
     <string name="tools_n2_ip_routing">Routing</string>
