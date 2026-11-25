@@ -183,6 +183,7 @@ def main():
     version_string = os.environ["VERSION_NAME"].split("-")[0]
     build_number = os.environ["BUILD_NUMBER"]
     summary = []
+    waiting = False
     for platform in os.environ["PLATFORMS"].split():
         version, editable = prepare_version(app_id, platform, version_string)
         if not editable:
@@ -191,7 +192,13 @@ def main():
         notes = "" if set_whats_new(platform, version["id"]) else " What's New is not taken, the version is the first on the store."
         build_id = wait_for_build(app_id, platform, version_string, build_number)
         call("PATCH", f"/appStoreVersions/{version['id']}/relationships/build", {"type": "builds", "id": build_id})
-        if os.environ["SUBMIT"] == "true":
+        # the export compliance of a build is answered by hand in App Store Connect, review refuses a build without it
+        if os.environ["SUBMIT"] == "true" and call("GET", f"/builds/{build_id}")["attributes"].get("usesNonExemptEncryption") is None:
+            summary.append(f"{platform} {version_string} ({build_number}): build attached, not sent to review: answer its export"
+                           f" compliance in App Store Connect (TestFlight, build {build_number}), then Add for Review there"
+                           " or Re-run failed jobs.")
+            waiting = True
+        elif os.environ["SUBMIT"] == "true":
             submit(app_id, platform, version["id"])
             summary.append(f"{platform} {version_string} ({build_number}): sent to review.{notes}")
         else:
@@ -199,6 +206,8 @@ def main():
     print("\n".join(summary))
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as file:
         file.write("".join(f"App Store Connect, {line}\n" for line in summary))
+    if waiting:
+        sys.exit(1)
 
 
 if __name__ == "__main__":
