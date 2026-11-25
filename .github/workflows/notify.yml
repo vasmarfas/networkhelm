@@ -1,0 +1,48 @@
+name: Failure notice
+
+# A failed run of any workflow is sent to the owner in a private chat with the bot of the announcements. The build workflows,
+# App Store Connect and the scan run inside Release, so a failure of theirs fails the Release run
+on:
+  workflow_run:
+    workflows: [CI, Release, Announce, VirusTotal, Mark stale issues and pull requests]
+    types: [completed]
+
+permissions:
+  actions: read
+
+jobs:
+  telegram:
+    name: Telegram
+    if: ${{ contains(fromJSON('["failure", "timed_out", "startup_failure"]'), github.event.workflow_run.conclusion) }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Tell the owner
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          CHAT: ${{ secrets.TG_OWNER_CHAT_ID }}
+          NAME: ${{ github.event.workflow_run.name }}
+          TITLE: ${{ github.event.workflow_run.display_title }}
+          BRANCH: ${{ github.event.workflow_run.head_branch }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          RUN: ${{ github.event.workflow_run.id }}
+          URL: ${{ github.event.workflow_run.html_url }}
+        run: |
+          set -eu
+          if [ -z "$TG_BOT_TOKEN" ] || [ -z "$CHAT" ]; then
+            echo "::notice::TG_BOT_TOKEN or TG_OWNER_CHAT_ID is not set, nobody is told"
+            exit 0
+          fi
+          failed=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/jobs?filter=latest&per_page=100" \
+            --jq '[.jobs[] | select(.conclusion == "failure" or .conclusion == "timed_out") | .name] | join(", ")' || true)
+          {
+            printf '%s не прошёл: %s\n' "$NAME" "$TITLE"
+            printf '%s, %s, попытка %s\n' "$BRANCH" "${SHA:0:7}" "$ATTEMPT"
+            if [ -n "$failed" ]; then printf 'Упало: %s\n' "$failed"; fi
+            printf '%s\n' "$URL"
+          } > message.txt
+          cat message.txt
+          jq -n --arg chat "$CHAT" --rawfile text message.txt '{chat_id: $chat, text: $text, link_preview_options: {is_disabled: true}}' \
+            | curl -fsS --retry 3 --retry-delay 15 "https://api.telegram.org/bot$TG_BOT_TOKEN/sendMessage" -H 'Content-Type: application/json' -d @- > /dev/null

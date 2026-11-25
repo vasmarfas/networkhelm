@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Tag of the published release whose files are scanned (e.g. v1.0.0-rc2)'
+        description: 'Tag of the published release whose files are scanned, e.g. v1.0.0-rc2. Release scans its files on its own'
         required: true
   workflow_call:
     inputs:

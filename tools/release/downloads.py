@@ -1,7 +1,7 @@
 """Prints the table of downloads that opens the body of a GitHub release.
 
 Reads the folder of the release files and links every file that is there into the cell of its system and architecture; a
-platform whose build failed leaves its cell empty. The names are the ones the deploy workflows give their files.
+platform whose build failed leaves its cell empty. The names are the ones the build workflows give their files.
 
 Usage: python tools/release/downloads.py FOLDER VERSION OWNER/REPOSITORY [DOCKER_IMAGE]
 """

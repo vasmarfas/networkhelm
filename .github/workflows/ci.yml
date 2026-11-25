@@ -22,17 +22,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+      - uses: ./.github/actions/setup-build
 
       # the tests against the lab routers need lab.properties, which CI has not, and are skipped
       - name: Unit tests
@@ -64,17 +54,7 @@ jobs:
         with:
           xcode-version: latest-stable
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+      - uses: ./.github/actions/setup-build
 
       # OpenSSL and libssh2 for the SSH of iOS are built once for each version of their script
       - name: Cache the SSH libraries

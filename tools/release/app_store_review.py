@@ -42,26 +42,37 @@ class ApiError(Exception):
         self.status = status
 
 
+# App Store Connect answers 5xx and drops connections now and then, and the wait for a build asks it for up to an hour and a
+# half. GET and PATCH are asked again, a POST only after 429, when it was not taken
 def call(method, path, data=None):
-    now = int(time.time())
-    token = jwt.encode(
-        {"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
-        KEY,
-        algorithm="ES256",
-        headers={"kid": os.environ["ASC_KEY_ID"]},
-    )
-    request = urllib.request.Request(
-        API + path,
-        method=method,
-        data=None if data is None else json.dumps({"data": data}).encode(),
-        headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=60) as response:
-            body = response.read()
-    except urllib.error.HTTPError as error:
-        raise ApiError(method, path, error.code, error.read().decode()) from None
-    return json.loads(body)["data"] if body else None
+    for attempt in range(1, 5):
+        now = int(time.time())
+        token = jwt.encode(
+            {"iss": os.environ["ASC_ISSUER_ID"], "iat": now, "exp": now + 1200, "aud": "appstoreconnect-v1"},
+            KEY,
+            algorithm="ES256",
+            headers={"kid": os.environ["ASC_KEY_ID"]},
+        )
+        request = urllib.request.Request(
+            API + path,
+            method=method,
+            data=None if data is None else json.dumps({"data": data}).encode(),
+            headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=60) as response:
+                body = response.read()
+            return json.loads(body)["data"] if body else None
+        except urllib.error.HTTPError as error:
+            failure = ApiError(method, path, error.code, error.read().decode())
+            again = error.code == 429 or error.code >= 500 and method != "POST"
+        except (urllib.error.URLError, TimeoutError, ConnectionError) as error:
+            failure = ApiError(method, path, "no answer", error)
+            again = method != "POST"
+        if not again or attempt == 4:
+            raise failure
+        print(f"{failure}, asking again", flush=True)
+        time.sleep(15 * attempt)
 
 
 def get(path, params):

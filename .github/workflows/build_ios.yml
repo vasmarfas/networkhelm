@@ -1,0 +1,142 @@
+name: Build iOS
+
+# the IPA for App Store Connect, signed with Apple Distribution and the App Store profile. Release uploads it
+on:
+  workflow_call:
+    inputs:
+      version_name:
+        type: string
+        required: true
+      version_code:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+env:
+  BUNDLE_ID: com.vasmarfas.networkhelm
+
+jobs:
+  build:
+    name: IPA
+    runs-on: macos-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Xcode
+        uses: maxim-lobanov/setup-xcode@v1
+        with:
+          xcode-version: latest-stable
+
+      - uses: ./.github/actions/setup-build
+
+      - name: Install certificate and provisioning profile
+        id: certificate
+        env:
+          IOS_P12_BASE64: ${{ secrets.IOS_P12_BASE64 }}
+          IOS_P12_PASSWORD: ${{ secrets.IOS_P12_PASSWORD }}
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          set -eu
+          umask 077
+          keychain="$RUNNER_TEMP/app-signing.keychain-db"
+          password=$(openssl rand -hex 24)
+          echo "::add-mask::$password"
+          printf '%s' "$IOS_P12_BASE64" | tr -d '\n\r ' | openssl base64 -d -A > "$RUNNER_TEMP/certificate.p12"
+          printf '%s' "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '\n\r ' | openssl base64 -d -A > "$RUNNER_TEMP/profile.mobileprovision"
+          security create-keychain -p "$password" "$keychain"
+          security set-keychain-settings -lut 21600 "$keychain"
+          security unlock-keychain -p "$password" "$keychain"
+          security import "$RUNNER_TEMP/certificate.p12" -k "$keychain" -P "$IOS_P12_PASSWORD" -A -t cert -f pkcs12
+          security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain" > /dev/null
+          security list-keychains -d user -s "$keychain" login.keychain-db
+          for dir in ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles ~/Library/MobileDevice/Provisioning\ Profiles; do
+            mkdir -p "$dir"
+            cp "$RUNNER_TEMP/profile.mobileprovision" "$dir/networkhelm.mobileprovision"
+          done
+          rm -f "$RUNNER_TEMP/certificate.p12"
+          echo "installed=true" >> "$GITHUB_OUTPUT"
+
+      # OpenSSL and libssh2 for the SSH of iOS are built once for each version of their script
+      - name: Cache the SSH libraries
+        uses: actions/cache@v6
+        with:
+          path: build/ios-ssh
+          key: ios-ssh-${{ hashFiles('tools/ios/build-ssh.sh') }}
+
+      - name: Build the SSH libraries
+        run: sh tools/ios/build-ssh.sh
+
+      # the build phase of Xcode runs Gradle for the framework. Built here first, with the attempts of gradle.sh, the
+      # framework is up to date when Xcode asks for it, and a lost download does not fail the archive
+      - name: Build the framework
+        env:
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          APP_VERSION_CODE: ${{ inputs.version_code }}
+        run: sh tools/release/gradle.sh :app:shared:linkReleaseFrameworkIosArm64
+
+      - name: Archive
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+          VERSION: ${{ inputs.version_name }}
+          BUILD_NUMBER: ${{ inputs.version_code }}
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          APP_VERSION_CODE: ${{ inputs.version_code }}
+        run: |
+          set -eu
+          # a profile given on the command line also reaches the targets of the Swift packages, which reject it,
+          # while Local.xcconfig, included by Config.xcconfig, reaches only this project
+          printf 'PROVISIONING_PROFILE_SPECIFIER = %s\n' "$PROFILE_NAME" > app/iosApp/Configuration/Local.xcconfig
+          xcodebuild -project app/iosApp/iosApp.xcodeproj -scheme iosApp \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
+            -configuration Release -destination 'generic/platform=iOS' archive \
+            -skipPackagePluginValidation -skipMacroValidation \
+            CODE_SIGN_STYLE=Manual \
+            CODE_SIGN_IDENTITY='Apple Distribution' \
+            DEVELOPMENT_TEAM="$APPLE_TEAM_ID" \
+            MARKETING_VERSION="${VERSION%%-*}" \
+            CURRENT_PROJECT_VERSION="$BUILD_NUMBER"
+
+      - name: Export IPA
+        env:
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          PROFILE_NAME: ${{ secrets.IOS_PROVISIONING_PROFILE_NAME }}
+        run: |
+          set -eu
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key><string>app-store-connect</string>
+            <key>destination</key><string>export</string>
+            <key>teamID</key><string>$APPLE_TEAM_ID</string>
+            <key>signingStyle</key><string>manual</string>
+            <key>uploadSymbols</key><true/>
+            <key>provisioningProfiles</key>
+            <dict><key>$BUNDLE_ID</key><string>$PROFILE_NAME</string></dict>
+          </dict>
+          </plist>
+          PLIST
+          xcodebuild -exportArchive \
+            -archivePath "$RUNNER_TEMP/iosApp.xcarchive" \
+            -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+            -exportPath "$RUNNER_TEMP/export"
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: store-ios
+          path: ${{ runner.temp }}/export/*.ipa
+          if-no-files-found: error
+
+      - name: Remove the temporary keychain
+        if: always() && steps.certificate.outputs.installed == 'true'
+        run: |
+          security list-keychains -d user -s login.keychain-db
+          security delete-keychain "$RUNNER_TEMP/app-signing.keychain-db" || true
+          rm -f ~/Library/Developer/Xcode/UserData/Provisioning\ Profiles/networkhelm.mobileprovision \
+                ~/Library/MobileDevice/Provisioning\ Profiles/networkhelm.mobileprovision

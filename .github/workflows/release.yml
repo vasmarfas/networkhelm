@@ -1,70 +1,109 @@
 name: Release
-run-name: Release ${{ inputs.version_name }}
+run-name: Release ${{ inputs.version || '(version of build.gradle.kts)' }}${{ inputs.builds_from_run != '' && ', earlier builds' || '' }}${{ inputs.dry_run && ', dry run' || '' }}
 
+# One run goes in stages, and a stage starts only when the one before it is done. First the parameters. Then the builds of
+# every platform side by side, with CI of the commit beside them, and the check that every build the boxes need is there.
+# Then the uploads to GitHub, the stores, ghcr.io and GitHub Pages side by side, the GitHub release only as a draft. The
+# release goes public once every upload is done, and the announcement and the scan follow it. Nothing is published while a
+# build is missing or CI is not green. Re-run failed jobs repeats what failed and everything after it, and builds_from_run
+# publishes the builds of an earlier run with other boxes, without building again.
 on:
   workflow_dispatch:
     inputs:
-      version_name:
-        description: 'Version (e.g. 1.1.0, 1.2.0-rc1; a hyphen makes a prerelease)'
-        required: true
-      notes_en:
-        description: 'What''s new in English: Google Play, App Store, Mac App Store, GitHub. \n is a line break, Google Play takes up to 500 characters'
-        required: true
-      notes_ru:
-        description: 'Что нового по-русски: Google Play, RuStore, App Store, Mac App Store, GitHub. \n — перенос строки, Google Play берёт до 500 знаков'
-        required: true
-      notes_github:
-        description: 'GitHub release notes in Markdown, \n is a line break (empty = the two texts above)'
+      version:
+        description: 'Version: 1.4.2, or 1.5.0-rc1 for a prerelease (empty = appVersionName of build.gradle.kts)'
         required: false
         default: ''
-      github_only:
-        description: 'GitHub only: nothing goes to the stores, the files go to the GitHub release alone'
+      notes_en:
+        description: 'What''s new in English for the GitHub release, Telegram and the stores, \n is a line break. Google Play takes up to 500 characters'
+        required: false
+        default: ''
+      notes_ru:
+        description: 'Что нового по-русски для релиза GitHub, Telegram и магазинов, \n означает перенос строки. Google Play берёт до 500 знаков'
+        required: false
+        default: ''
+      github:
+        description: 'GitHub release: publish, leave as a draft, or skip it and publish to the stores or GitHub Pages only'
+        type: choice
+        options: [publish, draft, skip]
+        default: publish
+      google_play:
+        description: 'Google Play'
         type: boolean
-        default: true
-      submit_for_review:
-        description: 'Send to review in every store (unchecked = upload and leave the versions ready in the consoles)'
-        type: boolean
-        default: true
-      release_after_review:
-        description: 'Publish as soon as review passes: App Store, Mac App Store, RuStore (Google Play follows its managed publishing setting)'
-        type: boolean
-        default: true
+        default: false
       play_track:
         description: 'Google Play track'
         type: choice
         options: [production, beta, alpha, internal]
         default: production
-      publish_google_play:
-        description: 'Google Play'
-        type: boolean
-        default: true
-      publish_rustore:
+      rustore:
         description: 'RuStore'
         type: boolean
-        default: true
-      publish_app_store:
+        default: false
+      app_store:
         description: 'App Store (iOS)'
         type: boolean
-        default: true
-      publish_mac_app_store:
+        default: false
+      mac_app_store:
         description: 'Mac App Store'
         type: boolean
-        default: true
-      push_gateway_image:
-        description: 'Push the gateway image to ghcr.io'
-        type: boolean
-        default: true
-      draft:
-        description: 'Leave the GitHub release as a draft'
-        type: boolean
         default: false
-      version_code:
-        description: 'Android versionCode and Apple build number (empty = from the version, 1.4.12 is 1041299, 1.4.12-rc2 is 1041202)'
+      review:
+        description: 'In the stores: publish as soon as review passes, send to review and publish by hand, or only upload (Google Play follows its managed publishing)'
+        type: choice
+        options: [publish after approval, submit only, upload only]
+        default: publish after approval
+      pages:
+        description: 'GitHub Pages: the page with the demo routers (a version without a hyphen, a run from master)'
+        type: boolean
+        default: true
+      docker:
+        description: 'Gateway image in ghcr.io, with the GitHub release'
+        type: boolean
+        default: true
+      announce:
+        description: 'Announcement in the Telegram chat, once the GitHub release is published'
+        type: boolean
+        default: true
+      virustotal:
+        description: 'VirusTotal scan of the release files once the release is published, up to an hour at the end of the run'
+        type: boolean
+        default: true
+      notes_github:
+        description: 'GitHub release notes in Markdown, \n is a line break (empty = the English and the Russian texts)'
         required: false
         default: ''
+      notes_apple_en:
+        description: 'What''s new in English for the App Store and the Mac App Store, up to 4000 characters (empty = notes_en)'
+        required: false
+        default: ''
+      notes_apple_ru:
+        description: 'Что нового для App Store и Mac App Store по-русски, до 4000 знаков (пусто = notes_ru)'
+        required: false
+        default: ''
+      notes_rustore:
+        description: 'Что нового для RuStore (пусто = notes_ru)'
+        required: false
+        default: ''
+      builds_from_run:
+        description: 'Publish the builds of an earlier Release run instead of building: its number or link. Empty notes come from that run'
+        required: false
+        default: ''
+      version_code:
+        description: 'Android versionCode and Apple build number (empty = from the version: 1.4.12 is 1041299, 1.4.12-rc2 is 1041202)'
+        required: false
+        default: ''
+      require_ci:
+        description: 'Publish only after CI on the commit is green. A commit CI has not run on gets a run'
+        type: boolean
+        default: true
+      dry_run:
+        description: 'Dry run: build what the boxes above need and publish nothing, the files stay in the run'
+        type: boolean
+        default: false
 
 permissions:
-  actions: read
+  actions: write
   contents: write
   packages: write
   pages: write
@@ -74,251 +113,800 @@ concurrency:
   group: release-${{ github.ref }}
   cancel-in-progress: false
 
+env:
+  GH_REPO: ${{ github.repository }}
+
 jobs:
-  meta:
-    name: Release parameters
+  prepare:
+    name: Parameters
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     outputs:
-      version_name: ${{ steps.resolve.outputs.version_name }}
-      version_code: ${{ steps.resolve.outputs.version_code }}
+      version: ${{ steps.plan.outputs.version }}
+      code: ${{ steps.plan.outputs.code }}
+      commit: ${{ steps.plan.outputs.commit }}
+      prerelease: ${{ steps.plan.outputs.prerelease }}
+      builds_run: ${{ steps.plan.outputs.builds_run }}
+      build_web: ${{ steps.plan.outputs.build_web }}
+      build_android: ${{ steps.plan.outputs.build_android }}
+      build_desktop: ${{ steps.plan.outputs.build_desktop }}
+      build_windows: ${{ steps.plan.outputs.build_windows }}
+      build_linux: ${{ steps.plan.outputs.build_linux }}
+      build_macos: ${{ steps.plan.outputs.build_macos }}
+      build_mac_app_store: ${{ steps.plan.outputs.build_mac_app_store }}
+      build_ios: ${{ steps.plan.outputs.build_ios }}
+      build_gateway: ${{ steps.plan.outputs.build_gateway }}
+      github: ${{ steps.plan.outputs.github }}
+      google_play: ${{ steps.plan.outputs.google_play }}
+      rustore: ${{ steps.plan.outputs.rustore }}
+      app_store: ${{ steps.plan.outputs.app_store }}
+      mac_app_store: ${{ steps.plan.outputs.mac_app_store }}
+      pages: ${{ steps.plan.outputs.pages }}
+      docker: ${{ steps.plan.outputs.docker }}
+      announce: ${{ steps.plan.outputs.announce }}
+      virustotal: ${{ steps.plan.outputs.virustotal }}
+      play_track: ${{ steps.plan.outputs.play_track }}
+      submit: ${{ steps.plan.outputs.submit }}
+      release_after_review: ${{ steps.plan.outputs.release_after_review }}
+      artifacts: ${{ steps.plan.outputs.artifacts }}
+      notes_en: ${{ steps.plan.outputs.notes_en }}
+      notes_ru: ${{ steps.plan.outputs.notes_ru }}
+      notes_github: ${{ steps.plan.outputs.notes_github }}
+      notes_apple_en: ${{ steps.plan.outputs.notes_apple_en }}
+      notes_apple_ru: ${{ steps.plan.outputs.notes_apple_ru }}
+      notes_rustore: ${{ steps.plan.outputs.notes_rustore }}
     steps:
-      # the stores get the build without a second test run, so the commit must already be green in CI; CI of a push takes about
-      # 20 minutes, and a release started right after the push waits for it instead of failing
-      - name: Check CI on this commit
-        timeout-minutes: 70
+      - uses: actions/checkout@v7
+
+      - name: Find the earlier run
+        id: source
+        if: ${{ inputs.builds_from_run != '' }}
+        env:
+          FROM: ${{ inputs.builds_from_run }}
+        run: |
+          set -eu
+          run=$(printf '%s' "$FROM" | sed -E 's#^.*/runs/([0-9]+).*$#\1#')
+          case "$run" in
+            '' | *[!0-9]*) echo "::error::'$FROM' is neither the number of a run nor a link to it"; exit 1 ;;
+          esac
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+      # plan.py says what it means when the manifest is not there
+      - name: Take the manifest of the earlier run
+        if: ${{ inputs.builds_from_run != '' }}
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: manifest
+          path: ${{ runner.temp }}/source
+          run-id: ${{ steps.source.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Plan
+        id: plan
+        env:
+          SOURCE_RUN: ${{ steps.source.outputs.run }}
+          SOURCE_MANIFEST: ${{ runner.temp }}/source/manifest.json
+          FORM_VERSION: ${{ inputs.version }}
+          FORM_VERSION_CODE: ${{ inputs.version_code }}
+          FORM_NOTES_EN: ${{ inputs.notes_en }}
+          FORM_NOTES_RU: ${{ inputs.notes_ru }}
+          FORM_NOTES_GITHUB: ${{ inputs.notes_github }}
+          FORM_NOTES_APPLE_EN: ${{ inputs.notes_apple_en }}
+          FORM_NOTES_APPLE_RU: ${{ inputs.notes_apple_ru }}
+          FORM_NOTES_RUSTORE: ${{ inputs.notes_rustore }}
+          FORM_GITHUB: ${{ inputs.github }}
+          FORM_GOOGLE_PLAY: ${{ inputs.google_play }}
+          FORM_PLAY_TRACK: ${{ inputs.play_track }}
+          FORM_RUSTORE: ${{ inputs.rustore }}
+          FORM_APP_STORE: ${{ inputs.app_store }}
+          FORM_MAC_APP_STORE: ${{ inputs.mac_app_store }}
+          FORM_REVIEW: ${{ inputs.review }}
+          FORM_PAGES: ${{ inputs.pages }}
+          FORM_DOCKER: ${{ inputs.docker }}
+          FORM_ANNOUNCE: ${{ inputs.announce }}
+          FORM_VIRUSTOTAL: ${{ inputs.virustotal }}
+          FORM_DRY_RUN: ${{ inputs.dry_run }}
+          HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+          HAS_PLAY: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON != '' }}
+          HAS_RUSTORE: ${{ secrets.RUSTORE_KEY_ID != '' && secrets.RUSTORE_PRIVATE_KEY != '' }}
+          HAS_ASC: ${{ secrets.ASC_KEY_ID != '' && secrets.ASC_ISSUER_ID != '' && secrets.ASC_KEY_P8 != '' }}
+          HAS_IOS: ${{ secrets.IOS_P12_BASE64 != '' && secrets.IOS_PROVISIONING_PROFILE_BASE64 != '' && secrets.IOS_PROVISIONING_PROFILE_NAME != '' && secrets.APPLE_TEAM_ID != '' }}
+          HAS_MAC_APP_STORE: ${{ secrets.MAC_APP_STORE_P12_BASE64 != '' && secrets.MAC_APP_STORE_PROFILE_BASE64 != '' && secrets.MAC_APP_STORE_RUNTIME_PROFILE_BASE64 != '' }}
+          HAS_TELEGRAM: ${{ secrets.TG_BOT_TOKEN != '' }}
+          HAS_VIRUSTOTAL: ${{ secrets.VT_API_KEY != '' }}
+        run: python3 tools/release/plan.py
+
+      # a published release is not touched again, and the stores get the commit the GitHub release was made from
+      - name: Check the release
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.plan.outputs.version }}
+          COMMIT: ${{ steps.plan.outputs.commit }}
+          RELEASE: ${{ steps.plan.outputs.github }}
+          STORES: ${{ steps.plan.outputs.google_play == 'true' || steps.plan.outputs.rustore == 'true' || steps.plan.outputs.app_store == 'true' || steps.plan.outputs.mac_app_store == 'true' }}
+          REUSE: ${{ steps.plan.outputs.builds_run != '' }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/matching-refs/tags/$tag" --jq ".[] | select(.ref == \"refs/tags/$tag\") | .object | \"\(.type) \(.sha)\"")
+          case "$ref" in
+            tag\ *) tagged=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/${ref#tag }" --jq .object.sha) ;;
+            commit\ *) tagged=${ref#commit } ;;
+            *) tagged= ;;
+          esac
+          state=$(gh release view "$tag" --json isDraft --jq 'if .isDraft then "draft" else "published" end' 2> /dev/null || echo none)
+          if [ "$RELEASE" != skip ]; then
+            if [ "$state" = published ]; then
+              echo "::error::$tag is already published. To send this version to the stores, choose GitHub release: skip"
+              exit 1
+            fi
+            if [ -n "$tagged" ] && [ "$tagged" != "$COMMIT" ]; then
+              echo "::error::tag $tag points to $tagged, this run is of $COMMIT"
+              exit 1
+            fi
+            if [ "$state" = draft ]; then echo "::notice::the draft of $tag is updated"; fi
+          elif [ "$STORES" = true ] && [ "$REUSE" = false ] && [ -n "$tagged" ] && [ "$tagged" != "$COMMIT" ]; then
+            echo "::error::$tag was released from $tagged and this run builds $COMMIT: start it from the tag $tag (Use workflow from, Tags) or give builds_from_run"
+            exit 1
+          fi
+
+      - name: Upload the manifest
+        uses: actions/upload-artifact@v7
+        with:
+          name: manifest
+          path: manifest.json
+          if-no-files-found: error
+
+  # the stores get the builds without a second test run, so the commit must be green in CI. CI of a push takes about 20 minutes
+  # and goes on beside the builds, which publish nothing
+  ci:
+    name: CI on this commit
+    needs: prepare
+    if: ${{ inputs.require_ci }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 80
+    steps:
+      - name: Wait for CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
         run: |
           set -eu
           started=$(date +%s)
+          dispatched=false
           while :; do
-            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$GITHUB_SHA" \
+            run=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ci.yml/runs?head_sha=$COMMIT" \
               --jq '.workflow_runs[0] // {} | "\(.status // "") \(.conclusion // "")"')
             waited=$(( $(date +%s) - started ))
             case "$run" in
               'completed success') break ;;
-              completed*) echo "::error::CI ended with '${run#completed }' on $GITHUB_SHA"; exit 1 ;;
+              completed*) echo "::error::CI ended with '${run#completed }' on $COMMIT"; exit 1 ;;
               ' ')
-                if [ "$waited" -ge 180 ]; then
-                  echo "::error::CI has not run on $GITHUB_SHA. Run the CI workflow manually on a branch or tag at this commit, wait for success, then start the release again"
-                  exit 1
+                # a change of .md files alone does not start CI
+                if [ "$dispatched" = false ] && [ "$waited" -ge 60 ]; then
+                  head=$(gh api "repos/$GITHUB_REPOSITORY/commits/$GITHUB_REF_NAME" --jq .sha)
+                  if [ "$head" != "$COMMIT" ]; then
+                    echo "::error::CI has not run on $COMMIT and $GITHUB_REF_NAME has moved on. Run CI on it by hand or uncheck require_ci"
+                    exit 1
+                  fi
+                  echo "::notice::CI has not run on $COMMIT, starting it"
+                  gh workflow run ci.yml --ref "$GITHUB_REF_NAME"
+                  dispatched=true
                 fi ;;
             esac
-            if [ "$waited" -ge 3600 ]; then
-              echo "::error::CI is still running on $GITHUB_SHA after an hour"
+            if [ "$waited" -ge 4200 ]; then
+              echo "::error::CI is still not done on $COMMIT after 70 minutes"
               exit 1
             fi
             state=${run% }
-            echo "CI on $GITHUB_SHA: ${state:-not started yet}, waited ${waited} s"
+            echo "CI on $COMMIT: ${state:-not started yet}, waited ${waited} s"
             sleep 30
           done
 
-      - name: Resolve
-        id: resolve
-        env:
-          INPUT_VERSION: ${{ inputs.version_name }}
-          INPUT_CODE: ${{ inputs.version_code }}
-        run: |
-          set -eu
-          derived=$(printf '%s' "$INPUT_VERSION" | awk '{
-            split($0, part, "-")
-            split(part[1], v, ".")
-            stage = 99
-            if (index($0, "-")) { stage = 0; if (match($0, /[0-9]+$/)) stage = substr($0, RSTART) }
-            print ((v[1] * 100 + v[2]) * 100 + v[3]) * 100 + stage
-          }')
-          {
-            echo "version_name=$INPUT_VERSION"
-            echo "version_code=${INPUT_CODE:-$derived}"
-          } >> "$GITHUB_OUTPUT"
-
-      # a long text would fail Google Play after the other stores already took the build
-      - name: Check release notes
-        if: inputs.publish_google_play && !inputs.github_only
-        env:
-          NOTES_EN: ${{ inputs.notes_en }}
-          NOTES_RU: ${{ inputs.notes_ru }}
-        run: |
-          set -eu
-          for name in NOTES_EN NOTES_RU; do
-            length=$(printf '%b' "${!name}" | LC_ALL=C.UTF-8 wc -m)
-            if [ "$length" -gt 500 ]; then
-              echo "::error::$name is $length characters, Google Play takes up to 500"
-              exit 1
-            fi
-          done
-
-      # the stores get the short texts for users, GitHub the full account of the changes when there is one
-      - name: Compose GitHub release notes
-        env:
-          NOTES_EN: ${{ inputs.notes_en }}
-          NOTES_RU: ${{ inputs.notes_ru }}
-          NOTES_GITHUB: ${{ inputs.notes_github }}
-        run: |
-          set -eu
-          if [ -n "$NOTES_GITHUB" ]; then
-            printf '%b\n' "$NOTES_GITHUB" > notes.md
-          else
-            {
-              printf '%b\n\n' "$NOTES_EN"
-              printf '%b\n' "$NOTES_RU"
-            } > notes.md
-          fi
-          cat notes.md
-
-      - name: Upload release notes
-        uses: actions/upload-artifact@v7
-        with:
-          name: release-notes
-          path: notes.md
+  web:
+    name: Build web
+    needs: prepare
+    if: ${{ needs.prepare.outputs.build_web == 'true' }}
+    uses: ./.github/workflows/build_web.yml
+    with:
+      version_name: ${{ needs.prepare.outputs.version }}
 
   android:
-    name: Android
-    needs: meta
-    uses: ./.github/workflows/deploy_android.yml
+    name: Build Android
+    needs: prepare
+    if: ${{ needs.prepare.outputs.build_android == 'true' }}
+    uses: ./.github/workflows/build_android.yml
     with:
-      version_name: ${{ needs.meta.outputs.version_name }}
-      version_code: ${{ needs.meta.outputs.version_code }}
-      notes_en: ${{ inputs.notes_en }}
-      notes_ru: ${{ inputs.notes_ru }}
-      publish_google_play: ${{ inputs.publish_google_play && !inputs.github_only }}
-      play_track: ${{ inputs.play_track }}
-      play_status: completed
-      play_send_for_review: ${{ inputs.submit_for_review }}
-      publish_rustore: ${{ inputs.publish_rustore && !inputs.github_only }}
-      rustore_artifact: apk
-      rustore_submit: ${{ inputs.submit_for_review }}
-      rustore_auto_publish: ${{ inputs.release_after_review }}
+      version_name: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.code }}
     secrets: inherit
 
   desktop:
-    name: Desktop
-    needs: meta
-    uses: ./.github/workflows/deploy_desktop.yml
+    name: Build desktop
+    needs: [prepare, web]
+    if: ${{ needs.prepare.outputs.build_desktop == 'true' }}
+    uses: ./.github/workflows/build_desktop.yml
     with:
-      version_name: ${{ needs.meta.outputs.version_name }}
-      version_code: ${{ needs.meta.outputs.version_code }}
-      publish_mac_app_store: ${{ inputs.publish_mac_app_store && !inputs.github_only }}
+      version_name: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.code }}
+      windows: ${{ needs.prepare.outputs.build_windows == 'true' }}
+      linux: ${{ needs.prepare.outputs.build_linux == 'true' }}
+      macos: ${{ needs.prepare.outputs.build_macos == 'true' }}
+      mac_app_store: ${{ needs.prepare.outputs.build_mac_app_store == 'true' }}
     secrets: inherit
 
-  # the IPA goes nowhere but App Store Connect, so the job runs only for an upload
   ios:
-    name: iOS
-    needs: meta
-    if: ${{ inputs.publish_app_store && !inputs.github_only }}
-    uses: ./.github/workflows/deploy_ios.yml
+    name: Build iOS
+    needs: prepare
+    if: ${{ needs.prepare.outputs.build_ios == 'true' }}
+    uses: ./.github/workflows/build_ios.yml
     with:
-      version_name: ${{ needs.meta.outputs.version_name }}
-      version_code: ${{ needs.meta.outputs.version_code }}
-      upload_app_store: true
-    secrets: inherit
-
-  app_store:
-    name: App Store Connect
-    needs: [meta, desktop, ios]
-    if: ${{ !cancelled() && (needs.ios.outputs.uploaded == 'true' || needs.desktop.outputs.mac_app_store_uploaded == 'true') }}
-    uses: ./.github/workflows/app_store_review.yml
-    with:
-      version_name: ${{ needs.meta.outputs.version_name }}
-      version_code: ${{ needs.meta.outputs.version_code }}
-      platforms: ${{ needs.ios.outputs.uploaded == 'true' && 'IOS' || '' }} ${{ needs.desktop.outputs.mac_app_store_uploaded == 'true' && 'MAC_OS' || '' }}
-      notes_en: ${{ inputs.notes_en }}
-      notes_ru: ${{ inputs.notes_ru }}
-      release_after_review: ${{ inputs.release_after_review }}
-      submit_for_review: ${{ inputs.submit_for_review }}
+      version_name: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.code }}
     secrets: inherit
 
   gateway:
-    name: Gateway
-    needs: meta
-    uses: ./.github/workflows/deploy_gateway.yml
+    name: Build gateway
+    needs: [prepare, web]
+    if: ${{ needs.prepare.outputs.build_gateway == 'true' }}
+    uses: ./.github/workflows/build_gateway.yml
     with:
-      version_name: ${{ needs.meta.outputs.version_name }}
-      push_image: ${{ inputs.push_gateway_image }}
-    secrets: inherit
+      version_name: ${{ needs.prepare.outputs.version }}
 
-  web:
-    name: Web
-    needs: meta
-    uses: ./.github/workflows/deploy_pages.yml
-    with:
-      version_name: ${{ needs.meta.outputs.version_name }}
-      publish: ${{ !contains(needs.meta.outputs.version_name, '-') }}
-    secrets: inherit
+  # the files of a failed optional build (Windows legacy and the ARM builds) are only missing from the release
+  gate:
+    name: Builds ready
+    needs: [prepare, ci, web, android, desktop, ios, gateway]
+    if: ${{ !cancelled() && needs.prepare.result == 'success' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      run: ${{ steps.check.outputs.run }}
+    steps:
+      - name: Check the builds and their files
+        id: check
+        env:
+          GH_TOKEN: ${{ github.token }}
+          NEEDS: ${{ toJSON(needs) }}
+          RUN: ${{ needs.prepare.outputs.builds_run || github.run_id }}
+          ARTIFACTS: ${{ needs.prepare.outputs.artifacts }}
+        run: |
+          set -euo pipefail
+          failed=$(jq -r 'to_entries[] | select(.value.result != "success" and .value.result != "skipped") | "\(.key) \(.value.result)"' <<< "$NEEDS")
+          if [ -n "$failed" ]; then
+            echo "::error::nothing is published, not done: $(tr '\n' ',' <<< "$failed" | sed 's/,$//; s/,/, /g')"
+            exit 1
+          fi
+          found=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$RUN/artifacts?per_page=100" \
+            --jq '.artifacts[] | select(.expired | not) | "\(.name) \(.size_in_bytes)"' | sort -u -k1,1)
+          missing=
+          for name in $ARTIFACTS; do
+            grep -q "^$name " <<< "$found" || missing="$missing $name"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::nothing is published, run $RUN has no$missing"
+            exit 1
+          fi
+          echo "run=$RUN" >> "$GITHUB_OUTPUT"
+          {
+            printf '## Builds of run %s\n\n| Artifact | MB |\n|---|---|\n' "$RUN"
+            awk '{ printf "| %s | %.1f |\n", $1, $2 / 1048576 }' <<< "$found"
+          } >> "$GITHUB_STEP_SUMMARY"
 
   github_release:
-    name: GitHub release
-    needs: [meta, android, desktop, ios, gateway, web]
-    if: ${{ !cancelled() && needs.meta.result == 'success' }}
+    name: GitHub release draft
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.github != 'skip' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 30
+    outputs:
+      url: ${{ steps.release.outputs.url }}
     steps:
       - uses: actions/checkout@v7
 
-      - name: Download artifacts
+      - name: Download the files
         uses: actions/download-artifact@v8
         with:
           pattern: release-*
           path: artifacts
           merge-multiple: true
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
 
-      - name: List artifacts
-        run: ls -lh artifacts
-
-      # the body opens with the table of downloads, linked to the files that were built, and the notes follow it
+      # the body opens with the table of downloads, linked to the files that were built. The notes and the changes since the last
+      # release follow it
       - name: Compose the release body
         env:
-          VERSION: ${{ needs.meta.outputs.version_name }}
-          IMAGE: ${{ inputs.push_gateway_image && format('ghcr.io/{0}/networkhelm-gateway', github.repository_owner) || '' }}
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          IMAGE: ${{ needs.prepare.outputs.docker == 'true' && format('ghcr.io/{0}/networkhelm-gateway', github.repository_owner) || '' }}
+          NOTES_EN: ${{ needs.prepare.outputs.notes_en }}
+          NOTES_RU: ${{ needs.prepare.outputs.notes_ru }}
+          NOTES_GITHUB: ${{ needs.prepare.outputs.notes_github }}
         run: |
-          set -eu
+          set -euo pipefail
           {
             python3 tools/release/downloads.py artifacts "$VERSION" "$GITHUB_REPOSITORY" "$IMAGE"
             printf '\n'
-            cat artifacts/notes.md
+            if [ -n "$NOTES_GITHUB" ]; then
+              printf '%b\n' "$NOTES_GITHUB"
+            else
+              printf '%b\n\n%b\n' "$NOTES_EN" "$NOTES_RU"
+            fi
+            printf '\n'
+            gh api "repos/$GITHUB_REPOSITORY/releases/generate-notes" -f tag_name="v$VERSION" -f target_commitish="$COMMIT" --jq .body
           } > body.md
           cat body.md
 
-      - name: Publish
-        uses: softprops/action-gh-release@v3
-        with:
-          tag_name: v${{ needs.meta.outputs.version_name }}
-          name: v${{ needs.meta.outputs.version_name }}
-          target_commitish: ${{ github.sha }}
-          body_path: body.md
-          generate_release_notes: true
-          # a failed platform, or one that got no runner, leaves its files out, so such a release is only drafted
-          draft: ${{ inputs.draft || contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') }}
-          prerelease: ${{ contains(needs.meta.outputs.version_name, '-') }}
-          fail_on_unmatched_files: false
+      - name: Create or update the draft
+        id: release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          COMMIT: ${{ needs.prepare.outputs.commit }}
+          PRERELEASE: ${{ needs.prepare.outputs.prerelease }}
+        run: |
+          set -euo pipefail
+          tag="v$VERSION"
+          if gh release view "$tag" > /dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" --target "$COMMIT" --notes-file body.md --prerelease="$PRERELEASE"
+          else
+            gh release create "$tag" --draft --title "$tag" --target "$COMMIT" --notes-file body.md --prerelease="$PRERELEASE"
+          fi
           # the AAB and the MSIX with its .cer stay in the run artifacts, they are for Google Play and the Microsoft Store
-          files: |
-            artifacts/*.apk
-            artifacts/*.exe
-            artifacts/*.msi
-            artifacts/*.deb
-            artifacts/*.rpm
-            artifacts/*.AppImage
-            artifacts/*.dmg
-            artifacts/*.jar
-            artifacts/*.zip
-            artifacts/*.tar.gz
+          shopt -s nullglob
+          files=(artifacts/*.apk artifacts/*.exe artifacts/*.msi artifacts/*.deb artifacts/*.rpm artifacts/*.AppImage
+            artifacts/*.dmg artifacts/*.jar artifacts/*.zip artifacts/*.tar.gz)
+          for attempt in 1 2 3; do
+            if gh release upload "$tag" "${files[@]}" --clobber; then break; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            echo "::warning::the files did not all upload, attempt $((attempt + 1)) of 3"
+            sleep 30
+          done
+          url=$(gh release view "$tag" --json url --jq .url)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+          echo "GitHub release: draft $url" >> "$GITHUB_STEP_SUMMARY"
+
+  google_play:
+    name: Google Play
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.google_play == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download the bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: release-android
+          path: out
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Download the mapping
+        continue-on-error: true
+        uses: actions/download-artifact@v8
+        with:
+          name: android-mapping
+          path: mapping
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Prepare release notes
+        id: notes
+        env:
+          NOTES_EN: ${{ needs.prepare.outputs.notes_en }}
+          NOTES_RU: ${{ needs.prepare.outputs.notes_ru }}
+        run: |
+          set -eu
+          mkdir -p whatsnew
+          # dispatch inputs are single-line, \n in them stands for a line break
+          printf '%b' "$NOTES_EN" > whatsnew/whatsnew-en-US
+          printf '%b' "$NOTES_RU" > whatsnew/whatsnew-ru-RU
+          if [ -f mapping/mapping.txt ]; then
+            echo "mapping=mapping/mapping.txt" >> "$GITHUB_OUTPUT"
+          else
+            echo "mapping=" >> "$GITHUB_OUTPUT"
+          fi
+
+      # an edit that fails is dropped by Google Play, so the second attempt starts a new one
+      - name: Upload to Google Play
+        id: upload
+        continue-on-error: true
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.vasmarfas.networkhelm
+          releaseFiles: out/*.aab
+          mappingFile: ${{ steps.notes.outputs.mapping }}
+          whatsNewDirectory: whatsnew
+          track: ${{ needs.prepare.outputs.play_track }}
+          status: completed
+          changesNotSentForReview: ${{ needs.prepare.outputs.submit != 'true' }}
+
+      - name: Wait before the second attempt
+        if: steps.upload.outcome == 'failure'
+        run: sleep 60
+
+      - name: Upload to Google Play again
+        if: steps.upload.outcome == 'failure'
+        uses: r0adkll/upload-google-play@v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.vasmarfas.networkhelm
+          releaseFiles: out/*.aab
+          mappingFile: ${{ steps.notes.outputs.mapping }}
+          whatsNewDirectory: whatsnew
+          track: ${{ needs.prepare.outputs.play_track }}
+          status: completed
+          changesNotSentForReview: ${{ needs.prepare.outputs.submit != 'true' }}
+
+  rustore:
+    name: RuStore
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.rustore == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Download the build
+        uses: actions/download-artifact@v8
+        with:
+          name: release-android
+          path: out
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      # the calls repeat on a dropped connection or an answer 5xx, and the draft and the upload of a repeated run are found and reused
+      - name: Upload to RuStore
+        env:
+          RUSTORE_KEY_ID: ${{ secrets.RUSTORE_KEY_ID }}
+          RUSTORE_PRIVATE_KEY: ${{ secrets.RUSTORE_PRIVATE_KEY }}
+          PACKAGE_NAME: com.vasmarfas.networkhelm
+          SUBMIT: ${{ needs.prepare.outputs.submit }}
+          PUBLISH_TYPE: ${{ needs.prepare.outputs.release_after_review == 'true' && 'INSTANTLY' || 'MANUAL' }}
+          NOTES: ${{ needs.prepare.outputs.notes_rustore }}
+        run: |
+          set -euo pipefail
+          api="https://public-api.rustore.ru"
+          raw="$RUNNER_TEMP/rustore.raw"
+          der="$RUNNER_TEMP/rustore.der"
+          key="$RUNNER_TEMP/rustore.pem"
+          umask 077
+          # the secret may be base64 DER or a PEM file, either PKCS#8 or PKCS#1, and a PEM may arrive in one line
+          # or itself base64-encoded, so everything is brought to DER and openssl detects the structure
+          printf '%s' "$RUSTORE_PRIVATE_KEY" > "$raw"
+          if ! grep -q 'BEGIN' "$raw"; then
+            tr -d '\r\n ' < "$raw" | base64 -d > "$der"
+            if grep -qa 'BEGIN' "$der"; then cp "$der" "$raw"; fi
+          fi
+          if grep -q 'BEGIN' "$raw"; then
+            sed 's/-----[A-Z ]*-----//g' "$raw" | tr -d '\r\n ' | base64 -d > "$der"
+          fi
+          if ! openssl pkey -inform DER -in "$der" -out "$key"; then
+            echo "::error::RUSTORE_PRIVATE_KEY is not an RSA private key, put the key from the RuStore console there again"
+            exit 1
+          fi
+          rm -f "$raw" "$der"
+
+          retry=(--retry 3 --retry-delay 15 --retry-connrefused)
+          timestamp=$(date +%Y-%m-%dT%H:%M:%S.%3N%:z)
+          signature=$(printf '%s' "$RUSTORE_KEY_ID$timestamp" | openssl dgst -sha512 -sign "$key" | openssl base64 -A)
+          auth=$(jq -n --arg id "$RUSTORE_KEY_ID" --arg ts "$timestamp" --arg sig "$signature" \
+            '{keyId: $id, timestamp: $ts, signature: $sig}')
+          session=$(curl -sS "${retry[@]}" -X POST "$api/public/auth/" -H 'Content-Type: application/json' -d "$auth")
+          rm -f "$key"
+          token=$(jq -r '.body.jwe // ""' <<< "$session")
+          if [ -z "$token" ]; then
+            echo "::error::RuStore authorization failed: $(jq -c '{code, message}' <<< "$session")"
+            exit 1
+          fi
+          echo "::add-mask::$token"
+
+          base="$api/public/v1/application/$PACKAGE_NAME"
+          # dispatch inputs are single-line, \n in them stands for a line break
+          whats_new=$(printf '%b' "$NOTES")
+          draft=$(curl -sS "${retry[@]}" -X POST "$base/version" -H "Public-Token: $token" -H 'Content-Type: application/json' \
+            -d "$(jq -n --arg type "$PUBLISH_TYPE" --arg notes "$whats_new" \
+              '{publishType: $type} + (if $notes == "" then {} else {whatsNew: $notes} end)')")
+          if [ "$(jq -r '.code' <<< "$draft")" = 'OK' ]; then
+            version_id=$(jq -r '.body' <<< "$draft")
+          else
+            version_id=$(jq -r '.message // ""' <<< "$draft" | grep -oE '[0-9]{3,}' | tail -n 1 || true)
+            if [ -z "$version_id" ]; then
+              echo "::error::RuStore draft was not created: $(jq -c '{code, message}' <<< "$draft")"
+              exit 1
+            fi
+            echo "::notice::reusing the existing RuStore draft $version_id, its release notes stay as they were"
+            # publishType is set when a draft is created, an older draft keeps its own unless the key may change it
+            settings=$(curl -sS "${retry[@]}" -X POST "$base/version/$version_id/publish-settings" -H "Public-Token: $token" \
+              -H 'Content-Type: application/json' -d "$(jq -n --arg type "$PUBLISH_TYPE" '{publishType: $type}')")
+            if [ "$(jq -r '.code' <<< "$settings")" != 'OK' ]; then
+              echo "::warning::RuStore kept the draft's publish type: $(jq -c '{code, message}' <<< "$settings")"
+            fi
+          fi
+
+          set -- out/*.apk
+          upload=$(curl -sS "${retry[@]}" -X POST "$base/version/$version_id/apk?servicesType=Unknown&isMainApk=true" \
+            -H "Public-Token: $token" -F "file=@$1")
+          if [ "$(jq -r '.code' <<< "$upload")" != 'OK' ]; then
+            # a rerun finds the file from the first attempt already in the draft
+            if jq -r '.message // ""' <<< "$upload" | grep -qi 'already uploaded'; then
+              echo "::notice::the build is already in RuStore draft $version_id"
+            else
+              echo "::error::RuStore upload failed: $(jq -c '{code, message}' <<< "$upload")"
+              exit 1
+            fi
+          fi
+
+          if [ "$SUBMIT" = 'true' ]; then
+            commit=$(curl -sS -X POST "$base/version/$version_id/commit?priorityUpdate=0" -H "Public-Token: $token")
+            if [ "$(jq -r '.code' <<< "$commit")" != 'OK' ]; then
+              echo "::error::RuStore moderation request failed: $(jq -c '{code, message}' <<< "$commit")"
+              exit 1
+            fi
+            if [ "$PUBLISH_TYPE" = 'INSTANTLY' ]; then
+              echo "RuStore: version $version_id sent to moderation, it goes live once approved." >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "RuStore: version $version_id sent to moderation, publish it in the console once approved." >> "$GITHUB_STEP_SUMMARY"
+            fi
+          else
+            echo "RuStore: version $version_id left as a draft." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  app_store:
+    name: App Store upload
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.app_store == 'true' }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    outputs:
+      uploaded: ${{ steps.upload.outputs.uploaded }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/release
+
+      - name: Download the IPA
+        uses: actions/download-artifact@v8
+        with:
+          name: store-ios
+          path: store
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Upload to App Store Connect
+        id: upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          bash tools/release/app_store_upload.sh ios store
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
+  mac_app_store:
+    name: Mac App Store upload
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.mac_app_store == 'true' }}
+    runs-on: macos-latest
+    timeout-minutes: 45
+    outputs:
+      uploaded: ${{ steps.upload.outputs.uploaded }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          sparse-checkout: tools/release
+
+      - name: Download the package
+        uses: actions/download-artifact@v8
+        with:
+          name: store-mac-app-store
+          path: store
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Upload to App Store Connect
+        id: upload
+        env:
+          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
+          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
+          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
+        run: |
+          bash tools/release/app_store_upload.sh macos store
+          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+
+  docker:
+    name: Gateway image
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.docker == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.prepare.outputs.commit }}
+
+      - name: Download the jar
+        uses: actions/download-artifact@v8
+        with:
+          name: release-gateway-linux
+          path: dist
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      - name: Put the jar where the Dockerfile takes it
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          mkdir -p server/build/libs
+          cp "dist/NetworkHelm-gateway-$VERSION.jar" server/build/libs/networkhelm-gateway.jar
+
+      # arm64 as well, for the container of a router
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v4
+
+      - name: Set up Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Log in to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # the context is server/, and a prerelease does not move latest
+      - name: Build and push the image
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          image="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/networkhelm-gateway"
+          tags="-t $image:$VERSION"
+          case "$VERSION" in
+            *-*) ;;
+            *) tags="$tags -t $image:latest" ;;
+          esac
+          for attempt in 1 2 3; do
+            if docker buildx build --platform linux/amd64,linux/arm64 $tags --push server; then exit 0; fi
+            [ "$attempt" -lt 3 ] || exit 1
+            echo "::warning::the image did not build or push, attempt $((attempt + 1)) of 3"
+            sleep 60
+          done
+
+  pages:
+    name: GitHub Pages
+    needs: [prepare, gate]
+    if: ${{ !cancelled() && needs.gate.result == 'success' && needs.prepare.outputs.pages == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url || steps.again.outputs.page_url }}
+    steps:
+      - name: Download the page
+        uses: actions/download-artifact@v8
+        with:
+          name: pages-site
+          path: site
+          run-id: ${{ needs.gate.outputs.run }}
+          github-token: ${{ github.token }}
+
+      # under the number of the attempt: deploy-pages refuses to choose between two artifacts of one name, and a re-run of this
+      # job uploads and deploys its own
+      - name: Upload the page
+        uses: actions/upload-pages-artifact@v5
+        with:
+          name: github-pages-${{ github.run_attempt }}
+          path: site
+          include-hidden-files: true
+
+      # Pages answered 500 to the deployment of 1.3.0
+      - name: Deploy
+        id: deploy
+        continue-on-error: true
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+      - name: Wait before the second attempt
+        if: steps.deploy.outcome == 'failure'
+        run: sleep 120
+
+      - name: Deploy again
+        id: again
+        if: steps.deploy.outcome == 'failure'
+        uses: actions/deploy-pages@v5
+        with:
+          artifact_name: github-pages-${{ github.run_attempt }}
+
+  # a failed upload keeps the release a draft, so it is never public without the stores and the image the run was asked for
+  publish:
+    name: Publish the GitHub release
+    needs: [prepare, github_release, google_play, rustore, app_store, mac_app_store, docker, pages]
+    if: ${{ !cancelled() && needs.prepare.outputs.github == 'publish' && needs.github_release.result == 'success' && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -eu
+          gh release edit "v$VERSION" --draft=false
+          echo "GitHub release: published v$VERSION" >> "$GITHUB_STEP_SUMMARY"
+
+  # the uploads only add builds to App Store Connect, the versions, their notes and the review request are made here
+  apple_review:
+    name: App Store Connect
+    needs: [prepare, app_store, mac_app_store]
+    if: ${{ !cancelled() && (needs.app_store.outputs.uploaded == 'true' || needs.mac_app_store.outputs.uploaded == 'true') }}
+    uses: ./.github/workflows/app_store_review.yml
+    with:
+      version_name: ${{ needs.prepare.outputs.version }}
+      version_code: ${{ needs.prepare.outputs.code }}
+      platforms: ${{ needs.app_store.outputs.uploaded == 'true' && 'IOS' || '' }} ${{ needs.mac_app_store.outputs.uploaded == 'true' && 'MAC_OS' || '' }}
+      notes_en: ${{ needs.prepare.outputs.notes_apple_en }}
+      notes_ru: ${{ needs.prepare.outputs.notes_apple_ru }}
+      release_after_review: ${{ needs.prepare.outputs.release_after_review == 'true' }}
+      submit_for_review: ${{ needs.prepare.outputs.submit == 'true' }}
+    secrets: inherit
 
   announce:
     name: Announce
-    needs: [meta, android, desktop, ios, gateway, web, github_release]
-    if: ${{ !cancelled() && needs.github_release.result == 'success' && !inputs.draft && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    needs: [prepare, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.prepare.outputs.announce == 'true' }}
     uses: ./.github/workflows/announce.yml
     with:
-      tag: v${{ needs.meta.outputs.version_name }}
-      notes: ${{ inputs.notes_ru }}\n\n---\n\n${{ inputs.notes_en }}
+      tag: v${{ needs.prepare.outputs.version }}
+      notes: ${{ needs.prepare.outputs.notes_ru }}\n\n---\n\n${{ needs.prepare.outputs.notes_en }}
     secrets: inherit
 
-  # the scan only reports and runs once the release is public, so nothing waits for it; a drafted release is not scanned
+  # the scan keeps the run up to an hour longer and only reports: a failed step of it does not turn the run red
   virustotal:
     name: VirusTotal
-    needs: [meta, android, desktop, ios, gateway, web, github_release]
-    if: ${{ !cancelled() && needs.github_release.result == 'success' && !inputs.draft && !contains(needs.*.result, 'failure') && !contains(needs.*.result, 'cancelled') }}
+    needs: [prepare, publish]
+    if: ${{ !cancelled() && needs.publish.result == 'success' && needs.prepare.outputs.virustotal == 'true' }}
     uses: ./.github/workflows/virustotal.yml
     with:
-      tag: v${{ needs.meta.outputs.version_name }}
+      tag: v${{ needs.prepare.outputs.version }}
     secrets: inherit
+
+  summary:
+    name: Summary
+    needs: [prepare, ci, web, android, desktop, ios, gateway, gate, github_release, google_play, rustore, app_store, mac_app_store, docker, pages, publish, apple_review, announce, virustotal]
+    if: ${{ always() }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: What happened and what is next
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+          URL: ${{ needs.publish.result == 'success' && format('https://github.com/{0}/releases/tag/v{1}', github.repository, needs.prepare.outputs.version) || needs.github_release.outputs.url }}
+          RUN: ${{ needs.gate.outputs.run || needs.prepare.outputs.builds_run || github.run_id }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -eu
+          names='{"prepare": "Parameters", "ci": "CI on this commit", "web": "Build web", "android": "Build Android",
+            "desktop": "Build desktop", "ios": "Build iOS", "gateway": "Build gateway", "gate": "Builds ready",
+            "github_release": "GitHub release draft", "google_play": "Google Play", "rustore": "RuStore",
+            "app_store": "App Store upload", "mac_app_store": "Mac App Store upload", "docker": "Gateway image",
+            "pages": "GitHub Pages", "publish": "Publish the GitHub release", "apple_review": "App Store Connect",
+            "announce": "Announce", "virustotal": "VirusTotal"}'
+          broken=$(jq -r '[.[] | select(.result == "failure" or .result == "cancelled")] | length' <<< "$NEEDS")
+          {
+            printf '## Release %s\n\n| Stage | Result |\n|---|---|\n' "${VERSION:-?}"
+            jq -r --argjson names "$names" 'to_entries[] | select(.value.result != "skipped") | "| \($names[.key]) | \(.value.result) |"' <<< "$NEEDS"
+            printf '\n'
+            if [ "$broken" != 0 ]; then
+              printf 'Not done. **Re-run failed jobs** repeats what failed and everything after it. '
+              printf 'To publish the builds that are ready with other boxes, start Release with builds_from_run: %s.\n' "$RUN"
+            elif [ "$DRY_RUN" = true ]; then
+              printf 'Dry run: the files are in the artifacts of run %s. To publish them, start Release with builds_from_run: %s.\n' "$RUN" "$RUN"
+            elif [ -n "$URL" ]; then
+              printf 'Release: %s\n' "$URL"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"

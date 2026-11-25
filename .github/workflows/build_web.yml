@@ -1,0 +1,68 @@
+name: Build web
+
+# the web app is built once for the whole release, on Linux: Windows on ARM has no Binaryen to optimize it with, and webpack
+# ran out of memory on the macOS ARM runner. Release publishes the page on GitHub Pages
+on:
+  workflow_call:
+    inputs:
+      version_name:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    name: Web app and page
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/setup-build
+
+      # the bundle the desktop app and the gateway carry, and from it the page that says it has no gateway behind it, with
+      # the demo routers and a manifest to install it
+      - name: Build the bundle and the page
+        env:
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          # the minifier of the JavaScript bundle of 1.4.0 ran out of the default heap of node on the runner
+          NODE_OPTIONS: --max-old-space-size=8192
+        run: sh tools/release/gradle.sh :app:webApp:pagesBundle
+
+      # the privacy policy and the terms of the repository, for the links the consent screens and the stores ask for
+      - name: Add the privacy policy and the terms
+        run: python3 tools/pages/legal.py app/webApp/build/pages
+
+      # the same files as an archive, for a web server of one's own
+      - name: Pack the page
+        env:
+          VERSION: ${{ inputs.version_name }}
+        run: |
+          set -eu
+          mkdir -p out
+          (cd app/webApp/build/pages && zip -qr "$GITHUB_WORKSPACE/out/NetworkHelm-web-$VERSION.zip" .)
+
+      - name: Upload the bundle
+        uses: actions/upload-artifact@v7
+        with:
+          name: web-bundle
+          path: app/webApp/build/bundle
+          retention-days: 1
+          if-no-files-found: error
+
+      - name: Upload the page
+        uses: actions/upload-artifact@v7
+        with:
+          name: pages-site
+          path: app/webApp/build/pages
+          include-hidden-files: true
+          if-no-files-found: error
+
+      - name: Upload the archive
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-web
+          path: out/*
+          if-no-files-found: error

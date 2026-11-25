@@ -1,0 +1,33 @@
+name: Set up the build
+description: The JetBrains Runtime of the desktop app, the JVM of the Gradle daemon and Gradle
+
+inputs:
+  jbr:
+    description: Version of the JetBrains Runtime, 17 for the flavour for Windows 7 and 8
+    required: false
+    default: '25'
+
+runs:
+  using: composite
+  steps:
+    # setup-java writes both runtimes into the Maven toolchains file, where Gradle finds them, so no JDK is fetched from
+    # foojay in the middle of a build: that download failed the macOS build of 1.4.1. The desktop app resolves its toolchain
+    # whenever the build is configured, so every job needs the runtime, and the daemon wants the JVM of
+    # gradle/gradle-daemon-jvm.properties
+    # the releases of the runtime are listed through the API of GitHub, which limits calls without a token
+    - name: Set up the JetBrains Runtime
+      uses: actions/setup-java@v6
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+      with:
+        distribution: jetbrains
+        java-version: ${{ inputs.jbr }}
+
+    - name: Set up the JVM of the Gradle daemon
+      uses: actions/setup-java@v6
+      with:
+        distribution: zulu
+        java-version: '21'
+
+    - name: Set up Gradle
+      uses: gradle/actions/setup-gradle@v6

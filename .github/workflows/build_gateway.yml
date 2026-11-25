@@ -1,0 +1,76 @@
+name: Build gateway
+
+# archives of the gateway with a Java runtime of their own, and the jar. Release attaches them to the GitHub release and builds
+# the Docker image from the jar. The web bundle the gateway carries comes from the Build web workflow of the same run
+on:
+  workflow_call:
+    inputs:
+      version_name:
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+jobs:
+  gateway:
+    name: Gateway ${{ matrix.system }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - system: linux
+            os: ubuntu-latest
+          - system: windows
+            os: windows-latest
+          # the ARM runners are new to this pipeline: a failure there leaves the x64 archives alone and does not stop the release
+          - system: linux-arm64
+            os: ubuntu-24.04-arm
+            experimental: true
+          - system: windows-arm64
+            os: windows-11-arm
+            experimental: true
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    continue-on-error: ${{ matrix.experimental == true }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Download the web bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: web-bundle
+          path: app/webApp/build/bundle
+
+      - uses: ./.github/actions/setup-build
+
+      # the archive carries the jar, which carries the web app, and a Java runtime of this system: jlink writes the
+      # runtime of the JDK that runs it, so each system builds its own archive. Gradle on Windows on ARM timed out waiting
+      # for its own workers with the configuration cache on
+      - name: Build the archive
+        env:
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+        run: sh tools/release/gradle.sh ${{ matrix.system == 'windows-arm64' && '--no-configuration-cache --max-workers=2' || '' }} -x :app:webApp:webAppBundle :server:gatewayArchive
+
+      - name: Collect artifacts
+        env:
+          VERSION: ${{ inputs.version_name }}
+          SYSTEM: ${{ matrix.system }}
+        run: |
+          set -eu
+          mkdir -p out
+          cp server/build/gateway/NetworkHelm-gateway-"$VERSION"-* out/
+          # the jar is the same on every system, so one of them hands it over
+          if [ "$SYSTEM" = linux ]; then
+            cp server/build/libs/networkhelm-gateway.jar "out/NetworkHelm-gateway-$VERSION.jar"
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v7
+        with:
+          name: release-gateway-${{ matrix.system }}
+          path: out/*
+          if-no-files-found: error

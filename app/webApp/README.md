@@ -54,6 +54,6 @@ The connection window greys these protocols out on the page. Direct Sockets, the
 
 ## Publishing
 
-`.github/workflows/deploy_pages.yml` builds the bundle and publishes it on GitHub Pages; the release workflow calls it, except for prereleases, and attaches `NetworkHelm-web-<version>.zip` to the release. That archive is the same bundle: unpacked on any static host over HTTPS (the service worker needs it, `localhost` excepted), it makes the same page. The repository needs Pages set to deploy from GitHub Actions.
+`.github/workflows/build_web.yml` builds the bundle. The release workflow publishes it on GitHub Pages, except for prereleases, and attaches `NetworkHelm-web-<version>.zip` to the release. That archive is the same bundle: unpacked on any static host over HTTPS (the service worker needs it, `localhost` excepted), it makes the same page. The repository needs Pages set to deploy from GitHub Actions.
 
 The paths of the bundle are relative, so the page works under `https://<user>.github.io/<repository>/`.

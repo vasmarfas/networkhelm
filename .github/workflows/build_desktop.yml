@@ -1,127 +1,43 @@
-name: Deploy Desktop
-run-name: Deploy Desktop ${{ inputs.version_name }}
+name: Build desktop
 
+# installers and images for the GitHub release, MSIX packages for the Microsoft Store and the package for the Mac App Store.
+# Release uploads them. The web bundle the app carries comes from the Build web workflow of the same run
 on:
-  workflow_dispatch:
-    inputs:
-      version_name:
-        description: 'App versionName (e.g. 1.1.0, 1.2.0-rc1)'
-        required: true
-      version_code:
-        description: 'Build number (empty = from the version, 1.4.12 is 1041299, 1.4.12-rc2 is 1041202)'
-        required: false
-        default: ''
-      build_windows:
-        description: 'Windows (installer, portable EXE, MSI, and an MSIX for the Microsoft Store in the run artifacts)'
-        type: boolean
-        default: true
-      build_linux:
-        description: 'Linux (DEB, RPM, AppImage)'
-        type: boolean
-        default: true
-      build_macos:
-        description: 'macOS (a DMG for Apple silicon and one for Intel, notarized where the secrets are set)'
-        type: boolean
-        default: true
-      publish_mac_app_store:
-        description: 'Upload the Apple silicon build to the Mac App Store'
-        type: boolean
-        default: false
   workflow_call:
     inputs:
       version_name:
         type: string
-        required: false
-        default: ''
+        required: true
       version_code:
         type: string
-        required: false
-        default: ''
-      build_windows:
+        required: true
+      windows:
         type: boolean
         required: false
         default: true
-      build_linux:
+      linux:
         type: boolean
         required: false
         default: true
-      build_macos:
+      macos:
         type: boolean
         required: false
         default: true
-      publish_mac_app_store:
+      mac_app_store:
+        description: 'Also the package for the Mac App Store, signed for the store, from the Apple silicon build'
         type: boolean
         required: false
         default: false
-    outputs:
-      mac_app_store_uploaded:
-        description: 'The Mac App Store package reached App Store Connect'
-        value: ${{ jobs.macos.outputs.mac_app_store_uploaded }}
 
 permissions:
   contents: read
 
-concurrency:
-  group: deploy-desktop-${{ github.ref }}
-  cancel-in-progress: false
-
 jobs:
-  # the web app is the same on every system, so it is built once, on Linux: Windows on ARM has no Binaryen to optimize it with, and
-  # webpack ran out of memory on the macOS ARM runner
-  web:
-    name: Web bundle
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v7
-
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Resolve version
-        id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version_name }}
-        run: |
-          set -eu
-          name="$INPUT_VERSION"
-          if [ -z "$name" ]; then
-            case "$GITHUB_REF" in
-              refs/tags/v*) name="${GITHUB_REF#refs/tags/v}" ;;
-              *) echo "::error::the version is not given"; exit 1 ;;
-            esac
-          fi
-          echo "name=$name" >> "$GITHUB_OUTPUT"
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
-      - name: Build the web bundle
-        env:
-          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
-          # the minifier of the JavaScript bundle of 1.4.0 ran out of the default heap of node on the runner
-          NODE_OPTIONS: --max-old-space-size=8192
-        run: ./gradlew :app:webApp:webAppBundle
-
-      - name: Upload
-        uses: actions/upload-artifact@v7
-        with:
-          name: web-bundle-desktop
-          path: app/webApp/build/bundle
-          retention-days: 1
-          if-no-files-found: error
-
   # the legacy flavour runs on Java 17 for Windows 7 and 8, the arm64 one is built on an ARM runner; the author has run neither on
   # its target, so a failure of them leaves the x64 files alone and does not stop the release
   windows:
     name: Windows ${{ matrix.name }}
-    if: ${{ inputs.build_windows }}
-    needs: web
+    if: ${{ inputs.windows }}
     strategy:
       fail-fast: false
       matrix:
@@ -134,6 +50,7 @@ jobs:
             os: windows-latest
             build: build/legacy
             flavor: -legacy
+            jbr: '17'
             tasks: '-PlegacyJava=true :app:desktopApp:packageInnoSetup'
             experimental: true
           - name: arm64
@@ -143,6 +60,7 @@ jobs:
             tasks: ':app:desktopApp:packageInnoSetup'
             experimental: true
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     continue-on-error: ${{ matrix.experimental == true }}
     defaults:
       run:
@@ -153,66 +71,47 @@ jobs:
       - name: Download the web bundle
         uses: actions/download-artifact@v8
         with:
-          name: web-bundle-desktop
+          name: web-bundle
           path: app/webApp/build/bundle
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
+      - uses: ./.github/actions/setup-build
         with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Resolve version
-        id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version_name }}
-          INPUT_CODE: ${{ inputs.version_code }}
-        run: |
-          set -eu
-          name="$INPUT_VERSION"
-          if [ -z "$name" ]; then
-            case "$GITHUB_REF" in
-              refs/tags/v*) name="${GITHUB_REF#refs/tags/v}" ;;
-              *) echo "::error::the version is not given"; exit 1 ;;
-            esac
-          fi
-          derived=$(printf '%s' "$name" | awk '{
-            split($0, part, "-")
-            split(part[1], v, ".")
-            stage = 99
-            if (index($0, "-")) { stage = 0; if (match($0, /[0-9]+$/)) stage = substr($0, RSTART) }
-            print ((v[1] * 100 + v[2]) * 100 + v[3]) * 100 + stage
-          }')
-          {
-            echo "name=$name"
-            echo "code=${INPUT_CODE:-$derived}"
-          } >> "$GITHUB_OUTPUT"
+          jbr: ${{ matrix.jbr || '25' }}
 
       # the installer in the look of the app is made by Inno Setup, which packageInnoSetup finds where it installs; the image of
-      # Windows on ARM may come without Chocolatey, and the x86 compiler runs there under emulation
+      # Windows x64 has it, the one of Windows on ARM may come without it and without Chocolatey, and the x86 compiler runs there
+      # under emulation
       - name: Install Inno Setup
         shell: pwsh
         run: |
-          if (Get-Command choco -ErrorAction SilentlyContinue) {
-            choco install innosetup --no-progress -y
-          } else {
-            Invoke-WebRequest https://jrsoftware.org/download.php/is.exe -OutFile "$env:RUNNER_TEMP\is.exe"
-            Start-Process "$env:RUNNER_TEMP\is.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER' -Wait
+          if (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe") { exit 0 }
+          foreach ($attempt in 1..3) {
+            try {
+              if (Get-Command choco -ErrorAction SilentlyContinue) {
+                choco install innosetup --no-progress -y
+                if ($LASTEXITCODE -ne 0) { throw "choco ended with $LASTEXITCODE" }
+              } else {
+                Invoke-WebRequest https://jrsoftware.org/download.php/is.exe -OutFile "$env:RUNNER_TEMP\is.exe"
+                Start-Process "$env:RUNNER_TEMP\is.exe" -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER' -Wait
+              }
+              exit 0
+            } catch {
+              if ($attempt -eq 3) { throw }
+              Write-Output "::warning::Inno Setup did not install, attempt $($attempt + 1) of 3: $_"
+              Start-Sleep -Seconds 30
+            }
           }
 
       - name: Package
         env:
-          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
-          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          APP_VERSION_CODE: ${{ inputs.version_code }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
-        run: ./gradlew -x :app:webApp:webAppBundle ${{ matrix.tasks }}
+        run: sh tools/release/gradle.sh -x :app:webApp:webAppBundle ${{ matrix.tasks }}
 
       - name: Collect artifacts
         env:
-          VERSION: ${{ steps.version.outputs.name }}
+          VERSION: ${{ inputs.version_name }}
           FLAVOR: ${{ matrix.flavor }}
           BUILD: ${{ matrix.build }}
         run: |
@@ -251,7 +150,7 @@ jobs:
         if: matrix.name != 'legacy'
         shell: pwsh
         env:
-          VERSION: ${{ steps.version.outputs.name }}
+          VERSION: ${{ inputs.version_name }}
           ARCH: ${{ matrix.name }}
           FLAVOR: ${{ matrix.flavor }}
         run: |
@@ -290,8 +189,7 @@ jobs:
   # the ARM runners are new to this pipeline: a failure there leaves the x86_64 files alone and does not stop the release
   linux:
     name: Linux ${{ matrix.arch }}
-    if: ${{ inputs.build_linux }}
-    needs: web
+    if: ${{ inputs.linux }}
     strategy:
       fail-fast: false
       matrix:
@@ -306,6 +204,7 @@ jobs:
             rpm: aarch64
             experimental: true
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 60
     continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - uses: actions/checkout@v7
@@ -313,53 +212,17 @@ jobs:
       - name: Download the web bundle
         uses: actions/download-artifact@v8
         with:
-          name: web-bundle-desktop
+          name: web-bundle
           path: app/webApp/build/bundle
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Resolve version
-        id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version_name }}
-          INPUT_CODE: ${{ inputs.version_code }}
-        run: |
-          set -eu
-          name="$INPUT_VERSION"
-          if [ -z "$name" ]; then
-            case "$GITHUB_REF" in
-              refs/tags/v*) name="${GITHUB_REF#refs/tags/v}" ;;
-              *) echo "::error::the version is not given"; exit 1 ;;
-            esac
-          fi
-          derived=$(printf '%s' "$name" | awk '{
-            split($0, part, "-")
-            split(part[1], v, ".")
-            stage = 99
-            if (index($0, "-")) { stage = 0; if (match($0, /[0-9]+$/)) stage = substr($0, RSTART) }
-            print ((v[1] * 100 + v[2]) * 100 + v[3]) * 100 + stage
-          }')
-          {
-            echo "name=$name"
-            echo "code=${INPUT_CODE:-$derived}"
-          } >> "$GITHUB_OUTPUT"
-
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
+      - uses: ./.github/actions/setup-build
 
       - name: Package
         env:
-          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
-          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          APP_VERSION_CODE: ${{ inputs.version_code }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
-        run: ./gradlew -x :app:webApp:webAppBundle :app:desktopApp:packageDeb :app:desktopApp:packageRpm :app:desktopApp:createDistributable
+        run: sh tools/release/gradle.sh -x :app:webApp:webAppBundle :app:desktopApp:packageDeb :app:desktopApp:packageRpm :app:desktopApp:createDistributable
 
       # Gradle reports only the exit code of jpackage, its own message stays in these files
       - name: jpackage logs
@@ -373,7 +236,7 @@ jobs:
 
       - name: Collect artifacts
         env:
-          VERSION: ${{ steps.version.outputs.name }}
+          VERSION: ${{ inputs.version_name }}
           DEB_ARCH: ${{ matrix.deb }}
           RPM_ARCH: ${{ matrix.rpm }}
         run: |
@@ -392,7 +255,7 @@ jobs:
       # after the upload above, so a failure here does not take the DEB and RPM with it
       - name: Package AppImage
         env:
-          VERSION: ${{ steps.version.outputs.name }}
+          VERSION: ${{ inputs.version_name }}
         run: sh tools/linux/build-appimage.sh app/desktopApp/build/compose/binaries/main/app/NetworkHelm "$VERSION" out
 
       - name: Upload AppImage
@@ -405,8 +268,7 @@ jobs:
   # jpackage makes no universal binary and Skiko and the runtime are taken for the processor of the machine, so each DMG is built on its own
   macos:
     name: macOS ${{ matrix.arch }}
-    if: ${{ inputs.build_macos }}
-    needs: web
+    if: ${{ inputs.macos }}
     strategy:
       fail-fast: false
       matrix:
@@ -416,51 +278,17 @@ jobs:
           - arch: x64
             os: macos-15-intel
     runs-on: ${{ matrix.os }}
-    outputs:
-      mac_app_store_uploaded: ${{ steps.mas.outputs.uploaded }}
+    timeout-minutes: 75
     steps:
       - uses: actions/checkout@v7
 
       - name: Download the web bundle
         uses: actions/download-artifact@v8
         with:
-          name: web-bundle-desktop
+          name: web-bundle
           path: app/webApp/build/bundle
 
-      - name: Set up JDK 21
-        uses: actions/setup-java@v6
-        with:
-          java-version: '21'
-          distribution: 'temurin'
-
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
-
-      - name: Resolve version
-        id: version
-        env:
-          INPUT_VERSION: ${{ inputs.version_name }}
-          INPUT_CODE: ${{ inputs.version_code }}
-        run: |
-          set -eu
-          name="$INPUT_VERSION"
-          if [ -z "$name" ]; then
-            case "$GITHUB_REF" in
-              refs/tags/v*) name="${GITHUB_REF#refs/tags/v}" ;;
-              *) echo "::error::the version is not given"; exit 1 ;;
-            esac
-          fi
-          derived=$(printf '%s' "$name" | awk '{
-            split($0, part, "-")
-            split(part[1], v, ".")
-            stage = 99
-            if (index($0, "-")) { stage = 0; if (match($0, /[0-9]+$/)) stage = substr($0, RSTART) }
-            print ((v[1] * 100 + v[2]) * 100 + v[3]) * 100 + stage
-          }')
-          {
-            echo "name=$name"
-            echo "code=${INPUT_CODE:-$derived}"
-          } >> "$GITHUB_OUTPUT"
+      - uses: ./.github/actions/setup-build
 
       - name: Import signing certificate
         id: certificate
@@ -489,20 +317,17 @@ jobs:
           rm -f "$RUNNER_TEMP/developer_id.p12"
           echo "imported=true" >> "$GITHUB_OUTPUT"
 
-      - name: Make gradlew executable
-        run: chmod +x ./gradlew
-
       - name: Package DMG
         env:
-          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
-          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          APP_VERSION_CODE: ${{ inputs.version_code }}
           APPLE_DEVELOPER_ID_IDENTITY: ${{ steps.certificate.outputs.imported == 'true' && secrets.APPLE_DEVELOPER_ID_IDENTITY || '' }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
-        run: ./gradlew -x :app:webApp:webAppBundle :app:desktopApp:packageDmg
+        run: sh tools/release/gradle.sh -x :app:webApp:webAppBundle :app:desktopApp:packageDmg
 
       - name: Collect artifacts
         env:
-          VERSION: ${{ steps.version.outputs.name }}
+          VERSION: ${{ inputs.version_name }}
           ARCH: ${{ matrix.arch }}
         run: |
           set -eu
@@ -531,7 +356,15 @@ jobs:
           fi
           trap 'rm -f "$key"' EXIT
           for dmg in out/*.dmg; do
-            result=$(xcrun notarytool submit "$dmg" --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait --output-format json)
+            # a dropped connection fails the submission itself, a verdict of Apple comes back as its status
+            for attempt in 1 2 3; do
+              if result=$(xcrun notarytool submit "$dmg" --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID" --wait --output-format json); then
+                break
+              fi
+              [ "$attempt" -lt 3 ] || exit 1
+              echo "::warning::notarytool failed, attempt $((attempt + 1)) of 3"
+              sleep 60
+            done
             echo "$result"
             if [ "$(jq -r .status <<< "$result")" != 'Accepted' ]; then
               xcrun notarytool log "$(jq -r .id <<< "$result")" --key "$key" --key-id "$ASC_KEY_ID" --issuer "$ASC_ISSUER_ID"
@@ -550,15 +383,12 @@ jobs:
 
       # the p12 holds Apple Distribution and 3rd Party Mac Developer Installer, the certificates the two profiles were made for;
       # Compose cannot sign a store build with Apple Distribution, so tools/release/mac_app_store.py signs the unsigned image
-      - name: Upload to the Mac App Store
-        id: mas
-        if: ${{ !cancelled() && inputs.publish_mac_app_store && matrix.arch == 'arm64' }}
+      - name: Package for the Mac App Store
+        if: ${{ inputs.mac_app_store && matrix.arch == 'arm64' }}
         env:
-          ASC_KEY_ID: ${{ secrets.ASC_KEY_ID }}
-          ASC_ISSUER_ID: ${{ secrets.ASC_ISSUER_ID }}
-          ASC_KEY_P8: ${{ secrets.ASC_KEY_P8 }}
-          APP_VERSION_NAME: ${{ steps.version.outputs.name }}
-          APP_VERSION_CODE: ${{ steps.version.outputs.code }}
+          VERSION: ${{ inputs.version_name }}
+          APP_VERSION_NAME: ${{ inputs.version_name }}
+          APP_VERSION_CODE: ${{ inputs.version_code }}
           MAC_APP_STORE_P12_BASE64: ${{ secrets.MAC_APP_STORE_P12_BASE64 }}
           MAC_APP_STORE_P12_PASSWORD: ${{ secrets.MAC_APP_STORE_P12_PASSWORD }}
           GOOGLE_DESKTOP_CLIENT_SECRET: ${{ secrets.GOOGLE_DESKTOP_CLIENT_SECRET }}
@@ -566,11 +396,10 @@ jobs:
           MAC_APP_STORE_RUNTIME_PROFILE_BASE64: ${{ secrets.MAC_APP_STORE_RUNTIME_PROFILE_BASE64 }}
         run: |
           set -eu
-          for name in MAC_APP_STORE_P12_BASE64 MAC_APP_STORE_PROFILE_BASE64 MAC_APP_STORE_RUNTIME_PROFILE_BASE64 ASC_KEY_ID ASC_ISSUER_ID ASC_KEY_P8; do
+          for name in MAC_APP_STORE_P12_BASE64 MAC_APP_STORE_PROFILE_BASE64 MAC_APP_STORE_RUNTIME_PROFILE_BASE64; do
             if [ -z "$(printenv "$name" || true)" ]; then
-              echo "::notice::$name is not set, skipping the Mac App Store"
-              echo "Mac App Store: skipped, $name is not set." >> "$GITHUB_STEP_SUMMARY"
-              exit 0
+              echo "::error::$name is not set, there is no package for the Mac App Store"
+              exit 1
             fi
           done
           umask 077
@@ -594,21 +423,19 @@ jobs:
             echo "::error::MAC_APP_STORE_P12_BASE64 needs both Apple Distribution and 3rd Party Mac Developer Installer"
             exit 1
           fi
-          ./gradlew -x :app:webApp:webAppBundle :app:desktopApp:createDistributable -PmacAppStore
+          sh tools/release/gradle.sh -x :app:webApp:webAppBundle :app:desktopApp:createDistributable -PmacAppStore
+          mkdir -p store
           python3 tools/release/mac_app_store.py app/desktopApp/build/compose/binaries/main/app/NetworkHelm.app \
             "$app_identity" "$installer_identity" \
-            "$RUNNER_TEMP/app.provisionprofile" "$RUNNER_TEMP/runtime.provisionprofile" "$RUNNER_TEMP/NetworkHelm.pkg"
-          key="$RUNNER_TEMP/asc_key.p8"
-          if printf '%s' "$ASC_KEY_P8" | grep -q 'BEGIN'; then
-            printf '%s\n' "$ASC_KEY_P8" > "$key"
-          else
-            printf '%s' "$ASC_KEY_P8" | tr -d '\n\r ' | openssl base64 -d -A > "$key"
-          fi
-          mkdir -p ~/.appstoreconnect/private_keys
-          cp "$key" ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
-          xcrun altool --upload-app -f "$RUNNER_TEMP/NetworkHelm.pkg" -t macos --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID"
-          rm -f "$key" ~/.appstoreconnect/private_keys/AuthKey_$ASC_KEY_ID.p8
-          echo "uploaded=true" >> "$GITHUB_OUTPUT"
+            "$RUNNER_TEMP/app.provisionprofile" "$RUNNER_TEMP/runtime.provisionprofile" "store/NetworkHelm-$VERSION-mac-app-store.pkg"
+
+      - name: Upload the package for the Mac App Store
+        if: ${{ inputs.mac_app_store && matrix.arch == 'arm64' }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: store-mac-app-store
+          path: store/*.pkg
+          if-no-files-found: error
 
       - name: Remove the temporary keychains
         if: always()
