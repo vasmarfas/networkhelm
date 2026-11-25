@@ -450,6 +450,11 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$VERSION"
+          # GitHub refuses the token of a run a release on a commit no branch or tag points at when its workflow files differ
+          if [ "$COMMIT" != "$GITHUB_SHA" ] && ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            echo "::error::$GITHUB_REF_NAME has moved on from ${COMMIT:0:7} of the builds, and the release needs the tag there first: git tag $tag $COMMIT && git push origin $tag, then Re-run failed jobs"
+            exit 1
+          fi
           if gh release view "$tag" > /dev/null 2>&1; then
             gh release edit "$tag" --title "$tag" --target "$COMMIT" --notes-file body.md --prerelease="$PRERELEASE"
           else
