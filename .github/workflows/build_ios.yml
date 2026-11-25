@@ -69,13 +69,14 @@ jobs:
       - name: Build the SSH libraries
         run: sh tools/ios/build-ssh.sh
 
-      # the build phase of Xcode runs Gradle for the framework. Built here first, with the attempts of gradle.sh, the
-      # framework is up to date when Xcode asks for it, and a lost download does not fail the archive
-      - name: Build the framework
+      # the build phase of Xcode runs Gradle for the framework. The Kotlin code is compiled here first, with the attempts of
+      # gradle.sh, so a lost download does not fail the archive. The link stays with Xcode: Gradle called from Xcode links
+      # the framework again whatever was linked before, and in 1.4.2 the two links took 40 and 34 minutes
+      - name: Compile the Kotlin code
         env:
           APP_VERSION_NAME: ${{ inputs.version_name }}
           APP_VERSION_CODE: ${{ inputs.version_code }}
-        run: sh tools/release/gradle.sh :app:shared:linkReleaseFrameworkIosArm64
+        run: sh tools/release/gradle.sh :app:shared:compileKotlinIosArm64
 
       - name: Archive
         env:
