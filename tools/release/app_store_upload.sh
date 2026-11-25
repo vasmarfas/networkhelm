@@ -25,6 +25,10 @@ for file in "$2"/*; do
             echo "::notice::App Store Connect already has $(basename "$file")"
             break
         fi
+        # a check of App Store Connect, like 90255, refuses the same file every time
+        if grep -qE '\(9[0-9]{4}\)' "$RUNNER_TEMP/altool.log"; then
+            exit 1
+        fi
         [ "$attempt" -lt 3 ] || exit 1
         echo "::warning::altool failed, attempt $((attempt + 1)) of 3"
         sleep 60

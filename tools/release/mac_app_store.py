@@ -96,6 +96,8 @@ def main(app, identity, installer="", profile="", runtime_profile="", pkg=""):
     sign(app, identity, entitlements("app-store-entitlements.plist", work, adhoc))
     subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app)], check=True)
     if pkg:
+        # the step that calls this runs under umask 077 for its keys, and App Store Connect refuses files only root can read
+        subprocess.run(["chmod", "-R", "u+rwX,go+rX,go-w", str(app)], check=True)
         subprocess.run(["productbuild", "--component", str(app), "/Applications", "--sign", installer, str(pkg)], check=True)
         subprocess.run(["pkgutil", "--check-signature", str(pkg)], check=True)
     shutil.rmtree(work)
