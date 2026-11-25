@@ -242,6 +242,8 @@ compose.desktop {
                     extraKeysRawXml = """
                         <key>NSLocalNetworkUsageDescription</key>
                         <string>NetworkHelm connects to routers on your network and listens for their discovery announcements.</string>
+                        <key>ITSAppUsesNonExemptEncryption</key>
+                        <false/>
                     """.trimIndent()
                 }
                 if (macAppStore) {
