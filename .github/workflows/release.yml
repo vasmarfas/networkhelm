@@ -247,8 +247,14 @@ jobs:
             fi
             if [ "$state" = draft ]; then echo "::notice::the draft of $tag is updated"; fi
           elif [ "$STORES" = true ] && [ "$REUSE" = false ] && [ -n "$tagged" ] && [ "$tagged" != "$COMMIT" ]; then
-            echo "::error::$tag was released from $tagged and this run builds $COMMIT: start it from the tag $tag (Use workflow from, Tags) or give builds_from_run"
-            exit 1
+            # commits that change only the release tooling build the same app
+            shipped=$(gh api "repos/$GITHUB_REPOSITORY/compare/$tagged...$COMMIT" \
+              --jq '[.files[].filename | select((startswith(".github/") or startswith("tools/release/") or startswith("docs/") or endswith(".md")) | not)] | length')
+            if [ "$shipped" != 0 ]; then
+              echo "::error::$tag was released from $tagged and this run builds $COMMIT, which changes $shipped files of the app: start it from the tag $tag (Use workflow from, Tags) or give builds_from_run"
+              exit 1
+            fi
+            echo "::notice::$tag was released from ${tagged:0:7}, this run builds ${COMMIT:0:7}, which changes only the release tooling"
           fi
 
       - name: Upload the manifest
@@ -450,15 +456,19 @@ jobs:
         run: |
           set -euo pipefail
           tag="v$VERSION"
-          # GitHub refuses the token of a run a release on a commit no branch or tag points at when its workflow files differ
-          if [ "$COMMIT" != "$GITHUB_SHA" ] && ! gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+          # GitHub refuses the token of a run a release with a target on a commit no branch head points at when its workflow
+          # files differ, so a commit the branch has left needs its tag first, and a tag that is there decides the commit
+          target=(--target "$COMMIT")
+          if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" > /dev/null 2>&1; then
+            target=()
+          elif [ "$COMMIT" != "$GITHUB_SHA" ]; then
             echo "::error::$GITHUB_REF_NAME has moved on from ${COMMIT:0:7} of the builds, and the release needs the tag there first: git tag $tag $COMMIT && git push origin $tag, then Re-run failed jobs"
             exit 1
           fi
           if gh release view "$tag" > /dev/null 2>&1; then
-            gh release edit "$tag" --title "$tag" --target "$COMMIT" --notes-file body.md --prerelease="$PRERELEASE"
+            gh release edit "$tag" --title "$tag" "${target[@]}" --notes-file body.md --prerelease="$PRERELEASE"
           else
-            gh release create "$tag" --draft --title "$tag" --target "$COMMIT" --notes-file body.md --prerelease="$PRERELEASE"
+            gh release create "$tag" --draft --title "$tag" "${target[@]}" --notes-file body.md --prerelease="$PRERELEASE"
           fi
           # the AAB and the MSIX with its .cer stay in the run artifacts, they are for Google Play and the Microsoft Store
           shopt -s nullglob

@@ -21,7 +21,7 @@ for file in "$2"/*; do
         if xcrun altool --upload-app -f "$file" -t "$platform" --apiKey "$ASC_KEY_ID" --apiIssuer "$ASC_ISSUER_ID" 2>&1 | tee "$RUNNER_TEMP/altool.log"; then
             break
         fi
-        if grep -qiE 'ITMS-4238|Redundant Binary Upload|already been uploaded' "$RUNNER_TEMP/altool.log"; then
+        if grep -qiE 'ITMS-4238|Redundant Binary Upload|already been uploaded|ENTITY_ERROR\.ATTRIBUTE\.INVALID\.DUPLICATE' "$RUNNER_TEMP/altool.log"; then
             echo "::notice::App Store Connect already has $(basename "$file")"
             break
         fi
