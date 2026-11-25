@@ -107,14 +107,22 @@ def prepare_version(app_id, platform, version_string):
     return created, True
 
 
-def set_whats_new(version_id):
+def set_whats_new(platform, version_id):
     for localization in get(f"/appStoreVersions/{version_id}/appStoreVersionLocalizations", {"limit": 50}):
         locale = localization["attributes"]["locale"]
-        call("PATCH", f"/appStoreVersionLocalizations/{localization['id']}", {
-            "type": "appStoreVersionLocalizations",
-            "id": localization["id"],
-            "attributes": {"whatsNew": NOTES_RU if locale.startswith("ru") else NOTES_EN},
-        })
+        try:
+            call("PATCH", f"/appStoreVersionLocalizations/{localization['id']}", {
+                "type": "appStoreVersionLocalizations",
+                "id": localization["id"],
+                "attributes": {"whatsNew": NOTES_RU if locale.startswith("ru") else NOTES_EN},
+            })
+        except ApiError as error:
+            # the first version of an app on the store has no What's New, App Store Connect answers 409
+            if error.status != 409:
+                raise
+            print(f"{platform}: What's New is not taken, {error}", flush=True)
+            return False
+    return True
 
 
 def wait_for_build(app_id, platform, version_string, build_number):
@@ -180,14 +188,14 @@ def main():
         if not editable:
             summary.append(f"{platform} {version_string}: already {state_of(version)}, left as is.")
             continue
-        set_whats_new(version["id"])
+        notes = "" if set_whats_new(platform, version["id"]) else " What's New is not taken, the version is the first on the store."
         build_id = wait_for_build(app_id, platform, version_string, build_number)
         call("PATCH", f"/appStoreVersions/{version['id']}/relationships/build", {"type": "builds", "id": build_id})
         if os.environ["SUBMIT"] == "true":
             submit(app_id, platform, version["id"])
-            summary.append(f"{platform} {version_string} ({build_number}): sent to review.")
+            summary.append(f"{platform} {version_string} ({build_number}): sent to review.{notes}")
         else:
-            summary.append(f"{platform} {version_string} ({build_number}): ready, not sent to review.")
+            summary.append(f"{platform} {version_string} ({build_number}): ready, not sent to review.{notes}")
     print("\n".join(summary))
     with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as file:
         file.write("".join(f"App Store Connect, {line}\n" for line in summary))
