@@ -120,12 +120,13 @@ class Consoles {
 
     internal fun of(id: Long, ssh: SshSession): KeptShell? = kept[id]?.takeIf { it.ssh === ssh && !it.cut }
 
-    internal suspend fun open(id: Long, ssh: SshSession, startup: String?): KeptShell {
+    // the console of RouterOS keeps a line typed before its prompt and drops the Enter, so there the line waits for the prompt
+    internal suspend fun open(id: Long, ssh: SshSession, startup: String?, atPrompt: Boolean = false): KeptShell {
         of(id, ssh)?.let { return it }
         close(id)
-        val opened = KeptShell(ssh.shell("xterm-256color", 120, 40), ssh)
+        val opened = KeptShell(ssh.shell("xterm-256color", 120, 40), ssh, startup.takeIf { atPrompt })
         kept[id] = opened
-        startup?.let { opened.write("$it\r".encodeToByteArray()) }
+        if (!atPrompt) startup?.let { opened.write("$it\r".encodeToByteArray()) }
         return opened
     }
 
@@ -140,11 +141,11 @@ class Consoles {
 
 // sudo: the password of the login for the button that makes the console root, empty when the host did not get one; null, no button
 @Composable
-fun TerminalView(ssh: SshSession, consoles: Consoles, id: Long, startup: String? = null, sudo: String? = null, terminal: @Composable (ShellChannel, Modifier) -> Unit) {
+fun TerminalView(ssh: SshSession, consoles: Consoles, id: Long, startup: String? = null, sudo: String? = null, atPrompt: Boolean = false, terminal: @Composable (ShellChannel, Modifier) -> Unit) {
     var attempt by remember { mutableIntStateOf(0) }
     val shell by produceState(consoles.of(id, ssh)?.let { Result.success(it) }, ssh, attempt) {
         value = try {
-            Result.success(consoles.open(id, ssh, startup))
+            Result.success(consoles.open(id, ssh, startup, atPrompt))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -189,7 +190,7 @@ fun TelnetView(ssh: SshSession, consoles: Consoles, id: Long, terminal: @Composa
     val started = target
     // a console the window kept is already connected
     if (started != null || consoles.of(id, ssh) != null) {
-        TerminalView(ssh, consoles, id, "${if (call?.mac == true) "/tool mac-telnet" else "/system telnet"} ${started.orEmpty()}", terminal = terminal)
+        TerminalView(ssh, consoles, id, "${if (call?.mac == true) "/tool mac-telnet" else "/system telnet"} ${started.orEmpty()}", atPrompt = true, terminal = terminal)
         return
     }
     val typed = address.text.toString().trim()
@@ -347,7 +348,7 @@ private fun Failure(text: String, onRetry: () -> Unit) {
 }
 
 // the terminals read and type in effects that catch nothing, so a console cut off under them would end the app; the window says so instead
-internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession) : ShellChannel by shell {
+internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession, @Volatile private var typed: String? = null) : ShellChannel by shell {
     var cut by mutableStateOf(false)
         private set
 
@@ -381,8 +382,26 @@ internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession) :
         }
     }
 
+    private val shown = StringBuilder()
+
+    private suspend fun prompted(text: String) {
+        val line = typed ?: return
+        shown.append(text)
+        if (shown.length > 1024) shown.deleteRange(0, shown.length - 256)
+        if (!ROUTEROS_PROMPT.containsMatchIn(shown.replace(ESCAPES, ""))) return
+        typed = null
+        shown.clear()
+        write("$line\r".encodeToByteArray())
+    }
+
     override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = try {
-        shell.read(buffer, offset, length).also { if (it > 0) answer(buffer.decodeToString(offset, offset + it)) }
+        shell.read(buffer, offset, length).also {
+            if (it > 0) {
+                val text = buffer.decodeToString(offset, offset + it)
+                answer(text)
+                prompted(text)
+            }
+        }
     } catch (e: CancellationException) {
         throw e
     } catch (e: Exception) {
@@ -411,3 +430,5 @@ internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession) :
 
 private const val SUDO_PROMPT = "NetworkHelm sudo for %u: "
 private val SUDO_ASKS = Regex("NetworkHelm sudo for [^%\\s]+: ")
+private val ROUTEROS_PROMPT = Regex("\\][^\\n]*> $")
+private val ESCAPES = Regex("\u001b\\[[0-9;?]*[A-Za-z]")

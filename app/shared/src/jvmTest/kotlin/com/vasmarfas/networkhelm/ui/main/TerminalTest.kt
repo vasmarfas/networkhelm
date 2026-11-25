@@ -54,10 +54,18 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class TerminalTest {
 
+    // a console of RouterOS greets with its prompt, and the line a window starts with waits for it
     private class Console : ShellChannel {
         var closed = false
         val written = StringBuilder()
-        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = awaitCancellation()
+        private var greeted = false
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (greeted) awaitCancellation()
+            greeted = true
+            val prompt = "\r\n[admin@CHR] > ".encodeToByteArray()
+            prompt.copyInto(buffer, offset)
+            return prompt.size
+        }
         override suspend fun write(bytes: ByteArray) {
             written.append(bytes.decodeToString())
         }
@@ -199,7 +207,17 @@ class TerminalTest {
         val tab = tab(ssh)
         setContent {
             NetworkHelmTheme(dark = true) {
-                CompositionLocalProvider(LocalTerminal provides { _, modifier -> Text("console", modifier) }) { MainScreen(tab, onDisconnect = {}) }
+                CompositionLocalProvider(
+                    LocalTerminal provides { channel, modifier ->
+                        LaunchedEffect(channel) {
+                            val buffer = ByteArray(256)
+                            do {
+                                val read = channel.read(buffer, 0, buffer.size)
+                            } while (read > 0)
+                        }
+                        Text("console", modifier)
+                    },
+                ) { MainScreen(tab, onDisconnect = {}) }
             }
         }
         waitUntil(timeoutMillis = 5_000) { tab.menu != null }
@@ -210,8 +228,7 @@ class TerminalTest {
         onNodeWithTag("telnet-connect").assertIsNotEnabled()
         onNodeWithTag("telnet-address").performTextReplacement("192.0.2.9")
         onNodeWithTag("telnet-connect").performClick()
-        waitUntil(timeoutMillis = 5_000) { ssh.consoles.size == 1 }
-        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("console")).fetchSemanticsNodes().isNotEmpty() }
+        waitUntil(timeoutMillis = 5_000) { ssh.consoles.singleOrNull()?.second?.written?.isNotEmpty() == true }
         assertEquals("/system telnet 192.0.2.9\r", ssh.consoles.single().second.written.toString())
     }
 

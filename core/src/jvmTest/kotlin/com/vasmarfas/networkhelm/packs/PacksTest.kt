@@ -22,6 +22,9 @@ class PacksTest {
 
     private val ofRouterOs6 = setOf("channel.width")
 
+    // the menus of extra packages, which the snapshots of the main package do not hold
+    private val extra = setOf("container")
+
     private fun node(path: String): JsonObject? {
         var children = commands.getValue("menus").jsonObject
         var node: JsonObject? = null
@@ -47,7 +50,8 @@ class PacksTest {
         val packs = bundledPacks()
         assertTrue(packs.isNotEmpty())
         val problems = packs.flatMap { (file, pack) ->
-            (if (pack.platform == "routeros" && !older(pack.until)) problems(pack) else formProblems(pack)).map { "$file: $it" }
+            val checked = pack.platform == "routeros" && !older(pack.until) && pack.window.tabs.none { it.path.substringBefore('/') in extra }
+            (if (checked) problems(pack) else formProblems(pack)).map { "$file: $it" }
         }
         assertTrue(problems.isEmpty(), problems.joinToString("\n"))
     }

@@ -267,7 +267,8 @@
                                     "additionalProperties": false,
                                     "properties": {
                                         "to": { "type": "string", "description": "The label of the field of the window that gets the value." },
-                                        "from": { "type": "string", "description": "The label of the column of the row that holds the value; without it the name of the row." }
+                                        "from": { "type": "string", "description": "The label of the column of the row that holds the value, or .id for the id of the row. Without it the name of the row." },
+                                        "format": { "type": "string", "description": "The text the value goes into in place of {}: /container/shell {}." }
                                     }
                                 }
                             },

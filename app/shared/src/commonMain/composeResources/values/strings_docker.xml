@@ -35,6 +35,7 @@
     <string name="docker_open">Open</string>
     <string name="docker_terminal_shell">Shell</string>
     <string name="docker_terminal_user">User</string>
+    <string name="docker_terminal_any">bash or sh</string>
     <string name="docker_terminal_hint">attach in place of a shell joins the main process of the container; it leaves with Ctrl+P, Ctrl+Q.</string>
     <string name="docker_terminal_none">This session opens no terminal.</string>
     <string name="docker_stats_cpu">CPU, % of one core</string>

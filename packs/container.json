@@ -1,0 +1,36 @@
+{
+    "$schema": "./pack.schema.json",
+    "menu": ["Container"],
+    "window": {
+        "title": "Container",
+        "tabs": [
+            { "title": "Containers", "path": "container" },
+            { "title": "Mounts", "path": "container/mounts" },
+            { "title": "Envs", "path": "container/envs" },
+            { "title": "Config", "path": "container/config" },
+            { "title": "Log", "path": "container/log", "since": "7.20" }
+        ]
+    },
+    "paths": {
+        "container": {
+            "columns": ["name", "tag", "interface", "root-dir", "mounts", "cpu-usage", "memory-current"],
+            "readonly": ["tag", "cpu-usage", "memory-current"],
+            "bytes": ["memory-current"],
+            "menu": [
+                {
+                    "title": "Shell",
+                    "path": "container",
+                    "window": "terminal",
+                    "fill": [{ "to": "name", "from": "Name" }, { "to": "command", "from": ".id", "format": "/container/shell {}" }]
+                },
+                { "title": "Log", "path": "container/log", "fill": [{ "to": "Container", "from": "Name" }] }
+            ]
+        },
+        "container/log": {
+            "columns": ["time", "container", "message"],
+            "readonly": ["time", "container", "message"],
+            "quick": "container",
+            "follow": true
+        }
+    }
+}

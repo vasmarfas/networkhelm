@@ -426,9 +426,10 @@ internal fun differences(changes: JsonElement): List<Item> = (changes as? JsonAr
 }
 
 // the shell of the login types this, so it is quoted for it; attach takes the container's own process instead of a new one
+// without a shell named, bash where the image has it and sh otherwise
 internal fun terminal(cli: String, id: String, shell: String, user: String): String = when (shell) {
     "attach" -> "exec $cli attach ${quote(id)}"
-    else -> listOfNotNull("exec", cli, "exec", "-it", user.ifEmpty { null }?.let { "-u ${quote(it)}" }, quote(id), shell.ifEmpty { "sh" }).joinToString(" ")
+    else -> listOfNotNull("exec", cli, "exec", "-it", user.ifEmpty { null }?.let { "-u ${quote(it)}" }, quote(id), shell.ifEmpty { ANY_SHELL }).joinToString(" ")
 }
 
 private fun masked(inspected: JsonObject): JsonObject {
@@ -808,6 +809,8 @@ private val COMMANDS = listOf(
 private val ALIVE = setOf("running", "paused", "restarting")
 
 private val SIGNALS = mapOf("kill" to "KILL", "hang-up" to "HUP")
+
+private const val ANY_SHELL = "sh -c 'command -v bash >/dev/null && exec bash || exec sh'"
 
 private val KINDS = listOf("changed", "added", "deleted")
 

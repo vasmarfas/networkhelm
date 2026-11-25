@@ -35,6 +35,7 @@
     <string name="docker_open">Открыть</string>
     <string name="docker_terminal_shell">Оболочка</string>
     <string name="docker_terminal_user">Пользователь</string>
+    <string name="docker_terminal_any">bash или sh</string>
     <string name="docker_terminal_hint">attach вместо оболочки подключает к основному процессу контейнера; выход — Ctrl+P, Ctrl+Q.</string>
     <string name="docker_terminal_none">Этот сеанс не открывает терминал.</string>
     <string name="docker_stats_cpu">ЦП, % одного ядра</string>

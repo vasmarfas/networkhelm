@@ -416,7 +416,7 @@ private fun WindowContent(tab: RouterTab, window: WindowState, onSecure: (suspen
         val ssh = tab.session.ssh
         val terminal = LocalTerminal.current
         val sudo = if (tab.session.device.platform == Platform.Ssh) tab.sudo.orEmpty() else null
-        if (ssh != null && terminal != null) TerminalView(ssh, tab.consoles, window.id, startup = tab.terminalStarts[window.id], sudo = sudo, terminal = terminal)
+        if (ssh != null && terminal != null) TerminalView(ssh, tab.consoles, window.id, startup = tab.terminalStarts[window.id], sudo = sudo, atPrompt = tab.session.device.platform == Platform.RouterOs, terminal = terminal)
     }
     if (window.id in tab.telnets) {
         val ssh = tab.session.ssh

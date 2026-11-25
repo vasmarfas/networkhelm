@@ -102,6 +102,17 @@ private fun DemoBuilder.packagesContainerDemo() {
         row("name=dns-config", "src=usb1/containers/dns-config", "dst=/opt/dns/conf")
         row("name=mqtt-data", "src=usb1/containers/mqtt-data", "dst=/var/lib/mqtt")
     }
+    list("container/log", writable = false) {
+        row("time=2026-10-27 22:03:41", "container=mqtt-broker", "message=*** start")
+        row("time=2026-10-27 22:03:42", "container=mqtt-broker", "message=*** started /usr/sbin/mosquitto -c /mosquitto/config/mosquitto.conf")
+        row("time=2026-10-27 22:03:42", "container=mqtt-broker", "message=mosquitto version 2.0.18 running")
+        row("time=2026-10-27 22:10:05", "container=mqtt-broker", "message=*** stop")
+        row("time=2026-10-28 06:15:02", "container=dns-filter", "message=*** start")
+        row("time=2026-10-28 06:15:03", "container=dns-filter", "message=*** started /usr/bin/dns-filter --config /opt/dns/conf/filter.yaml")
+        row("time=2026-10-28 06:15:03", "container=dns-filter", "message=loaded 182344 blocked names from 3 lists")
+        row("time=2026-10-28 06:15:04", "container=dns-filter", "message=listening on 0.0.0.0:53 udp, tcp")
+        row("time=2026-10-28 09:41:17", "container=dns-filter", "message=upstream 1.1.1.1 answered in 14 ms")
+    }
 }
 
 private fun DemoBuilder.packagesOpenFlowDemo() {

@@ -326,7 +326,7 @@ class LayoutTest {
         val wireguard = MenuSchema(MenuPath.parse("interface/wireguard"), NodeKind.List, listOf("peers"), listOf("add", "print", "remove", "set"), emptyList())
         val schemas = mapOf(
             directory("routing/isis", "instance", "interface-template", "neighbor"),
-            directory("container", "envs", "mounts"),
+            directory("gadget", "envs", "mounts"),
             directory("system/ntp", "client", "key", "server"),
             "interface/wireguard" to wireguard,
         )
@@ -340,7 +340,7 @@ class LayoutTest {
         }
         assertEquals(listOf("Instance", "Interface Template", "Neighbor"), tabs("ISIS", "routing/isis/instance"))
         assertEquals(listOf("WireGuard", "Peers"), tabs("WireGuard", "interface/wireguard"))
-        assertEquals(listOf("Envs", "Mounts"), tabs("Container", "container"))
+        assertEquals(listOf("Envs", "Mounts"), tabs("Gadget", "gadget"))
         assertEquals(listOf("Key"), tabs("NTP Keys", "system/ntp/key"))
         assertEquals(listOf("Identity"), tabs("Identity", "system/identity"))
     }

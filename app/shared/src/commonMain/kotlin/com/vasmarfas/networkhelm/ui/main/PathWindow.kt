@@ -22,6 +22,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.text.input.TextFieldState
 import androidx.compose.foundation.text.input.clearText
+import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.verticalScroll
@@ -578,8 +579,13 @@ private fun ListView(
         }
     }
     val quick = pack?.quick
-    var picked by remember(name) { mutableStateOf<String?>(null) }
-    val lines = remember(name) { mutableStateListOf<FilterLine>() }
+    // a table opened from a row of another one starts with the rows of that row: the log of a container
+    var picked by remember(name) { mutableStateOf(quick?.let { tab.prefill[it] }) }
+    val lines = remember(name) {
+        mutableStateListOf<FilterLine>().apply {
+            for ((column, value) in tab.prefill.filterKeys { it != quick }) add(FilterLine(column).also { it.value.setTextAndPlaceCursorAtEnd(value) })
+        }
+    }
     val conditions = lines.map { it.condition() }
     val text = query.text.toString().trim()
     fun merged(): List<Item> {
@@ -808,10 +814,14 @@ private fun ListView(
             val linked = present(session, pack?.links.orEmpty())
             val tools = present(session, pack?.menu.orEmpty()).filter { it.window == null || session.ssh != null }
             val labelled = remember(available, schema, tab.labels) { available.groupBy { named(it).lowercase() } }
-            fun filled(link: PackLink) = link.fill.all { fill -> fill.from?.let { labelled[it.lowercase()]?.size == 1 } != false }
+            fun filled(link: PackLink) = link.fill.all { fill -> fill.from?.let { it == ".id" || labelled[it.lowercase()]?.size == 1 } != false }
             fun valueOf(fill: PackFill, row: Item): String? {
-                val from = fill.from ?: return row["name"] ?: row.id
-                return labelled[from.lowercase()]?.singleOrNull()?.let { row[it] }
+                val value = when (val from = fill.from) {
+                    null -> row["name"] ?: row.id
+                    ".id" -> row.id
+                    else -> labelled[from.lowercase()]?.singleOrNull()?.let { row[it] }
+                }
+                return value?.takeIf { it.isNotEmpty() }?.let { fill.format?.replace("{}", it) ?: it }
             }
             fun openLink(link: PackLink) {
                 val row = chosenRows().singleOrNull()

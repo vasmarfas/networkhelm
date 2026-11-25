@@ -1,6 +1,9 @@
 package com.vasmarfas.networkhelm.ui.main
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.key.Key
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
@@ -51,9 +54,17 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class ContextLinksTest {
 
+    // a console of RouterOS greets with its prompt, and a line typed before it would lose its Enter
     private class Console : ShellChannel {
         val written = StringBuilder()
-        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = awaitCancellation()
+        private var greeted = false
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (greeted) awaitCancellation()
+            greeted = true
+            val prompt = "\r\n[admin@CHR] > ".encodeToByteArray()
+            prompt.copyInto(buffer, offset)
+            return prompt.size
+        }
         override suspend fun write(bytes: ByteArray) {
             written.append(bytes.decodeToString())
         }
@@ -69,6 +80,16 @@ class ContextLinksTest {
         override suspend fun sftp(): SftpClient = error("no sftp")
         override suspend fun forward(host: String, port: Int): ByteStream = error("no forward")
         override fun close() = Unit
+    }
+
+    private val reading: @Composable (ShellChannel, Modifier) -> Unit = { channel, modifier ->
+        LaunchedEffect(channel) {
+            val buffer = ByteArray(256)
+            do {
+                val read = channel.read(buffer, 0, buffer.size)
+            } while (read > 0)
+        }
+        Text("console", modifier)
     }
 
     private val gadgets = Pack(
@@ -87,8 +108,11 @@ class ContextLinksTest {
                     PackLink("Odd", "tool/probe", fill = listOf(PackFill("Probe To", "Nothing Of That Name"))),
                     PackLink("Telnet", "", "telnet", fill = listOf(PackFill("Address", "IP Address")), autostart = true),
                     PackLink("MAC Telnet", "", "mac-telnet", fill = listOf(PackFill("MAC Address", "MAC Address")), autostart = true),
+                    PackLink("Shell", "ip/gadget", "terminal", fill = listOf(PackFill("name", "Name"), PackFill("command", ".id", "/ip/gadget/shell {}"))),
+                    PackLink("Lines", "ip/gadget/line", fill = listOf(PackFill("Gadget", "Name"))),
                 ),
             ),
+            "ip/gadget/line" to PackPath(columns = listOf("gadget", "message"), readonly = listOf("gadget", "message"), quick = "gadget"),
         ),
     )
 
@@ -221,7 +245,7 @@ class ContextLinksTest {
         val tab = RouterTab(router, "192.0.2.1", listOf(gadgets, probe), storage, TableLayouts(storage))
         setContent {
             NetworkHelmTheme(dark = true) {
-                CompositionLocalProvider(LocalTerminal provides { _, modifier -> Text("console", modifier) }) { MainScreen(tab, onDisconnect = {}) }
+                CompositionLocalProvider(LocalTerminal provides reading) { MainScreen(tab, onDisconnect = {}) }
             }
         }
         tab.open(MenuEntry("Gadgets", "ip/gadget"))
@@ -229,7 +253,7 @@ class ContextLinksTest {
         onNodeWithText("gad1").performMouseInput { rightClick() }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Telnet")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Telnet").performClick()
-        waitUntil(timeoutMillis = 5_000) { ssh.consoles.size == 1 }
+        waitUntil(timeoutMillis = 5_000) { ssh.consoles.singleOrNull()?.written?.isNotEmpty() == true }
         assertEquals("/system telnet 192.0.2.5\r", ssh.consoles.single().written.toString())
         tab.workspace.windows.toList().forEach(tab.workspace::close)
         tab.open(MenuEntry("Gadgets", "ip/gadget"))
@@ -237,8 +261,52 @@ class ContextLinksTest {
         onNodeWithText("gad2").performMouseInput { rightClick() }
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("MAC Telnet")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("MAC Telnet").performClick()
-        waitUntil(timeoutMillis = 5_000) { ssh.consoles.size == 2 }
+        waitUntil(timeoutMillis = 5_000) { ssh.consoles.size == 2 && ssh.consoles.last().written.isNotEmpty() }
         assertEquals("/tool mac-telnet 02:00:00:00:00:02\r", ssh.consoles.last().written.toString())
+    }
+
+    @Test
+    fun aShellItemTypesTheCommandWithTheIdOfTheRow() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val ssh = Ssh()
+        val router = FakeRouter(mapOf("ip/gadget" to rows), schemas = schemas, ssh = ssh)
+        val storage = MemoryStorage()
+        val tab = RouterTab(router, "192.0.2.1", listOf(gadgets, probe), storage, TableLayouts(storage))
+        setContent {
+            NetworkHelmTheme(dark = true) {
+                CompositionLocalProvider(LocalTerminal provides reading) { MainScreen(tab, onDisconnect = {}) }
+            }
+        }
+        tab.open(MenuEntry("Gadgets", "ip/gadget"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("gad2")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("gad2").performMouseInput { rightClick() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Shell")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Shell").performClick()
+        waitUntil(timeoutMillis = 5_000) { ssh.consoles.singleOrNull()?.written?.isNotEmpty() == true }
+        assertEquals("/ip/gadget/shell *2\r", ssh.consoles.single().written.toString())
+        assertTrue(tab.workspace.windows.any { it.title == "Shell: gad2" })
+    }
+
+    @Test
+    fun aTableOpenedFromARowShowsTheRowsOfThatRow() = runDesktopComposeUiTest(1000, 620) {
+        Locale.setDefault(Locale.ENGLISH)
+        val lines = listOf(
+            Item("*1", mapOf("gadget" to "gad1", "message" to "first of gad1")),
+            Item("*2", mapOf("gadget" to "gad2", "message" to "first of gad2")),
+            Item("*3", mapOf("gadget" to "gad1", "message" to "second of gad1")),
+        )
+        val router = FakeRouter(mapOf("ip/gadget" to rows, "ip/gadget/line" to lines), schemas = schemas)
+        val storage = MemoryStorage()
+        val tab = RouterTab(router, "192.0.2.1", listOf(gadgets, probe), storage, TableLayouts(storage))
+        setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
+        tab.open(MenuEntry("Gadgets", "ip/gadget"))
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("gad2")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("gad1").performMouseInput { rightClick() }
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("Lines")).fetchSemanticsNodes().isNotEmpty() }
+        onNodeWithText("Lines").performClick()
+        waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("second of gad1")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(listOf(1, 0), counts("first of gad1", "first of gad2"))
+        assertEquals(mapOf("gadget" to "gad1"), tab.specs.values.single { it.tabs.any { tab -> tab.path == MenuPath.parse("ip/gadget/line") } }.tabs.single { it.path == MenuPath.parse("ip/gadget/line") }.prefill)
     }
 
     @Test

@@ -259,9 +259,10 @@ fun Pack.tablesWindow(): Pack? {
     return Pack(schema, platform, menu, PackWindow(menu.lastOrNull() ?: window.title, tabs), paths, forms, labels, since, until, native, prio, hidden = true)
 }
 
-// from names a column of the row by its label in WinBox, and none means the name of the row; to names a field of the window by its label
+// from names a column of the row by its label in WinBox, .id the id of the row, none the name of the row, to a field of the window by its label,
+// and format is the text the value goes into in place of {}
 @Serializable
-class PackFill(val to: String, val from: String? = null)
+class PackFill(val to: String, val from: String? = null, val format: String? = null)
 
 @Serializable
 class PackOpen(val by: String, val paths: Map<String, String>)

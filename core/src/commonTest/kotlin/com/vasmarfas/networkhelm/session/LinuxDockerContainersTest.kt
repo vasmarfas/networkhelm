@@ -360,6 +360,7 @@ class LinuxDockerContainersTest {
         assertEquals(command, words(shellWords(command)))
         assertEquals("exec sudo docker exec -it -u 'www-data' 'nh-sample-web' bash", terminal("sudo docker", "nh-sample-web", "bash", "www-data"))
         assertEquals("exec podman attach 'nh-sample-web'", terminal("podman", "nh-sample-web", "attach", ""))
+        assertEquals("exec docker exec -it 'nh-sample-web' sh -c 'command -v bash >/dev/null && exec bash || exec sh'", terminal("docker", "nh-sample-web", "", ""))
     }
 
     @Test

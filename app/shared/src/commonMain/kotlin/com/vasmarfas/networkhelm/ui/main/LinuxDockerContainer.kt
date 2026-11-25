@@ -86,6 +86,7 @@ import networkhelm.app.shared.generated.resources.docker_tab_logs
 import networkhelm.app.shared.generated.resources.docker_tab_processes
 import networkhelm.app.shared.generated.resources.docker_tab_stats
 import networkhelm.app.shared.generated.resources.docker_tab_terminal
+import networkhelm.app.shared.generated.resources.docker_terminal_any
 import networkhelm.app.shared.generated.resources.docker_terminal_hint
 import networkhelm.app.shared.generated.resources.docker_terminal_none
 import networkhelm.app.shared.generated.resources.docker_terminal_shell
@@ -130,7 +131,7 @@ internal fun LinuxDockerContainerView(tab: RouterTab, window: Long, container: S
         Box(Modifier.weight(1f).fillMaxWidth()) {
             when (CONTAINER_TABS[shown].first) {
                 "logs" -> ContainerLog(tab.session, container)
-                "terminal" -> ContainerTerminal(tab, window, container, terminal, sudo) { terminal = it }
+                "terminal" -> ContainerTerminal(tab, window, container, terminal, sudo, instant = opened == "terminal") { terminal = it }
                 "stats" -> ContainerStats(tab.session, container)
                 "processes" -> ContainerRows(tab.session, container, "top", 3.seconds)
                 "inspect" -> DockerInspect(tab.session, CONTAINER, container)
@@ -202,9 +203,10 @@ private fun ContainerLog(session: DeviceSession, container: String) {
     }
 }
 
-// the shell of the login types the command of the engine for it: exec with a shell and a user, or attach to the process of the container
+// the shell of the login types the command of the engine for it: exec with a shell and a user, or attach to the process of the container,
+// and a window opened by Terminal of the row starts the shell of the container at once
 @Composable
-private fun ContainerTerminal(tab: RouterTab, window: Long, container: String, started: String?, sudo: String, onStart: (String) -> Unit) {
+private fun ContainerTerminal(tab: RouterTab, window: Long, container: String, started: String?, sudo: String, instant: Boolean, onStart: (String) -> Unit) {
     val palette = Theme.palette
     val ssh = tab.session.ssh
     val terminal = LocalTerminal.current
@@ -216,11 +218,11 @@ private fun ContainerTerminal(tab: RouterTab, window: Long, container: String, s
         TerminalView(ssh, tab.consoles, window, startup = started, sudo = sudo, terminal = terminal)
         return
     }
-    val shell = remember { TextFieldState("sh") }
+    val shell = remember { TextFieldState() }
     val user = remember { TextFieldState() }
     var problem by remember { mutableStateOf<String?>(null) }
     val scope = rememberCoroutineScope()
-    fun open() = scope.launch {
+    suspend fun open() {
         problem = try {
             val arguments = mapOf("id" to container, "shell" to shell.text.toString().trim(), "user" to user.text.toString().trim())
             tab.session.run(CONTAINER, "terminal", arguments).toList().singleOrNull()?.get("command")?.let(onStart)
@@ -229,13 +231,14 @@ private fun ContainerTerminal(tab: RouterTab, window: Long, container: String, s
             e.message
         }
     }
+    LaunchedEffect(container) { if (instant) open() }
     Column(Modifier.fillMaxSize().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(6.dp), itemVerticalAlignment = Alignment.CenterVertically) {
             Text(stringResource(Res.string.docker_terminal_shell), color = palette.muted)
-            TextField(shell, Modifier.width(160.dp).testTag("docker-shell"), mono = true)
+            TextField(shell, Modifier.width(160.dp).testTag("docker-shell"), placeholder = stringResource(Res.string.docker_terminal_any), mono = true)
             Text(stringResource(Res.string.docker_terminal_user), color = palette.muted)
             TextField(user, Modifier.width(140.dp).testTag("docker-user"), mono = true)
-            Button(stringResource(Res.string.docker_open), { open() }, Modifier.testTag("docker-terminal-open"), primary = true)
+            Button(stringResource(Res.string.docker_open), { scope.launch { open() } }, Modifier.testTag("docker-terminal-open"), primary = true)
         }
         Text(stringResource(Res.string.docker_terminal_hint), color = palette.muted, style = Theme.type.small)
         problem?.let { Text(deviceMessage(it), color = palette.danger, style = Theme.type.small) }
