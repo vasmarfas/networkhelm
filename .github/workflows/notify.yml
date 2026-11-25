@@ -22,7 +22,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
           CHAT: ${{ secrets.TG_OWNER_CHAT_ID }}
-          NAME: ${{ github.event.workflow_run.name }}
+          NAME: ${{ github.event.workflow.name }}
           TITLE: ${{ github.event.workflow_run.display_title }}
           BRANCH: ${{ github.event.workflow_run.head_branch }}
           SHA: ${{ github.event.workflow_run.head_sha }}

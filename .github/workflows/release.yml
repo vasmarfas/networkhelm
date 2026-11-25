@@ -901,7 +901,10 @@ jobs:
             printf '## Release %s\n\n| Stage | Result |\n|---|---|\n' "${VERSION:-?}"
             jq -r --argjson names "$names" 'to_entries[] | select(.value.result != "skipped") | "| \($names[.key]) | \(.value.result) |"' <<< "$NEEDS"
             printf '\n'
-            if [ "$broken" != 0 ]; then
+            if [ "$(jq -r '.prepare.result' <<< "$NEEDS")" = failure ]; then
+              printf 'Nothing was built: the form asks for what cannot work, the errors are in Parameters. '
+              printf 'A re-run takes the same form, start Release again with the form corrected.\n'
+            elif [ "$broken" != 0 ]; then
               printf 'Not done. **Re-run failed jobs** repeats what failed and everything after it. '
               printf 'To publish the builds that are ready with other boxes, start Release with builds_from_run: %s.\n' "$RUN"
             elif [ "$DRY_RUN" = true ]; then
