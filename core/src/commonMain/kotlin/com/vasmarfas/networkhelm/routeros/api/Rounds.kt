@@ -30,11 +30,15 @@ internal fun rounds(words: List<String>, call: suspend (List<String>) -> List<Ma
     }
 }
 
+// a round takes at most a tenth of the router's time, as the reads of a list do
 private fun snapshots(words: List<String>, call: suspend (List<String>) -> List<Map<String, String>>) = flow {
     var round = 0
     while (true) {
-        emitTable(call(words + "=once="), round++)
-        delay(ROUND_MILLIS)
+        val asked = TimeSource.Monotonic.markNow()
+        val rows = call(words + "=once=")
+        val spent = asked.elapsedNow().inWholeMilliseconds
+        emitTable(rows, round++)
+        delay(maxOf(ROUND_MILLIS, spent * 9))
     }
 }
 

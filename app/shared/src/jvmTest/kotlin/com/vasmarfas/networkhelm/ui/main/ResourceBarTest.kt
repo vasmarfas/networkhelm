@@ -184,6 +184,21 @@ class ResourceBarTest {
     }
 
     @Test
+    fun theClockGoesOnWithoutAskingTheRouterEverySecond() = runDesktopComposeUiTest(1100, 60) {
+        val router = FakeRouter(mapOf("system/clock" to listOf(Item("", mapOf("date" to "2026-10-29", "time" to "09:19:11")))))
+        var asked = 0
+        val counting = object : DeviceSession by router {
+            override fun watch(path: MenuPath, filter: Filter?, properties: List<String>?): Flow<ListEvent> = flow {
+                if (path == MenuPath.parse("system/clock")) asked++
+                emitAll(router.watch(path, filter, properties))
+            }
+        }
+        bar(emptyMap(), settings = Settings(barOrder = listOf(BarItem.Clock)), router = counting)
+        waitUntil(timeoutMillis = 10_000) { onAllNodes(hasText("2026-10-29 09:19:13")).fetchSemanticsNodes().isNotEmpty() }
+        assertEquals(1, asked)
+    }
+
+    @Test
     fun aMenuTheRouterLacksIsNotAskedAgain() = runTest {
         var asked = 0
         flow<Item> {

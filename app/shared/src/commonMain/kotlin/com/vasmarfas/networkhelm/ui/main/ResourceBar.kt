@@ -44,6 +44,7 @@ import com.vasmarfas.networkhelm.ui.chart.isoDate
 import com.vasmarfas.networkhelm.ui.chart.kibiCount
 import com.vasmarfas.networkhelm.ui.kit.LocalCompact
 import com.vasmarfas.networkhelm.ui.theme.Theme
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -52,6 +53,7 @@ import kotlinx.coroutines.flow.emptyFlow
 import kotlinx.coroutines.flow.filterIsInstance
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.flowOn
 import kotlinx.coroutines.flow.mapNotNull
 import kotlinx.coroutines.flow.onEach
 import kotlinx.coroutines.flow.retryWhen
@@ -64,6 +66,7 @@ import networkhelm.app.shared.generated.resources.resource_memory
 import networkhelm.app.shared.generated.resources.resource_uptime
 import kotlin.math.roundToInt
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeSource
 
 private val PhoneItems = setOf(BarItem.Cpu, BarItem.Memory, BarItem.Uptime)
 
@@ -74,6 +77,10 @@ private val Lasting = setOf(ErrorCategory.MissingItem, ErrorCategory.Unsupported
 
 private val ROUTES = MenuPath.parse("ip/route")
 private val INTERFACES = MenuPath.parse("interface")
+private val CLOCK = MenuPath.parse("system/clock")
+private val TIME = Regex("(\\d{1,2}):(\\d\\d):(\\d\\d)")
+private val CLOCK_READ = 60.seconds
+private const val DAY_SECONDS = 86_400
 
 private val MinFlexible = 120.dp
 private val MinShown = 72.dp
@@ -174,7 +181,23 @@ private fun resourceOf(tab: RouterTab, openWrt: Boolean, cpu: Series, memory: Se
             }.again()
     }
 
-private fun clockOf(tab: RouterTab): Flow<Item> = tab.session.watchSettings(MenuPath.parse("system/clock"), listOf("date", "time")).onTheSecond().again()
+// the clock is read once a minute and counted on here, as every read costs a router on the WinBox port a line of its console,
+// and a time the bar cannot count on or the turn of the date is read from the router
+private fun clockOf(tab: RouterTab): Flow<Item> = flow {
+    while (true) {
+        val read = tab.session.watchSettings(CLOCK, listOf("date", "time")).first()
+        val asked = TimeSource.Monotonic.markNow()
+        val from = read["time"]?.let(TIME::matchEntire)?.destructured?.let { (hours, minutes, seconds) -> hours.toInt() * 3_600 + minutes.toInt() * 60 + seconds.toInt() }
+        emit(read)
+        while (true) {
+            delay(1.seconds)
+            val now = from?.plus(asked.elapsedNow().inWholeSeconds.toInt())?.takeIf { it < DAY_SECONDS && asked.elapsedNow() < CLOCK_READ } ?: break
+            emit(Item(read.id, read.values + ("time" to "${two(now / 3_600)}:${two(now % 3_600 / 60)}:${two(now % 60)}")))
+        }
+    }
+}.flowOn(Dispatchers.Default).onTheSecond().again()
+
+private fun two(value: Int) = value.toString().padStart(2, '0')
 
 // a read the router failed is asked again after a pause, so the bar does not stand on old values
 internal fun <T> Flow<T>.again(): Flow<T> = retryWhen { cause, _ ->
