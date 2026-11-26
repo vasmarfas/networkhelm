@@ -84,6 +84,7 @@ import kotlin.concurrent.Volatile
 import kotlin.time.Duration
 import kotlin.time.Duration.Companion.milliseconds
 import kotlin.time.Duration.Companion.seconds
+import kotlin.time.TimeMark
 import kotlin.time.TimeSource
 
 class RouterOsSession(
@@ -121,6 +122,10 @@ class RouterOsSession(
     private var released = emptyMap<String, List<Map<String, String>>>()
     private val releaseName = "mirrors-${build.hashCode().toUInt().toString(16)}.json"
     private val releasing = Mutex()
+
+    private val ratesRead = Mutex()
+    @Volatile
+    private var ratesKept: Pair<TimeMark, Map<String?, Item>>? = null
 
     private val mirrors = (client as? ConsoleClient)?.let { console ->
         MenuMirrors(nativeWindows, console.dialect == Dialect.Classic, { key -> inspect?.recalled(key) ?: released[key] }) { key, rows ->
@@ -238,6 +243,8 @@ class RouterOsSession(
         val spec = nativeWindows.spec(path)
         return when {
             nativeWindows.stands(path) -> spec?.let { nativeWindows.list(it, filter, nativeWindows.refresh(path) ?: pollInterval) } ?: flow { throw DeviceException(ErrorCategory.MissingItem, "no window of the native channel at $path") }
+            path == RESOURCE && client is ConsoleClient && filter == null && properties != null && resourceNames.containsAll(properties) ->
+                resources(client.dialect == Dialect.Classic, client.each { api -> follow(api, path, null, properties) })
             spec?.log == true && filter == null && properties == null -> nativeWindows.lines(spec, client.each { api -> follow(api, path, null, null) }) { count(path, null) }
             spec == null -> client.each { api -> follow(api, path, filter, properties) }
             else -> nativeWindows.joined(client.each { api -> follow(api, path, filter, properties) }, spec)
@@ -305,15 +312,60 @@ class RouterOsSession(
 
     private fun touch(path: MenuPath) = touched.update { it + (path.toString() to (it[path.toString()] ?: 0) + 1) }
 
-    override fun run(path: MenuPath, command: String, arguments: Map<String, String>): Flow<Item> =
-        if (nativeWindows.stands(path)) {
-            flow<Item> {
+    override fun run(path: MenuPath, command: String, arguments: Map<String, String>): Flow<Item> {
+        val console = client.command(listOf(path.apiCommand(command)) + arguments.words()).map { item(it.attributes) }.asDeviceErrors()
+        return when {
+            nativeWindows.stands(path) -> flow<Item> {
                 val spec = nativeSpec(path)
                 if (spec?.query != null) emitAll(nativeWindows.query(spec, arguments)) else if (spec != null) nativeWindows.act(spec, command, arguments["id"])
             }.asDeviceErrors()
-        } else {
-            client.command(listOf(path.apiCommand(command)) + arguments.words()).map { item(it.attributes) }.asDeviceErrors()
+            // a round of monitor-traffic is a line of the console, which costs a slow router far more than a read of the list of WinBox
+            command == "monitor-traffic" && path == INTERFACES && client is ConsoleClient -> rates(arguments["interface"].orEmpty().split(',').filter { it.isNotEmpty() }, console)
+            else -> console
         }
+    }
+
+    // the values of system/resource the Resources window of WinBox holds come from that window, and from the console once it fails
+    private fun resources(classic: Boolean, console: Flow<ListEvent>): Flow<ListEvent> = flow {
+        var shown: Item? = null
+        if (nativeWindows.usable()) while (true) {
+            val asked = TimeSource.Monotonic.markNow()
+            val read = try {
+                nativeWindows.item(RESOURCES, "#0")
+            } catch (e: DeviceException) {
+                null
+            }
+            val row = read?.takeIf { it.values.keys.containsAll(resourceNames) }?.let { Item("", resourcesRow(it, classic)) } ?: break
+            if (row != shown) emit(ListEvent.Snapshot(listOf(row)))
+            shown = row
+            delay(maxOf(pollInterval, asked.elapsedNow() * 9))
+        }
+        emitAll(console)
+    }
+
+    // the rounds come from the list of interfaces as long as it gives the rates of all the names, and from the console after that
+    private fun rates(names: List<String>, console: Flow<Item>): Flow<Item> = flow {
+        var round = 0
+        if (nativeWindows.usable()) while (true) {
+            val asked = TimeSource.Monotonic.markNow()
+            val rows = try {
+                listedRates(names)
+            } catch (e: DeviceException) {
+                null
+            }
+            if (rows == null || names.any { rows[it]?.get("tx-bits-per-second") == null }) break
+            for (name in names) emit(Item("", rows.getValue(name).values + (".section" to round.toString())))
+            round++
+            delay(maxOf(pollInterval, asked.elapsedNow() * 9))
+        }
+        emitAll(console)
+    }
+
+    // the rounds of several windows asked within a round of each other share one read of the list
+    private suspend fun listedRates(names: List<String>): Map<String?, Item>? = ratesRead.withLock {
+        ratesKept?.takeIf { (at, rows) -> at.elapsedNow() < pollInterval * 9 / 10 && names.all { it in rows } }?.second
+            ?: nativeWindows.whole(RATES)?.associateBy { it["name"] }?.also { ratesKept = TimeSource.Monotonic.markNow() to it }
+    }
 
     override fun counters(path: MenuPath, properties: List<String>, filter: Filter?): Flow<Map<String, Map<String, String>>> = flow {
         if (!capabilities.streamingCommands || !outline(path).listens) return@flow
@@ -631,6 +683,9 @@ class RouterOsSession(
 
         const val END = "*FFFFFFFF"
         val LOG = MenuPath.parse("log")
+        val INTERFACES = MenuPath.parse("interface")
+        val RESOURCE = MenuPath.parse("system/resource")
+        val resourceNames = RESOURCES.fields.map { it.name }.toSet()
         val service = setOf(".id", ".dead", ".nextid")
         // the router learns of a session lost without FIN or RST by sending into it, and rolls back ~16 minutes later
         val BEAT = listOf("/system/resource/print", "=interval=5", "=.proplist=uptime")

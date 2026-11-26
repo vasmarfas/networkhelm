@@ -2,6 +2,7 @@ package com.vasmarfas.networkhelm.routeros
 
 import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.duration
+import com.vasmarfas.networkhelm.packs.MIRROR_TIME
 import com.vasmarfas.networkhelm.packs.NATIVE_NO_KEY
 import com.vasmarfas.networkhelm.packs.PackNative
 import com.vasmarfas.networkhelm.packs.PackNativeField
@@ -128,6 +129,34 @@ internal val UPTIME = PackNative(listOf(24, 2), listOf(number("uptime", 0x1)), s
 
 // the time on the clock of the router, in seconds since 1970 counted in its own zone
 internal val ROUTER_CLOCK = PackNative(listOf(24, 0), listOf(number("now", 0x7)), single = true)
+
+// the rates of the interfaces as the list of WinBox shows them, under the names of monitor-traffic. The router sends them only to a read
+// with the counters and the refresh filter of the window (262154 in the descriptions of RouterOS 7.25)
+internal val RATES = PackNative(
+    listOf(20, 0),
+    listOf(
+        text("name", 0x10006), counter("tx-bits-per-second", 0x100d4), counter("rx-bits-per-second", 0x100d3), number("tx-packets-per-second", 0x100cd),
+        number("rx-packets-per-second", 0x100cb), counter("fp-tx-bits-per-second", 0x100d6), counter("fp-rx-bits-per-second", 0x100d5),
+        number("fp-tx-packets-per-second", 0x100d8), number("fp-rx-packets-per-second", 0x100d7),
+    ),
+    mask = 0x10000005L or 0x2L or 262_154L,
+)
+
+// the Resources window of WinBox: the uptime in seconds, memory and disk in KiB
+internal val RESOURCES = PackNative(
+    listOf(24, 2),
+    listOf(
+        field("uptime", 0x1, MIRROR_TIME, "u"), number("cpu-load", 0x9), number("free-memory", 0x3), number("total-memory", 0x2),
+        number("free-hdd-space", 0xb), number("total-hdd-space", 0xa),
+    ),
+    single = true,
+)
+
+private val KIB = setOf("free-memory", "total-memory", "free-hdd-space", "total-hdd-space")
+
+// the record of the Resources window written as the console prints system/resource
+internal fun resourcesRow(item: Item, classic: Boolean): Map<String, String> =
+    (MenuMirror(RESOURCES, classic).row(item) - ".id").mapValues { (name, value) -> if (name in KIB) value.toLongOrNull()?.times(1024)?.toString() ?: value else value }
 
 // the numbers of the protocols as the console names them
 private val PROTOCOLS = mapOf(
