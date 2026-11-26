@@ -1,12 +1,22 @@
 package com.vasmarfas.networkhelm.routeros.console
 
+import com.vasmarfas.networkhelm.model.Capabilities
 import com.vasmarfas.networkhelm.model.DeviceException
+import com.vasmarfas.networkhelm.model.DeviceInfo
 import com.vasmarfas.networkhelm.model.ErrorCategory
+import com.vasmarfas.networkhelm.model.Item
 import com.vasmarfas.networkhelm.model.LinkState
 import com.vasmarfas.networkhelm.model.MenuPath
+import com.vasmarfas.networkhelm.model.Platform
+import com.vasmarfas.networkhelm.model.SafeModeKind
+import com.vasmarfas.networkhelm.packs.PackNative
+import com.vasmarfas.networkhelm.routeros.RouterOsSession
 import com.vasmarfas.networkhelm.routeros.api.ApiConnectionClosedException
 import com.vasmarfas.networkhelm.routeros.api.ApiEncoding
 import com.vasmarfas.networkhelm.routeros.api.ApiTrapException
+import com.vasmarfas.networkhelm.session.NativeObjects
+import com.vasmarfas.networkhelm.session.NativeSide
+import com.vasmarfas.networkhelm.session.watchSettings
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -394,6 +404,23 @@ class ConsoleClientTest {
         val asked = sent.size
         assertEquals(listOf(row), client.call(resource).rows)
         assertEquals(asked + 1, sent.size)
+    }
+
+    @Test
+    fun aFieldOfTheProplistThatTheVersionLacksLeavesTheMenuToAPrintWithoutTheProplist() = runTest {
+        val sent = mutableListOf<String>()
+        val client = client(size = 1) { command ->
+            if ("count-only" !in command) sent += command
+            when {
+                "count-only" in command -> "!bad parameter count-only (line 1 column 25)"
+                "available" in command -> "!input does not match any value of value-name (line 1 column 98)"
+                else -> command.split("; ").joinToString("\n") { "[{\".id\":\"*1\",\"name\":\"routeros\",\"disabled\":false,\"version\":\"7.17.2\"}]" }
+            }
+        }
+        val packages = listOf("/system/package/print", "=.proplist=name,disabled,available")
+        assertEquals(listOf(mapOf(".id" to "*1", "name" to "routeros", "disabled" to "false")), client.call(packages).rows)
+        assertTrue("available" in sent.first())
+        assertFalse("proplist" in sent.last())
     }
 
     @Test
@@ -1361,5 +1388,51 @@ class ConsoleClientTest {
         }
         client.call(listOf("/password", "=old-password=old", "=new-password=Nw 1", "=confirm-new-password=Nw 1"))
         assertEquals(listOf("/password old-password=old new-password=\"Nw 1\" confirm-new-password=\"Nw 1\""), sent)
+    }
+
+    private class Lists(private val rates: Boolean) : NativeObjects {
+        override suspend fun read(spec: PackNative, limit: Int?): List<Item>? = when (spec.handler) {
+            listOf(20L, 0L) -> listOf(Item("*1", mapOf("name" to "ether1") + if (rates) mapOf("tx-bits-per-second" to "151880", "rx-bits-per-second" to "102400") else emptyMap()))
+            listOf(24L, 2L) -> listOf(
+                Item("#0", mapOf("uptime" to "3725", "cpu-load" to "7", "free-memory" to "56012", "total-memory" to "131072", "free-hdd-space" to "110592", "total-hdd-space" to "131072")),
+            )
+            else -> null
+        }
+
+        override fun close() = Unit
+    }
+
+    private fun overWinBoxPort(window: NativeObjects, sent: MutableList<String>) = RouterOsSession(
+        client { command ->
+            sent += command
+            "[{\"name\":\"ether1\",\"tx-bits-per-second\":1,\"rx-bits-per-second\":2}]"
+        },
+        DeviceInfo(Platform.RouterOs, "lab", "7.25", "mipsbe", "RB951Ui-2HnD", setOf("routeros"), setOf("read", "write")),
+        Capabilities(false, false, false, SafeModeKind.None, terminal = true, files = false, export = true, menuContents = false),
+        native = object : NativeSide {
+            override suspend fun open(port: Int) = window
+
+            override val sessionPort = 8291
+        },
+    )
+
+    @Test
+    fun overTheWinBoxPortTheRatesAndTheResourcesComeFromItsWindows() = runTest {
+        val sent = mutableListOf<String>()
+        val session = overWinBoxPort(Lists(rates = true), sent)
+        val rounds = session.run(MenuPath.parse("interface"), "monitor-traffic", mapOf("interface" to "ether1")).take(2).toList()
+        assertEquals(listOf("151880", "151880"), rounds.map { it["tx-bits-per-second"] })
+        assertEquals(listOf("0", "1"), rounds.map { it[".section"] })
+        val resource = session.watchSettings(MenuPath.parse("system/resource"), listOf("uptime", "cpu-load", "free-memory", "total-memory")).first()
+        assertEquals(mapOf("uptime" to "01:02:05", "cpu-load" to "7", "free-memory" to "57356288", "total-memory" to "134217728"), resource.values.filterKeys { it in setOf("uptime", "cpu-load", "free-memory", "total-memory") })
+        assertTrue(sent.isEmpty(), "$sent")
+    }
+
+    @Test
+    fun aListWithoutTheRatesLeavesTheRoundsToTheConsole() = runTest {
+        val sent = mutableListOf<String>()
+        val round = overWinBoxPort(Lists(rates = false), sent).run(MenuPath.parse("interface"), "monitor-traffic", mapOf("interface" to "ether1")).first()
+        assertEquals("1", round["tx-bits-per-second"])
+        assertTrue(sent.single().contains("/interface/monitor-traffic interface=ether1 once"), "$sent")
     }
 }

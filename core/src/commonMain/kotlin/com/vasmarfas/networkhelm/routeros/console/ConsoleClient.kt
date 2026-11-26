@@ -45,6 +45,7 @@ import kotlin.random.Random
 
 private val BOOLEAN = Regex("invalid value of (\\S+), must be either yes or no")
 private val REFUSAL = Regex("^bad (?:parameter|command name) (\\S+)")
+private const val UNKNOWN_FIELD = "input does not match any value of value-name"
 private const val PROFILE = "/tool/profile"
 internal const val LINE_LIMIT = 16_000
 
@@ -175,7 +176,9 @@ class ConsoleClient internal constructor(
         while (!answer.ok) {
             val last = answer.text.substringAfterLast('\n')
             val menu = call.menu
-            val word = REFUSAL.find(last)?.groupValues?.get(1) ?: answer.word
+            val stopped = REFUSAL.find(last)?.groupValues?.get(1) ?: answer.word
+            // a field of the proplist this version lacks refuses the proplist: RouterOS 7.17 has no available in /system/package
+            val word = if (PROPLIST in call.offered && (UNKNOWN_FIELD in last || stopped?.split(',')?.any { it in call.proplist } == true)) PROPLIST else stopped
             call = when {
                 menu != null && word != null && word in call.offered -> {
                     refused.update { it + (menu to it[menu].orEmpty() + word) }
