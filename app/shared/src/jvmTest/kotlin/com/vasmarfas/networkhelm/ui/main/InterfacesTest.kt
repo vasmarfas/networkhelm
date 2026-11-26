@@ -42,15 +42,17 @@ class InterfacesTest {
             mapOf(
                 "name" to "ether1", "type" to "ether", "actual-mtu" to "1500", "l2mtu" to "1514", "running" to "true",
                 "tx-byte" to "36279223", "rx-byte" to "10933992", "last-link-up-time" to "2026-10-24 09:27:56", "link-downs" to "0",
+                "tx-packet" to "512", "rx-packet" to "640", "tx-drop" to "2", "rx-drop" to "7", "tx-queue-drop" to "1", "tx-error" to "0", "rx-error" to "3",
             ),
         ),
         Item("*2", mapOf("name" to "bridge1", "type" to "bridge", "actual-mtu" to "1500", "running" to "true")),
     )
     private val ethernet = listOf(Item("*1", mapOf("name" to "ether1", "default-name" to "ether1", "mtu" to "1500", "arp" to "enabled", "mac-address" to "00:00:5E:00:53:ED")))
+    private val fastPath = mapOf("fp-tx-packets-per-second" to "0", "fp-rx-packets-per-second" to "206")
     private val traffic = (0..1).map { round ->
         listOf(
-            Item("", mapOf("name" to "ether1", "tx-bits-per-second" to "151880", "rx-bits-per-second" to "102400", ".section" to "$round")),
-            Item("", mapOf("name" to "bridge1", "tx-bits-per-second" to "2688", "rx-bits-per-second" to "0", ".section" to "$round")),
+            Item("", mapOf("name" to "ether1", "tx-bits-per-second" to "151880", "rx-bits-per-second" to "102400", ".section" to "$round") + fastPath),
+            Item("", mapOf("name" to "bridge1", "tx-bits-per-second" to "2688", "rx-bits-per-second" to "0", ".section" to "$round") + fastPath),
         )
     }.flatten()
 
@@ -94,6 +96,11 @@ class InterfacesTest {
         onNodeWithText("Tx/Rx").assertExists()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("34.6 MiB / 10.4 MiB")).fetchSemanticsNodes().isNotEmpty() }
         onNodeWithText("Tx/Rx Bytes").assertExists()
+        // the rows of the router's own description: drops and errors are counters of the interface, as WinBox shows them
+        for ((title, value) in listOf("FP Tx/Rx Packet (p/s)" to "0 / 206", "Tx/Rx Packets" to "512 / 640", "Tx/Rx Drops" to "2 / 7", "Tx Queue Drops" to "1", "Tx/Rx Errors" to "0 / 3")) {
+            onNodeWithText(title).assertExists()
+            onAllNodes(hasText(value)).fetchSemanticsNodes().let { assertTrue(it.isNotEmpty(), "$title $value") }
+        }
         picture("interfaces-traffic")
         onAllNodes(hasText("Status")).onLast().performClick()
         waitUntil(timeoutMillis = 5_000) { onAllNodes(hasText("2026-10-24 09:27:56")).fetchSemanticsNodes().isNotEmpty() }

@@ -190,8 +190,9 @@
                     "readonly": true,
                     "path": "interface",
                     "fields": [
-                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte",
-                        "tx-packet", "rx-packet"
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
                     ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
@@ -223,8 +224,9 @@
                     "readonly": true,
                     "path": "interface",
                     "fields": [
-                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte",
-                        "tx-packet", "rx-packet"
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
                     ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
@@ -316,6 +318,11 @@
         "reneg-sec": "Key Renegotiate Sec",
         "user-auth-method": "User Authentication Method",
         "ipv6-prefix-len": "Server IPv6 Prefix Length",
-        "accept-proto-version": "Protocol"
+        "accept-proto-version": "Protocol",
+        "tx-drop": "Tx Drops",
+        "rx-drop": "Rx Drops",
+        "tx-queue-drop": "Tx Queue Drops",
+        "tx-error": "Tx Errors",
+        "rx-error": "Rx Errors"
     }
 }

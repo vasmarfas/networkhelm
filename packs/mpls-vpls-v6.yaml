@@ -74,7 +74,7 @@ forms:
       - title: Traffic
         readonly: true
         path: interface
-        fields: [tx-bits-per-second, rx-bits-per-second, tx-packets-per-second, rx-packets-per-second, "-", tx-byte, rx-byte, tx-packet, rx-packet]
+        fields: [tx-bits-per-second, rx-bits-per-second, tx-packets-per-second, rx-packets-per-second, "-", fp-tx-bits-per-second, fp-rx-bits-per-second, fp-tx-packets-per-second, fp-rx-packets-per-second, "-", tx-byte, rx-byte, tx-packet, rx-packet, tx-drop, rx-drop, tx-queue-drop, tx-error, rx-error]
         monitor: { command: interface/monitor-traffic, argument: interface }
         chart: true
   bgp-vpls:
@@ -125,3 +125,12 @@ labels:
   rx-byte: Rx Bytes
   tx-packet: Tx Packets
   rx-packet: Rx Packets
+  fp-tx-packets-per-second: FP Tx Packet (p/s)
+  fp-rx-packets-per-second: FP Rx Packet (p/s)
+  tx-drop: Tx Drops
+  rx-drop: Rx Drops
+  tx-queue-drop: Tx Queue Drops
+  tx-error: Tx Errors
+  rx-error: Rx Errors
+  fp-tx-bits-per-second: FP Tx
+  fp-rx-bits-per-second: FP Rx

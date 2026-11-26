@@ -53,7 +53,7 @@ private val interfacesQueueExtras = arrayOf(
 
 private fun interfacesStatus(up: String?, tx: Long, rx: Long, txPackets: Long, rxPackets: Long, down: String? = null, downs: Int = 0): Array<String> = listOfNotNull(
     down?.let { "last-link-down-time=$it" }, up?.let { "last-link-up-time=$it" }, "link-downs=$downs", "tx-byte=$tx", "rx-byte=$rx", "tx-packet=$txPackets", "rx-packet=$rxPackets",
-    "tx-drops-per-second=0", "rx-drops-per-second=0", "tx-errors-per-second=0", "rx-errors-per-second=0",
+    "tx-drop=0", "rx-drop=0", "tx-queue-drop=0", "tx-error=0", "rx-error=0",
 ).toTypedArray()
 
 private val interfacesNeighbors = listOf(

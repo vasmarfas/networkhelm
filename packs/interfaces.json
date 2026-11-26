@@ -218,9 +218,8 @@
                     "path": "interface",
                     "fields": [
                         "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
-                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "-",
-                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drops-per-second", "rx-drops-per-second", "tx-errors-per-second",
-                        "rx-errors-per-second"
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
                     ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
@@ -242,7 +241,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -264,7 +267,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -288,7 +295,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -311,7 +322,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -334,7 +349,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -357,7 +376,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -387,7 +410,11 @@
                     "title": "Traffic",
                     "readonly": true,
                     "path": "interface",
-                    "fields": ["tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-", "tx-byte", "rx-byte", "tx-packet", "rx-packet"],
+                    "fields": [
+                        "tx-bits-per-second", "rx-bits-per-second", "tx-packets-per-second", "rx-packets-per-second", "-",
+                        "fp-tx-bits-per-second", "fp-rx-bits-per-second", "fp-tx-packets-per-second", "fp-rx-packets-per-second", "-",
+                        "tx-byte", "rx-byte", "tx-packet", "rx-packet", "tx-drop", "rx-drop", "tx-queue-drop", "tx-error", "rx-error"
+                    ],
                     "monitor": { "command": "interface/monitor-traffic", "argument": "interface" },
                     "chart": true
                 }
@@ -405,13 +432,14 @@
         "fp-rx-bits-per-second": "FP Rx",
         "fp-tx-packets-per-second": "FP Tx Packet (p/s)",
         "fp-rx-packets-per-second": "FP Rx Packet (p/s)",
-        "tx-drops-per-second": "Tx Drops (p/s)",
-        "rx-drops-per-second": "Rx Drops (p/s)",
-        "tx-errors-per-second": "Tx Errors (p/s)",
-        "rx-errors-per-second": "Rx Errors (p/s)",
         "tx-byte": "Tx Bytes",
         "rx-byte": "Rx Bytes",
         "tx-packet": "Tx Packets",
-        "rx-packet": "Rx Packets"
+        "rx-packet": "Rx Packets",
+        "tx-drop": "Tx Drops",
+        "rx-drop": "Rx Drops",
+        "tx-queue-drop": "Tx Queue Drops",
+        "tx-error": "Tx Errors",
+        "rx-error": "Rx Errors"
     }
 }
