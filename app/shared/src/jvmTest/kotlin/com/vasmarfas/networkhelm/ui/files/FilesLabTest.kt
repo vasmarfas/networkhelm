@@ -121,7 +121,7 @@ class FilesLabTest {
                 try {
                     runBlocking {
                         run(session, files, "tmp") { backend ->
-                            rows(session, files).mapNotNull(::entryOf) + runCatching { backend.list("tmp/rd-test-files") }.getOrDefault(emptyList())
+                            rows(session, files).mapNotNull(::entryOf) + backend.list("tmp") + runCatching { backend.list("tmp/rd-test-files") }.getOrDefault(emptyList())
                         }
                     }
                 } catch (e: Throwable) {
@@ -202,7 +202,7 @@ class FilesLabTest {
                     run(session, files, "tmp") { backend ->
                         backend.probe()
                         assertEquals(Bulk.Ready(FileVia.Rpcd), backend.bulk.value)
-                        rows(session, files).mapNotNull(::entryOf) + runCatching { backend.list("tmp/rd-test-files") }.getOrDefault(emptyList())
+                        rows(session, files).mapNotNull(::entryOf) + backend.list("tmp") + runCatching { backend.list("tmp/rd-test-files") }.getOrDefault(emptyList())
                     }
                 }
             } catch (e: Throwable) {

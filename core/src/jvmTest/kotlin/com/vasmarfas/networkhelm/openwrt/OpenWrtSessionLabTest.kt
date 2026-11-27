@@ -237,12 +237,17 @@ class OpenWrtSessionLabTest {
                 assertTrue(client.list("/tmp").any { it.name == name && !it.directory })
                 client.close()
             }
-            assertEquals("file", session.watch(files).rows().first { it.isNotEmpty() }.single { it.id == "tmp/rd-test-cat.txt" }["type"])
+            // the window starts at the root, the folders below it come over the file channel
+            val root = session.watch(files).rows().first { it.isNotEmpty() }
+            assertEquals("directory", root.single { it.id == "tmp" }["type"])
+            assertEquals("directory", root.single { it.id == "var" }["type"], "the link /var leads to /tmp")
+            val tmp = ShellFiles(ssh)
+            assertTrue(tmp.list("/tmp").any { it.name == "rd-test-cat.txt" })
             session.run(files, "backup", emptyMap()).toList()
-            val backup = session.watch(files).rows().first { rows -> rows.any { it.id.startsWith("tmp/backup-") } }.first { it.id.startsWith("tmp/backup-") }
-            assertTrue(backup["size"].orEmpty().toLong() > 1000, backup.toString())
-            session.remove(files, listOf(backup.id, "tmp/rd-test-cat.txt"))
-            assertTrue(session.watch(files).rows().first { it.isNotEmpty() }.none { it.id == backup.id || it.id == "tmp/rd-test-cat.txt" })
+            val backup = tmp.list("/tmp").first { it.name.startsWith("backup-") }
+            assertTrue(backup.size > 1000, backup.toString())
+            session.remove(files, listOf("tmp/${backup.name}", "tmp/rd-test-cat.txt"))
+            assertTrue(tmp.list("/tmp").none { it.name == backup.name || it.name == "rd-test-cat.txt" })
             ShellFiles(ssh).write("/tmp/rd-test-image.bin", "rd-test".encodeToByteArray())
             val refused = assertFailsWith<DeviceException> { session.run(files, "upgrade", mapOf("numbers" to "tmp/rd-test-image.bin")).toList() }
             assertEquals(ErrorCategory.ArgumentValue, refused.category)

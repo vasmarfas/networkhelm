@@ -22,12 +22,15 @@ class RpcdFilesTest {
     private class Rpcd : Ubus {
         val files = mutableMapOf<String, ByteArray>()
         val folders = mutableSetOf<String>()
+        val links = mutableMapOf<String, String>()
+        val listed = mutableListOf<String>()
         val writes = mutableListOf<Boolean>()
         val ran = mutableListOf<List<String>>()
 
         override suspend fun call(obj: String, method: String, args: JsonObject): JsonObject {
             assertEquals("file", obj)
             val path = args["path"]?.jsonPrimitive?.content.orEmpty()
+            if (method == "list") listed += path
             return when (method) {
                 "write" -> {
                     val append = args.getValue("append").jsonPrimitive.booleanOrNull == true
@@ -46,8 +49,10 @@ class RpcdFilesTest {
                     files.remove(path)
                     JsonObject(emptyMap())
                 }
-                "list" -> JsonObject(mapOf("entries" to JsonArray(files.keys.filter { it.startsWith("$path/") }.map {
+                "list" -> if (path != "/" && (links[path] ?: path) !in folders) throw UbusException(UbusStatus.NOT_FOUND) else JsonObject(mapOf("entries" to JsonArray(files.keys.filter { it.startsWith("$path/") }.map {
                     JsonObject(mapOf("name" to JsonPrimitive(it.substringAfterLast('/')), "type" to JsonPrimitive("file"), "size" to JsonPrimitive(files.getValue(it).size), "mtime" to JsonPrimitive(1_800_000_000)))
+                } + links.keys.filter { it.substringBeforeLast('/').ifEmpty { "/" } == path }.map {
+                    JsonObject(mapOf("name" to JsonPrimitive(it.substringAfterLast('/')), "type" to JsonPrimitive("symlink"), "size" to JsonPrimitive(3), "mtime" to JsonPrimitive(1_800_000_000)))
                 })))
                 "exec" -> {
                     val command = args.getValue("command").jsonPrimitive.content
@@ -103,5 +108,17 @@ class RpcdFilesTest {
         assertFailsWith<DeviceException> { channel.rename("/tmp/a.txt", "/tmp/b.txt") }
         assertEquals("b", rpcd.files.getValue("/tmp/b.txt").decodeToString())
         assertEquals(ErrorCategory.MissingItem, assertFailsWith<DeviceException> { channel.read("/tmp/none") }.category)
+    }
+
+    // rpcd names a link as a link, as /var and /run in the root of OpenWrt 25.12, and lists the folder a link leads to
+    @Test
+    fun aLinkToAFolderIsListedAsTheFolderAndABrokenLinkAsAFile() = runTest {
+        val rpcd = Rpcd()
+        val channel = RpcdFiles(rpcd)
+        rpcd.folders += "/tmp"
+        rpcd.links["/var"] = "/tmp"
+        rpcd.links["/localtime"] = "/tmp/localtime"
+        assertEquals(listOf("var" to true, "localtime" to false), channel.list("/").map { it.name to it.directory })
+        assertEquals(listOf("/", "/var", "/localtime"), rpcd.listed)
     }
 }

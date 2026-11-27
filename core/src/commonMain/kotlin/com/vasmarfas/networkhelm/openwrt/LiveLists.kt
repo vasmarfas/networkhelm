@@ -11,7 +11,6 @@ import com.vasmarfas.networkhelm.model.NodeKind
 import com.vasmarfas.networkhelm.model.ValueType
 import com.vasmarfas.networkhelm.model.duration
 import com.vasmarfas.networkhelm.search.span
-import com.vasmarfas.networkhelm.ssh.RemoteFile
 import com.vasmarfas.networkhelm.ssh.publicKeyBits
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.catch
@@ -402,20 +401,12 @@ internal class LiveLists(private val ubus: Ubus, private val uci: Uci, private v
         return listOf(Item("keys", mapOf("private-key" to keys.text("priv"), "public-key" to keys.text("pub"))))
     }
 
+    // the root of the router: the window opens the folders below it
     private suspend fun files(): List<Item> {
         val shift = shift()
-        return FILES.flatMap { directory ->
-            entries(directory).map { file ->
-                val name = "${directory.drop(1)}/${file.name}"
-                Item(name, mapOf("name" to name, "type" to if (file.directory) "directory" else "file", "size" to "${file.size}", "last-modified" to local(file.modifiedEpochSeconds + shift)))
-            }
-        }
-    }
-
-    private suspend fun entries(directory: String): List<RemoteFile> {
-        if ("file" !in objects) return listing(shell?.sh("ls -la --full-time ${quote(directory)}")?.output.orEmpty())
-        return ubus.call("file", "list", JsonObject(mapOf("path" to JsonPrimitive(directory)))).objects("entries").map {
-            RemoteFile(it.text("name"), it.number("size") ?: 0, it.text("type") == "directory", it.number("mtime") ?: 0)
+        val root = if ("file" in objects) RpcdFiles(ubus).list("/") else listing(shell?.sh("ls -la --full-time /")?.output.orEmpty())
+        return root.map { file ->
+            Item(file.name, mapOf("name" to file.name, "type" to if (file.directory) "directory" else "file", "size" to "${file.size}", "last-modified" to local(file.modifiedEpochSeconds + shift)))
         }
     }
 
@@ -843,7 +834,6 @@ internal class LiveLists(private val ubus: Ubus, private val uci: Uci, private v
         const val AUTHORIZED_KEYS = "/etc/dropbear/authorized_keys"
         val keyTypes = Regex("(ssh|ecdsa-sha2|sk-ssh|sk-ecdsa-sha2)-[\\w@.-]+")
         const val LINES = 500
-        val FILES = listOf("/tmp", "/root")
         const val MANAGER = "/usr/libexec/package-manager-call"
         val TASK = listOf("minute", "hour", "day", "month", "weekday", "command")
         val blanks = Regex("\\s+")

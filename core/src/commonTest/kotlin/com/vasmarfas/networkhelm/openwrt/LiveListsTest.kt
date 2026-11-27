@@ -74,6 +74,9 @@ class LiveListsTest {
                 }
                 "luci getConntrackList" -> """{"result":[{"bytes":2012,"packets":10,"layer3":"ipv4","layer4":"tcp","timeout":300,"src":"192.0.2.10","dst":"192.168.99.1",""" +
                     """"sport":26760,"dport":22,"mark":0,"zone":0,"use":2}]}"""
+                "file list" -> if (args.getValue("path").jsonPrimitive.content != "/") """{"entries":[]}""" else """{"entries":[""" +
+                    """{"name":"etc","type":"directory","size":4096,"mtime":1792675200},{"name":"var","type":"symlink","size":3,"mtime":1792675200},""" +
+                    """{"name":"tmp","type":"directory","size":360,"mtime":1792675200}]}"""
                 "system validate_firmware_image" -> """{"valid":${"openwrt" in args.toString()},"forceable":true}"""
                 "system info" -> """{"localtime":1792686061,"uptime":93784,"load":[3276,1,0],"memory":{"total":1033998336,"available":932155392},""" +
                     """"root":{"total":100000,"avail":75000}}"""
@@ -343,6 +346,15 @@ class LiveListsTest {
             router.calls.last(),
         )
         assertTrue(lists.watched(clients) && !lists.watched(MenuPath.parse("status/log")))
+    }
+
+    // the folders open from the root, and the link /var opens as the folder it leads to
+    @Test
+    fun theFilesStartAtTheRootOfTheRouter() = runTest {
+        val root = lists.read(MenuPath.parse("status/files"))
+        assertEquals(listOf("etc" to "directory", "var" to "directory", "tmp" to "directory"), root.map { it["name"] to it["type"] })
+        assertEquals(listOf("etc", "var", "tmp"), root.map { it.id })
+        assertEquals("file list {\"path\":\"/\"}", router.calls.first { it.startsWith("file list") })
     }
 
     @Test

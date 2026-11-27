@@ -10,6 +10,7 @@ import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.hasAnyAncestor
+import androidx.compose.ui.test.hasScrollToIndexAction
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasTestTag
 import androidx.compose.ui.test.hasText
@@ -23,6 +24,7 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performKeyInput
 import androidx.compose.ui.test.performMouseInput
 import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.pressKey
@@ -290,7 +292,9 @@ class MainScreenLabTest {
                 waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("authpriv") and !hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
                 picture("$prefix-log")
                 onNodeWithText("Files").performClick()
-                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("tmp")).fetchSemanticsNodes().isNotEmpty() }
+                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("etc")).fetchSemanticsNodes().isNotEmpty() }
+                // the root has more folders than the window has rows
+                onNode(hasScrollToIndexAction() and hasAnyAncestor(hasTestTag("tree"))).performScrollToNode(hasText("tmp"))
                 onNodeWithText("tmp").performMouseInput { doubleClick() }
                 onAllNodesWithTag("find").onLast().performTextInput("dhcp.leases")
                 waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("dhcp.leases")).fetchSemanticsNodes().isNotEmpty() }
@@ -326,8 +330,9 @@ class MainScreenLabTest {
                 setContent { NetworkHelmTheme(dark = true) { MainScreen(tab, onDisconnect = {}) } }
                 waitUntil(timeoutMillis = 60_000) { tab.menu != null }
                 tab.open(MenuEntry("Files", "status/files"))
-                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("tmp")).fetchSemanticsNodes().isNotEmpty() }
+                waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("etc")).fetchSemanticsNodes().isNotEmpty() }
                 assertTrue(onAllNodes(hasText("dhcp.leases")).fetchSemanticsNodes().isEmpty(), "closed at first")
+                onNode(hasScrollToIndexAction() and hasAnyAncestor(hasTestTag("tree"))).performScrollToNode(hasTestTag("toggle-tmp"))
                 onNodeWithTag("toggle-tmp").performClick()
                 onNodeWithTag("find").performTextInput("dhcp.leases")
                 waitUntil(timeoutMillis = 30_000) { onAllNodes(hasText("dhcp.leases")).fetchSemanticsNodes().isNotEmpty() }

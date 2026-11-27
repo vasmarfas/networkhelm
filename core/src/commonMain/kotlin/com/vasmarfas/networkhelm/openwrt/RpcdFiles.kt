@@ -20,7 +20,23 @@ private const val PART = 24 * 1024
 
 internal class RpcdFiles(private val ubus: Ubus) : SftpClient {
     override suspend fun list(path: String): List<RemoteFile> = call("list", "path" to JsonPrimitive(path)).list("entries").map {
-        RemoteFile(it.text("name"), it.number("size") ?: 0, it.text("type") == "directory", it.number("mtime") ?: 0)
+        val name = it.text("name")
+        val directory = when (it.text("type")) {
+            "directory" -> true
+            // a link to a folder opens as the folder: /var and /run of OpenWrt lead to /tmp
+            "symlink" -> folder("${path.trimEnd('/')}/$name")
+            else -> false
+        }
+        RemoteFile(name, it.number("size") ?: 0, directory, it.number("mtime") ?: 0)
+    }
+
+    // the ACL of LuCI lets a login list any folder and stat none, so the link is listed: a link to a file, to nothing or to where
+    // the login may not look leads to no folder
+    private suspend fun folder(path: String): Boolean = try {
+        ubus.call("file", "list", JsonObject(mapOf("path" to JsonPrimitive(path))))
+        true
+    } catch (e: UbusException) {
+        false
     }
 
     override suspend fun read(path: String): ByteArray {

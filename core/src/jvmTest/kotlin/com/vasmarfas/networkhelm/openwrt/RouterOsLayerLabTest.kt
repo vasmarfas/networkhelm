@@ -4,7 +4,9 @@ import com.vasmarfas.networkhelm.Lab
 import com.vasmarfas.networkhelm.model.DeviceException
 import com.vasmarfas.networkhelm.model.ErrorCategory
 import com.vasmarfas.networkhelm.model.MenuPath
+import com.vasmarfas.networkhelm.model.Platform
 import com.vasmarfas.networkhelm.packs.bundledPacks
+import com.vasmarfas.networkhelm.packs.packName
 import com.vasmarfas.networkhelm.session.DeviceSession
 import com.vasmarfas.networkhelm.session.rows
 import com.vasmarfas.networkhelm.ssh.SshAuth
@@ -285,11 +287,12 @@ class RouterOsLayerLabTest {
 
     @Test
     fun moreMenusOfRouterOsShowWhatTheRouterHas() = layer { layer, _, _ ->
-        assertTrue(layer.rows("file").any { it.id == "tmp/dhcp.leases" })
+        assertTrue(layer.rows("file").any { it.id == "tmp" && it["type"] == "directory" })
         assertTrue(layer.rows("ipv6/route").any { it["dst-address"] == "fe80::/64" && it["dynamic"] == "true" })
         assertTrue(layer.rows("system/clock").single()["date"].orEmpty().matches(Regex("\\d{4}-\\d{2}-\\d{2}")))
         assertTrue("sync-time" in layer.describe(MenuPath.parse("system/clock")).commands)
-        val clock = layer.windows(bundledPacks().values).single { "system/clock" in it.paths }
+        // the program gives the layer the packs of RouterOS alone, as Keenetic has a Clock window of its own
+        val clock = layer.windows(bundledPacks().values.filter { it.platform == Platform.RouterOs.packName }).single { "system/clock" in it.paths }
         assertEquals(listOf("sync-time"), clock.paths.getValue("system/clock").actions.map { it.command })
         layer.run(MenuPath.parse("system/clock"), "sync-time", emptyMap()).collect()
         val ntp = layer.rows("system/ntp/client").single()

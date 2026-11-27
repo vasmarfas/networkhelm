@@ -124,6 +124,18 @@ internal fun DemoBuilder.openWrtServicesDemo() {
     }
 
     list("status/files", writable = false) {
+        row(".id=bin", "name=bin", "type=directory", "size=4096", "last-modified=2026-09-14 19:20:01")
+        row(".id=etc", "name=etc", "type=directory", "size=4096", "last-modified=2026-10-29 08:41:50")
+        row(".id=etc/config", "name=etc/config", "type=directory", "size=4096", "last-modified=2026-10-29 08:41:50")
+        row(".id=etc/config/network", "name=etc/config/network", "type=file", "size=1092", "last-modified=2026-10-29 08:41:50")
+        row(".id=etc/config/wireless", "name=etc/config/wireless", "type=file", "size=874", "last-modified=2026-10-19 04:20:13")
+        row(".id=etc/config/firewall", "name=etc/config/firewall", "type=file", "size=2391", "last-modified=2026-10-19 04:20:13")
+        row(".id=overlay", "name=overlay", "type=directory", "size=4096", "last-modified=2026-09-14 19:22:10")
+        row(".id=root", "name=root", "type=directory", "size=4096", "last-modified=2026-10-01 21:07:33")
+        row(".id=tmp", "name=tmp", "type=directory", "size=360", "last-modified=2026-10-31 11:58:02")
+        row(".id=usr", "name=usr", "type=directory", "size=4096", "last-modified=2026-09-14 19:20:01")
+        row(".id=var", "name=var", "type=directory", "size=3", "last-modified=2026-09-14 19:20:01")
+        row(".id=www", "name=www", "type=directory", "size=4096", "last-modified=2026-09-14 19:20:01")
         row(".id=tmp/dhcp.leases", "name=tmp/dhcp.leases", "type=file", "size=412", "last-modified=2026-10-31 11:58:02")
         row(".id=tmp/etc", "name=tmp/etc", "type=directory", "size=260", "last-modified=2026-10-19 04:18:51")
         row(".id=tmp/log", "name=tmp/log", "type=directory", "size=60", "last-modified=2026-10-19 04:18:49")
