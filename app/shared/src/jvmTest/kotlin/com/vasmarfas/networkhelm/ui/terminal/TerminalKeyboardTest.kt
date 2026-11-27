@@ -27,9 +27,17 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalTestApi::class)
 class TerminalKeyboardTest {
-    private class Typed : ShellChannel {
+    // screen: what the host writes first, then it writes nothing more
+    private class Typed(private val screen: String = "") : ShellChannel {
         val text = StringBuffer()
-        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = awaitCancellation()
+        private var shown = screen.isEmpty()
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (shown) awaitCancellation()
+            shown = true
+            val bytes = screen.encodeToByteArray()
+            bytes.copyInto(buffer, offset)
+            return bytes.size
+        }
         override suspend fun write(bytes: ByteArray) {
             text.append(bytes.decodeToString())
         }
@@ -66,6 +74,16 @@ class TerminalKeyboardTest {
         Thread.sleep(1500)
         onRoot().performKeyInput { pressKey(Key.A) }
         assertTrue(shell.got("a"), "typed: ${shell.text}")
+    }
+
+    // mc and htop set the cursor keys of the program and take an arrow only as ESC O B then
+    @Test
+    fun theArrowsGoAsTheProgramSetTheCursorKeys() = runDesktopComposeUiTest(1000, 700) {
+        val shell = Typed("\u001b[?1049h\u001b[?1h\u001b=")
+        console(shell)
+        Thread.sleep(1500)
+        onRoot().performKeyInput { pressKey(Key.DirectionDown) }
+        assertTrue(shell.got("\u001bOB"), "typed: ${shell.text.map { it.code }}")
     }
 
     @Test

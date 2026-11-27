@@ -1,17 +1,28 @@
 package com.vasmarfas.networkhelm.ui.terminal
 
+import kotlin.concurrent.Volatile
+
 // whether the program on the screen asked for the mouse, as htop and mc do, read from what the host writes: DECSET and DECRST of
 // the modes 1000, 1002 and 1003 turn the reports on and off, 1006 picks the SGR form; a terminal without mouse of its own
-// sends a tap as a click of the left button
+// sends a tap as a click of the left button. Mode 1 is the cursor keys of the program: with it set, mc and htop take an arrow
+// only as ESC O A and ignore ESC [ A
 class TerminalMouse {
     private val tracking = mutableSetOf<Int>()
     private var sgr = false
     private var rest = ""
 
+    @Volatile
+    private var cursorKeys = false
+
     val wanted get() = tracking.isNotEmpty()
 
-    fun read(bytes: ByteArray, count: Int) {
-        val text = rest + bytes.decodeToString(0, count)
+    // A up, B down, C right, D left
+    fun arrow(direction: Char): String = if (cursorKeys) "\u001bO$direction" else "\u001b[$direction"
+
+    fun read(bytes: ByteArray, count: Int) = read(bytes.decodeToString(0, count))
+
+    fun read(written: String) {
+        val text = rest + written
         var end = 0
         for (match in MODE.findAll(text)) {
             val on = match.groupValues[2] == "h"
@@ -19,6 +30,7 @@ class TerminalMouse {
                 when (mode) {
                     in TRACKING -> if (on) tracking += mode else tracking -= mode
                     SGR -> sgr = on
+                    CURSOR_KEYS -> cursorKeys = on
                 }
             }
             end = match.range.last + 1
@@ -42,6 +54,7 @@ class TerminalMouse {
         val MODE = Regex("\u001b\\[\\?([0-9;]+)([hl])")
         val TRACKING = setOf(1000, 1002, 1003)
         const val SGR = 1006
+        const val CURSOR_KEYS = 1
         const val MAX_SEQUENCE = 32
     }
 }

@@ -43,5 +43,21 @@ class TerminalMouseTest {
         val mouse = TerminalMouse()
         mouse.feed("\u001b[?25l\u001b[?2004h\u001b[?1049h")
         assertFalse(mouse.wanted)
+        assertEquals("\u001b[A", mouse.arrow('A'))
+    }
+
+    @Test
+    fun theArrowsFollowTheCursorKeysOfTheProgram() {
+        val modes = TerminalMouse()
+        assertEquals(listOf("\u001b[A", "\u001b[B", "\u001b[C", "\u001b[D"), "ABCD".map(modes::arrow))
+        // mc 4.8 starts with smkx of xterm-256color and ends with rmkx
+        modes.feed("\u001b[?1049h\u001b[?1h\u001b=\u001b[?1000h")
+        assertEquals(listOf("\u001bOA", "\u001bOB", "\u001bOC", "\u001bOD"), "ABCD".map(modes::arrow))
+        modes.feed("\u001b[?1l\u001b>\u001b[?1049l")
+        assertEquals("\u001b[B", modes.arrow('B'))
+        modes.read("\u001b[?1;")
+        modes.read("1000h")
+        assertEquals("\u001bOB", modes.arrow('B'))
+        assertTrue(modes.wanted)
     }
 }

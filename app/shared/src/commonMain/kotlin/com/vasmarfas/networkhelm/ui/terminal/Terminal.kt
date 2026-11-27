@@ -248,7 +248,7 @@ private fun SnippetBar(snippets: Snippets, channel: ShellChannel, onReopen: () -
 }
 
 @Composable
-private fun KeysBar(channel: ShellChannel) {
+private fun KeysBar(channel: KeptShell) {
     val scope = rememberCoroutineScope()
     fun send(text: String) {
         scope.launch { channel.write(text.encodeToByteArray()) }
@@ -260,10 +260,10 @@ private fun KeysBar(channel: ShellChannel) {
     ) {
         KeyButton("key-tab", Res.string.terminal_key_tab, label = "Tab") { send("\t") }
         KeyButton("key-esc", Res.string.terminal_key_esc, label = "Esc") { send("\u001b") }
-        KeyButton("key-up", Res.string.terminal_key_up, icon = Lucide.ArrowUp) { send("\u001b[A") }
-        KeyButton("key-down", Res.string.terminal_key_down, icon = Lucide.ArrowDown) { send("\u001b[B") }
-        KeyButton("key-left", Res.string.terminal_key_left, icon = Lucide.ArrowLeft) { send("\u001b[D") }
-        KeyButton("key-right", Res.string.terminal_key_right, icon = Lucide.ArrowRight) { send("\u001b[C") }
+        KeyButton("key-up", Res.string.terminal_key_up, icon = Lucide.ArrowUp) { send(channel.modes.arrow('A')) }
+        KeyButton("key-down", Res.string.terminal_key_down, icon = Lucide.ArrowDown) { send(channel.modes.arrow('B')) }
+        KeyButton("key-left", Res.string.terminal_key_left, icon = Lucide.ArrowLeft) { send(channel.modes.arrow('D')) }
+        KeyButton("key-right", Res.string.terminal_key_right, icon = Lucide.ArrowRight) { send(channel.modes.arrow('C')) }
         KeyButton("key-ctrl-c", Res.string.terminal_key_ctrl_c, label = "Ctrl+C") { send("\u0003") }
     }
 }
@@ -356,6 +356,9 @@ internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession, @
     var screen: Any? = null
     var release: () -> Unit = {}
 
+    // the modes the program on the screen set, for the arrows of the keys bar
+    val modes = TerminalMouse()
+
     private var closed = false
 
     // sudo asks with a prompt of its own: the typed line shows it with %u, the question itself with the name of the user
@@ -398,6 +401,7 @@ internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession, @
         shell.read(buffer, offset, length).also {
             if (it > 0) {
                 val text = buffer.decodeToString(offset, offset + it)
+                modes.read(text)
                 answer(text)
                 prompted(text)
             }

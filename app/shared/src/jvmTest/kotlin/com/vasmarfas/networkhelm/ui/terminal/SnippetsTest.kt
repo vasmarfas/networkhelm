@@ -1,7 +1,10 @@
 package com.vasmarfas.networkhelm.ui.terminal
 
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.toAwtImage
 import androidx.compose.ui.test.ExperimentalTestApi
 import androidx.compose.ui.test.SkikoComposeUiTest
@@ -38,9 +41,20 @@ import kotlin.test.assertTrue
 @OptIn(ExperimentalTestApi::class)
 class SnippetsTest {
 
-    private class Console : ShellChannel {
+    // screen: what the host writes first, then it writes nothing more
+    private class Console(private val screen: String = "") : ShellChannel {
         val written = mutableListOf<String>()
-        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int = awaitCancellation()
+
+        @Volatile
+        var shown = screen.isEmpty()
+
+        override suspend fun read(buffer: ByteArray, offset: Int, length: Int): Int {
+            if (shown) awaitCancellation()
+            val bytes = screen.encodeToByteArray()
+            bytes.copyInto(buffer, offset)
+            shown = true
+            return bytes.size
+        }
         override suspend fun write(bytes: ByteArray) {
             written += bytes.decodeToString()
         }
@@ -62,12 +76,16 @@ class SnippetsTest {
         ImageIO.write(captureToImage().toAwtImage(), "png", File(directory, "$name.png"))
     }
 
-    private fun SkikoComposeUiTest.showTerminal(console: Console, compact: Boolean) {
+    private fun SkikoComposeUiTest.showTerminal(
+        console: Console,
+        compact: Boolean,
+        terminal: @Composable (ShellChannel, Modifier) -> Unit = { _, modifier -> Text("console", modifier) },
+    ) {
         val snippets = Snippets(MemoryStorage())
         setContent {
             NetworkHelmTheme(dark = true) {
                 CompositionLocalProvider(LocalSnippets provides snippets, LocalCompact provides compact) {
-                    TerminalView(Ssh(console), remember { Consoles() }, 1L) { _, modifier -> Text("console", modifier) }
+                    TerminalView(Ssh(console), remember { Consoles() }, 1L, terminal = terminal)
                 }
             }
         }
@@ -138,6 +156,26 @@ class SnippetsTest {
         for ((tag, _, _) in keys) onNodeWithTag(tag).performClick()
         waitUntil(timeoutMillis = 5_000) { console.written.size == keys.size }
         assertEquals(keys.map { it.third }, console.written)
+    }
+
+    @Test
+    fun theArrowsOfTheKeysBarFollowTheCursorKeysTheProgramSet() = runDesktopComposeUiTest(400, 700) {
+        Locale.setDefault(Locale.ENGLISH)
+        // the screen of mc as it starts: the alternate screen, smkx of xterm-256color and the mouse
+        val console = Console("\u001b[?1049h\u001b[?1h\u001b=\u001b[?1000h")
+        showTerminal(console, compact = true) { shell, modifier ->
+            LaunchedEffect(shell) {
+                val buffer = ByteArray(256)
+                while (true) {
+                    if (shell.read(buffer, 0, buffer.size) < 0) break
+                }
+            }
+            Text("console", modifier)
+        }
+        waitUntil(timeoutMillis = 5_000) { console.shown }
+        for (tag in listOf("key-up", "key-down", "key-left", "key-right")) onNodeWithTag(tag).performClick()
+        waitUntil(timeoutMillis = 5_000) { console.written.size == 4 }
+        assertEquals(listOf("\u001bOA", "\u001bOB", "\u001bOD", "\u001bOC"), console.written)
     }
 
     @Test
