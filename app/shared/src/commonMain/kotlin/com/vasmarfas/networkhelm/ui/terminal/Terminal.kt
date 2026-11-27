@@ -260,10 +260,10 @@ private fun KeysBar(channel: KeptShell) {
     ) {
         KeyButton("key-tab", Res.string.terminal_key_tab, label = "Tab") { send("\t") }
         KeyButton("key-esc", Res.string.terminal_key_esc, label = "Esc") { send("\u001b") }
-        KeyButton("key-up", Res.string.terminal_key_up, icon = Lucide.ArrowUp) { send(channel.modes.arrow('A')) }
-        KeyButton("key-down", Res.string.terminal_key_down, icon = Lucide.ArrowDown) { send(channel.modes.arrow('B')) }
-        KeyButton("key-left", Res.string.terminal_key_left, icon = Lucide.ArrowLeft) { send(channel.modes.arrow('D')) }
-        KeyButton("key-right", Res.string.terminal_key_right, icon = Lucide.ArrowRight) { send(channel.modes.arrow('C')) }
+        KeyButton("key-up", Res.string.terminal_key_up, icon = Lucide.ArrowUp) { send(channel.modes.cursorKey('A')) }
+        KeyButton("key-down", Res.string.terminal_key_down, icon = Lucide.ArrowDown) { send(channel.modes.cursorKey('B')) }
+        KeyButton("key-left", Res.string.terminal_key_left, icon = Lucide.ArrowLeft) { send(channel.modes.cursorKey('D')) }
+        KeyButton("key-right", Res.string.terminal_key_right, icon = Lucide.ArrowRight) { send(channel.modes.cursorKey('C')) }
         KeyButton("key-ctrl-c", Res.string.terminal_key_ctrl_c, label = "Ctrl+C") { send("\u0003") }
     }
 }
@@ -358,6 +358,9 @@ internal class KeptShell(private val shell: ShellChannel, val ssh: SshSession, @
 
     // the modes the program on the screen set, for the arrows of the keys bar
     val modes = TerminalMouse()
+
+    // whether the console held the keyboard, for its screen in the other layout
+    var keyboard = false
 
     private var closed = false
 

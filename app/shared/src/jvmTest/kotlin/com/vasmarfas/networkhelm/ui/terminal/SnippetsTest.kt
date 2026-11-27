@@ -161,8 +161,8 @@ class SnippetsTest {
     @Test
     fun theArrowsOfTheKeysBarFollowTheCursorKeysTheProgramSet() = runDesktopComposeUiTest(400, 700) {
         Locale.setDefault(Locale.ENGLISH)
-        // the screen of mc as it starts: the alternate screen, smkx of xterm-256color and the mouse
-        val console = Console("\u001b[?1049h\u001b[?1h\u001b=\u001b[?1000h")
+        // the modes mc 4.8.29 sets as it starts: the mouse, the alternate screen, the cursor keys, and ESC > of the keypad after them
+        val console = Console("\u001b[?1049h\u001b[?1049l\u001b[?1002h\u001b[?1006h\u001b[?2004h\u001b[?1049h\u001b[?1h\u001b=\u001b[?1h\u001b=\u001b>\u001b>\u001b>\u001b>")
         showTerminal(console, compact = true) { shell, modifier ->
             LaunchedEffect(shell) {
                 val buffer = ByteArray(256)

@@ -12,14 +12,30 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.input.key.Key
+import androidx.compose.ui.input.key.KeyEventType
+import androidx.compose.ui.input.key.isAltPressed
+import androidx.compose.ui.input.key.isCtrlPressed
+import androidx.compose.ui.input.key.isMetaPressed
+import androidx.compose.ui.input.key.isShiftPressed
+import androidx.compose.ui.input.key.key
+import androidx.compose.ui.input.key.onPreviewKeyEvent
+import androidx.compose.ui.input.key.type
 import androidx.compose.ui.input.pointer.pointerInput
 import com.vasmarfas.networkhelm.app.LocalSettings
 import com.vasmarfas.networkhelm.ssh.ShellChannel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.launch
 import java.nio.ByteBuffer
 import java.nio.CharBuffer
 import java.nio.charset.CodingErrorAction
@@ -37,17 +53,39 @@ fun BossTerminal(shell: ShellChannel, modifier: Modifier) {
         remember(kept) { kept.screen as? EmbeddableTerminalState ?: EmbeddableTerminalState().also { kept.screen = it; kept.release = it::dispose } }
     }
     val focus = remember { FocusRequester() }
-    // the screen of a new console comes once its shell is connected, and the keyboard goes to it then
+    // the screen of a new console comes once its shell is connected, and the keyboard goes to it then. A console that held the
+    // keyboard takes it back in the other layout, as the program swaps the layouts of a computer and a phone at 600 by 480 dp
     val connected = state.isConnected
-    LaunchedEffect(kept, connected) { if (opened && connected) focus.requestFocus() }
+    LaunchedEffect(kept, connected) { if ((opened || kept?.keyboard == true) && connected) focus.requestFocus() }
+    val scope = rememberCoroutineScope()
+    var focused by remember { mutableStateOf(false) }
+    val modes = kept?.modes
     // the console takes the press: left to the workspace behind, it would take the keyboard back on release
     Box(
-        modifier.focusRequester(focus).pointerInput(Unit) {
+        modifier.focusRequester(focus)
+            // the console a layout drops loses the keyboard without a choice of the person, and its scope ends before the next frame
+            .onFocusChanged { change ->
+                focused = change.hasFocus
+                if (kept != null) scope.launch {
+                    withFrameNanos { }
+                    kept.keyboard = focused
+                }
+            }
+            .pointerInput(Unit) {
             awaitEachGesture {
                 awaitFirstDown(requireUnconsumed = false).consume()
                 focus.requestFocus()
             }
-        },
+        }
+            // BossTerm turns its cursor keys back to ESC [ A on ESC >, which mc 4.8 sends after ESC [ ? 1 h as it starts, and mc
+            // takes them only as ESC O A then. The keys without modifiers follow the mode the console read
+            .onPreviewKeyEvent { event ->
+                val final = CURSOR_KEYS[event.key]
+                val plain = !event.isCtrlPressed && !event.isAltPressed && !event.isShiftPressed && !event.isMetaPressed
+                if (modes == null || final == null || !plain || !modes.cursorKeys || event.type != KeyEventType.KeyDown) return@onPreviewKeyEvent false
+                state.writeVerbatim(modes.cursorKey(final))
+                true
+            },
     ) {
         EmbeddableTerminal(
             state = state,
@@ -60,6 +98,10 @@ fun BossTerminal(shell: ShellChannel, modifier: Modifier) {
 }
 
 internal actual val terminalScrollback = true
+
+private val CURSOR_KEYS = mapOf(
+    Key.DirectionUp to 'A', Key.DirectionDown to 'B', Key.DirectionRight to 'C', Key.DirectionLeft to 'D', Key.MoveHome to 'H', Key.MoveEnd to 'F',
+)
 
 private class SshPlatformServices(private val shell: ShellChannel, defaults: PlatformServices = getPlatformServices()) : PlatformServices by defaults {
     override fun getProcessService(): PlatformServices.ProcessService = object : PlatformServices.ProcessService {

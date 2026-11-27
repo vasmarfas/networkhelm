@@ -113,6 +113,7 @@ internal fun InternalWindow(
                         .fillMaxWidth()
                         .height(Theme.metrics.title)
                         .background(if (active) palette.title ?: palette.accent else inactiveTitle ?: palette.raised, RoundedCornerShape(topStart = radius, topEnd = radius))
+                        .then(FramePress)
                         .pointerInput(window) {
                             detectTapGestures(onDoubleTap = { window.maximized = !window.maximized })
                         }
@@ -159,6 +160,10 @@ internal fun InternalWindow(
 
 internal expect fun resizeIcon(x: Int, y: Int): PointerIcon
 
+// a press on the frame starts no selection of text: the SelectionContainer of the program starts one from a press nothing took,
+// and the console of the window loses the keyboard to it. The gestures of the frame after it in the chain see the press first
+private val FramePress = Modifier.pointerInput(Unit) { awaitEachGesture { awaitFirstDown(requireUnconsumed = false).consume() } }
+
 @Composable
 private fun TitleButton(icon: ImageVector, tint: Color, onClick: () -> Unit) {
     UnstyledButton(onClick = onClick, indication = LocalIndication.current, modifier = Modifier.widthIn(min = 28.dp).fillMaxHeight().hand()) {
@@ -171,7 +176,7 @@ private fun ResizeHandle(modifier: Modifier, window: WindowState, x: Int, y: Int
     val density = LocalDensity.current
     FrameGestures {
         Spacer(
-            modifier.pointerHoverIcon(resizeIcon(x, y)).pointerInput(window) {
+            modifier.pointerHoverIcon(resizeIcon(x, y)).then(FramePress).pointerInput(window) {
                 detectDragGestures { change, drag ->
                     change.consume()
                     with(density) { window.resize(x, y, drag.x.toDp(), drag.y.toDp()) }

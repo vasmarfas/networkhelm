@@ -5,19 +5,20 @@ import kotlin.concurrent.Volatile
 // whether the program on the screen asked for the mouse, as htop and mc do, read from what the host writes: DECSET and DECRST of
 // the modes 1000, 1002 and 1003 turn the reports on and off, 1006 picks the SGR form; a terminal without mouse of its own
 // sends a tap as a click of the left button. Mode 1 is the cursor keys of the program: with it set, mc and htop take an arrow
-// only as ESC O A and ignore ESC [ A
+// only as ESC O A and ignore ESC [ A. ESC = and ESC > of the keypad leave it as it is
 class TerminalMouse {
     private val tracking = mutableSetOf<Int>()
     private var sgr = false
     private var rest = ""
 
     @Volatile
-    private var cursorKeys = false
+    var cursorKeys = false
+        private set
 
     val wanted get() = tracking.isNotEmpty()
 
-    // A up, B down, C right, D left
-    fun arrow(direction: Char): String = if (cursorKeys) "\u001bO$direction" else "\u001b[$direction"
+    // A up, B down, C right, D left, H home, F end
+    fun cursorKey(final: Char): String = if (cursorKeys) "\u001bO$final" else "\u001b[$final"
 
     fun read(bytes: ByteArray, count: Int) = read(bytes.decodeToString(0, count))
 
